@@ -234,13 +234,9 @@ export default function DashboardPage() {
   };
 
   // --- NEW: Console Query Logic ---
-  const handleQueryConsole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!consoleInput.trim() || isQuerying) return;
-
-    const userMessage = consoleInput;
+  const submitQuery = async (userMessage: string) => {
+    if (isQuerying) return;
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    setConsoleInput('');
     setIsQuerying(true);
 
     try {
@@ -256,6 +252,14 @@ export default function DashboardPage() {
     } finally {
       setIsQuerying(false);
     }
+  };
+
+  const handleQueryConsole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!consoleInput.trim() || isQuerying) return;
+    const msg = consoleInput;
+    setConsoleInput('');
+    await submitQuery(msg);
   };
 
   return (
@@ -498,6 +502,19 @@ export default function DashboardPage() {
                 }}>
                   {msg.content}
                 </div>
+                {msg.role === 'ai' && i > 0 && (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                    <button disabled={isQuerying} onClick={() => submitQuery("Based on the response above, please create a set of interactive flashcards for me.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                      ✨ Create Flashcards
+                    </button>
+                    <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                      📝 Summarize Key Terms
+                    </button>
+                    <button disabled={isQuerying} onClick={() => submitQuery("Please generate a quick 3-question multiple-choice quiz based on the information above to test my understanding.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                      🧠 Generate Practice Quiz
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
             
