@@ -2,18 +2,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { auth, db } from '../../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc, getDoc, arrayUnion } from 'firebase/firestore';
 import { useUploadThing } from '../../../utils/uploadthing';
+import { Pencil, RefreshCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 export default function DashboardPage() {
+  const pathname = usePathname();
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [userData, setUserData] = useState({ name: 'Loading...', email: '', uid: '' });
+  const [userData, setUserData] = useState<any>({ name: 'Loading...', email: '', uid: '', profile: null });
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [chatList, setChatList] = useState<Array<{id: string, title: string, updatedAt: any}>>([]);
 
   // Console state
-  const [messages, setMessages] = useState<Array<{role: 'user' | 'ai', content: string}>>([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+  const [messages, setMessages] = useState<Array<{role: 'user' | 'ai', content: string, feedback?: 'up'|'down'}>>([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
   const [consoleInput, setConsoleInput] = useState('');
   const [isQuerying, setIsQuerying] = useState(false);
+
+  const [vaultFiles, setVaultFiles] = useState<any[]>([]);
+  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
+  const [editInput, setEditInput] = useState("");
 
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -42,11 +51,42 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        setUserData({ name: user.displayName || 'Student', email: user.email || '', uid: user.uid });
+        let profile = null;
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            profile = userSnap.data();
+          }
+        } catch (error) {
+          console.error("Error fetching user profile", error);
+        }
+        setUserData({ name: profile?.username || user.displayName || 'Student', email: user.email || '', uid: user.uid, profile });
+        
+        // Fetch Vault Files for Smart Selector
+        try {
+          const vq = query(collection(db, 'vault_files'), where('userId', '==', user.uid), where('status', '==', 'analyzed'));
+          const vaultSnap = await getDocs(vq);
+          const vFiles = vaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setVaultFiles(vFiles);
+        } catch(e) { console.error(e) }
+
+        // Fetch Chat List
+        try {
+          const q = query(collection(db, 'chats'), where('userId', '==', user.uid));
+          const chatSnap = await getDocs(q);
+          const chats = chatSnap.docs.map(d => ({ id: d.id, title: d.data().title, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
+          chats.sort((a, b) => b.updatedAt - a.updatedAt);
+          setChatList(chats);
+        } catch (error) {
+          console.error("Error fetching chats:", error);
+        }
       } else {
-        setUserData({ name: 'Guest Student', email: 'Not signed in', uid: '' });
+        setUserData({ name: 'Guest Student', email: 'Not signed in', uid: '', profile: null });
+        setChatList([]);
+        setCurrentChatId(null);
       }
     });
     return () => unsubscribe();
@@ -233,24 +273,120 @@ export default function DashboardPage() {
     }
   };
 
+  const handleLoadChat = async (chatId: string) => {
+    setCurrentChatId(chatId);
+    setIsConsoleOpen(true);
+    try {
+      const chatDoc = await getDoc(doc(db, 'chats', chatId));
+      if (chatDoc.exists()) {
+        const data = chatDoc.data();
+        if (data.messages && data.messages.length > 0) {
+          setMessages(data.messages);
+        } else {
+          setMessages([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load chat", error);
+    }
+  };
+
   // --- NEW: Console Query Logic ---
-  const submitQuery = async (userMessage: string) => {
+  const submitQuery = async (userMessage: string, historyPrefix?: Array<{role: 'user' | 'ai', content: string, feedback?: 'up'|'down'}>) => {
     if (isQuerying) return;
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    
+    const baseMessages = historyPrefix || messages;
+    const history = baseMessages.filter(m => m.role === 'user');
+    
+    const newUserMsg = { role: 'user' as const, content: userMessage };
+    const updatedMessages = [...baseMessages, newUserMsg];
+    
+    setMessages(updatedMessages);
     setIsQuerying(true);
 
     try {
       const response = await fetch('/api/engine/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: userMessage, userId: userData.uid })
+        body: JSON.stringify({ query: userMessage, userId: userData.uid, chatHistory: history, userProfile: userData.profile })
       });
       const data = await response.json();
-      setMessages(prev => [...prev, { role: 'ai', content: data.answer || data.error }]);
+      const newAiMsg = { role: 'ai' as const, content: data.answer || data.error };
+      const finalMessages = [...updatedMessages, newAiMsg];
+      
+      setMessages(finalMessages);
+
+      // Persist to Firestore
+      if (currentChatId) {
+        const chatRef = doc(db, 'chats', currentChatId);
+        await updateDoc(chatRef, {
+          messages: finalMessages,
+          updatedAt: serverTimestamp()
+        });
+        setChatList(prev => prev.map(c => c.id === currentChatId ? { ...c, updatedAt: Date.now() } : c).sort((a, b) => b.updatedAt - a.updatedAt));
+      } else {
+        let title = userMessage.split(' ').slice(0, 4).join(' ') + '...';
+
+        const newChatDoc = await addDoc(collection(db, 'chats'), {
+          userId: userData.uid,
+          title: title,
+          messages: finalMessages,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        
+        setCurrentChatId(newChatDoc.id);
+        setChatList(prev => [{ id: newChatDoc.id, title, updatedAt: Date.now() }, ...prev]);
+
+        // Generate title asynchronously
+        fetch('/api/engine/title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: userMessage })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.title) {
+            updateDoc(doc(db, 'chats', newChatDoc.id), { title: data.title });
+            setChatList(prev => prev.map(c => c.id === newChatDoc.id ? { ...c, title: data.title } : c));
+          }
+        })
+        .catch(e => console.error("Async title generation failed", e));
+      }
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', content: "Error: Could not reach the brain." }]);
     } finally {
       setIsQuerying(false);
+    }
+  };
+
+  const handleEditSubmit = (index: number) => {
+    if (!editInput.trim() || isQuerying) return;
+    const historyPrefix = messages.slice(0, index);
+    setEditingMessageIndex(null);
+    submitQuery(editInput, historyPrefix);
+  };
+
+  const handleRegenerate = (index: number) => {
+    if (isQuerying) return;
+    const userMsg = messages[index - 1];
+    if (userMsg && userMsg.role === 'user') {
+      const historyPrefix = messages.slice(0, index - 1);
+      submitQuery(userMsg.content, historyPrefix);
+    }
+  };
+
+  const handleFeedback = async (index: number, type: 'up' | 'down') => {
+    const newMessages = [...messages];
+    newMessages[index] = { ...newMessages[index], feedback: type };
+    setMessages(newMessages);
+    
+    if (currentChatId) {
+      try {
+        await updateDoc(doc(db, 'chats', currentChatId), {
+          messages: newMessages
+        });
+      } catch(e) { console.error("Failed to save feedback", e); }
     }
   };
 
@@ -266,14 +402,14 @@ export default function DashboardPage() {
     <>
       <style dangerouslySetInnerHTML={{__html: `
         .dashboard-layout, .dashboard-layout * { box-sizing: border-box; }
-        .dashboard-layout { display: flex; flex-direction: column; height: 100vh; background-color: #0A1128; color: white; overflow-x: hidden; overflow-y: hidden; position: relative; width: 100%; max-width: 100vw; }
+        .dashboard-layout { display: flex; flex-direction: column; height: 100dvh; background-color: #0A1128; color: white; overflow-x: hidden; overflow-y: hidden; position: relative; width: 100%; max-width: 100vw; }
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 40; display: none; opacity: 0; transition: opacity 0.3s; }
         .overlay.visible { display: block; opacity: 1; }
-        .sidebar { position: fixed; top: 0; left: -300px; width: 260px; height: 100vh; background-color: #111111; border-right: 1px solid #27272A; padding: 1.5rem; display: flex; flex-direction: column; z-index: 50; transition: left 0.3s ease; }
+        .sidebar { position: fixed; top: 0; left: -300px; width: 260px; height: 100dvh; background-color: #111111; border-right: 1px solid #27272A; padding: 1.5rem; display: flex; flex-direction: column; z-index: 50; transition: left 0.3s ease; }
         .sidebar.open { left: 0; }
-        .console-panel { position: fixed; top: 0; right: -100%; width: 100%; max-width: 420px; height: 100vh; background-color: #111111; border-left: 1px solid #27272A; display: flex; flex-direction: column; z-index: 50; transition: right 0.3s ease; }
+        .console-panel { position: fixed; top: 0; right: -100%; width: 100%; height: 100dvh; background-color: #111111; display: flex; flex-direction: column; z-index: 50; transition: right 0.3s ease; }
         .console-panel.open { right: 0; }
-        .main-content { flex: 1; padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem; overflow-y: auto; overflow-x: hidden; height: 100vh; width: 100%; max-width: 100vw; }
+        .main-content { flex: 1; padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem; overflow-y: auto; overflow-x: hidden; height: 100dvh; width: 100%; max-width: 100vw; }
         .logo-img { width: 8rem; margin-bottom: 2rem; }
         .mobile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; width: 100%; }
         .menu-btn { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0.5rem; display: flex; }
@@ -289,7 +425,7 @@ export default function DashboardPage() {
           .overlay { display: none !important; }
           .mobile-header { display: none; }
           .sidebar { position: static; width: 250px; left: 0; transition: none; flex-shrink: 0; }
-          .console-panel { position: static; width: 400px; right: 0; transition: none; display: none; flex-shrink: 0; }
+          .console-panel { position: static; width: 400px; right: 0; transition: none; display: none; flex-shrink: 0; border-left: 1px solid #27272A; }
           .console-panel.open { display: flex; }
           .main-content { padding: 3rem; flex: 1; }
           .logo-img { width: 10rem; margin-bottom: 3rem; }
@@ -307,10 +443,39 @@ export default function DashboardPage() {
             <button className="menu-btn lg:hidden" onClick={() => setIsSidebarOpen(false)} style={{ display: 'none' }}>✕</button>
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, marginTop: '3rem' }}>
-            <a href="#" style={{ color: '#EA580C', fontWeight: 'bold', textDecoration: 'none' }}>Command Center</a>
-            <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>My Vault</a>
+            <a href="/dashboard" style={{ color: pathname === '/dashboard' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/dashboard' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Command Center</a>
+            <a href="/vault" style={{ color: pathname === '/vault' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/vault' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>My Vault</a>
             <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Active Engines</a>
             <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Settings</a>
+
+            <div style={{ marginTop: '1.5rem', borderTop: '1px solid #27272A', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden', flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: '#71717A', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recent Chats</span>
+                <button 
+                  onClick={() => {
+                    setCurrentChatId(null);
+                    setMessages([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+                    setIsConsoleOpen(true);
+                  }}
+                  style={{ background: 'none', border: 'none', color: '#EA580C', cursor: 'pointer', fontSize: '1.25rem', lineHeight: '1' }}
+                  title="New Chat"
+                >
+                  +
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, paddingRight: '0.5rem' }} className="file-list-container">
+                {chatList.map(chat => (
+                  <button 
+                    key={chat.id}
+                    onClick={() => handleLoadChat(chat.id)}
+                    style={{ background: currentChatId === chat.id ? '#18181B' : 'none', border: 'none', color: currentChatId === chat.id ? 'white' : '#A1A1AA', textAlign: 'left', padding: '0.5rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', transition: 'all 0.2s' }}
+                  >
+                    {chat.title}
+                  </button>
+                ))}
+                {chatList.length === 0 && <span style={{ color: '#71717A', fontSize: '0.8rem' }}>No recent chats.</span>}
+              </div>
+            </div>
           </nav>
           <div style={{ borderTop: '1px solid #27272A', paddingTop: '1.5rem', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -484,39 +649,101 @@ export default function DashboardPage() {
           <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div style={{ color: '#A1A1AA', fontSize: '0.75rem', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px dashed #27272A', paddingBottom: '0.5rem' }}>Secure Session Established</div>
             
-            {messages.map((msg, i) => (
+            {messages.map((msg, i) => {
+              const isError = msg.content.startsWith("Error:") || msg.content.includes("Failed to query the AI brain.");
+              
+              const lowerMsg = msg.content.toLowerCase();
+              const needsDisambiguation = lowerMsg.includes("which specific") || lowerMsg.includes("which document") || lowerMsg.includes("tell me which");
+              
+              return (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                <span style={{ color: msg.role === 'user' ? '#A1A1AA' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                  {msg.role === 'user' ? 'User' : '>_console'}
-                </span>
-                <div style={{ 
-                  backgroundColor: msg.role === 'user' ? '#27272A' : '#18181B', 
-                  padding: '1rem', 
-                  borderRadius: '0.5rem', 
-                  border: '1px solid #27272A', 
-                  color: '#E4E4E7', 
-                  fontSize: '0.9rem', 
-                  lineHeight: '1.6',
-                  maxWidth: '90%',
-                  whiteSpace: 'pre-wrap'
-                }}>
-                  {msg.content}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ color: msg.role === 'user' ? '#A1A1AA' : isError ? '#EF4444' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                    {msg.role === 'user' ? userData.name.split(' ')[0] : '>_console'}
+                  </span>
+                  {msg.role === 'user' && (
+                    <button onClick={() => { setEditingMessageIndex(i); setEditInput(msg.content); }} className="text-gray-400 hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none' }} title="Edit">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                {msg.role === 'ai' && i > 0 && (
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                    <button disabled={isQuerying} onClick={() => submitQuery("Based on the response above, please create a set of interactive flashcards for me.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                      ✨ Create Flashcards
-                    </button>
-                    <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                      📝 Summarize Key Terms
-                    </button>
-                    <button disabled={isQuerying} onClick={() => submitQuery("Please generate a quick 3-question multiple-choice quiz based on the information above to test my understanding.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                      🧠 Generate Practice Quiz
-                    </button>
+                
+                {editingMessageIndex === i ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '90%', alignItems: 'flex-end' }}>
+                    <textarea 
+                      value={editInput}
+                      onChange={e => setEditInput(e.target.value)}
+                      style={{ width: '100%', backgroundColor: '#27272A', color: 'white', border: '1px solid #EA580C', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', outline: 'none', resize: 'vertical', minHeight: '80px' }}
+                    />
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button onClick={() => setEditingMessageIndex(null)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => handleEditSubmit(i)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>Save & Resubmit</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ 
+                    backgroundColor: msg.role === 'user' ? '#27272A' : isError ? '#450a0a' : '#18181B', 
+                    padding: '1rem', 
+                    borderRadius: '0.5rem', 
+                    border: isError ? '1px solid #7f1d1d' : '1px solid #27272A', 
+                    color: isError ? '#fca5a5' : '#E4E4E7', 
+                    fontSize: '0.9rem', 
+                    lineHeight: '1.6',
+                    maxWidth: '90%',
+                    whiteSpace: 'pre-wrap'
+                  }}>
+                    {msg.content}
+                  </div>
+                )}
+
+                {/* Smart Vault Selector for Disambiguation */}
+                {msg.role === 'ai' && needsDisambiguation && !isError && i === messages.length - 1 && vaultFiles.length > 0 && (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem', maxWidth: '90%' }}>
+                    {vaultFiles.map(file => (
+                      <button 
+                        key={file.id} 
+                        disabled={isQuerying}
+                        onClick={() => submitQuery(`Please use the document: ${file.fileName} as the context.`)} 
+                        style={{ backgroundColor: '#18181B', color: '#A1A1AA', border: '1px solid #EA580C', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}
+                      >
+                        📄 {file.fileName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* AI Action Buttons & Controls */}
+                {msg.role === 'ai' && !isError && i > 0 && (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem', alignItems: 'center' }}>
+                    {!needsDisambiguation && (
+                      <>
+                        <button disabled={isQuerying} onClick={() => submitQuery("Based on the response above, please create a set of interactive flashcards for me.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                          ✨ Create Flashcards
+                        </button>
+                        <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                          📝 Summarize Key Terms
+                        </button>
+                        <button disabled={isQuerying} onClick={() => submitQuery("Please generate a quick 3-question multiple-choice quiz based on the information above to test my understanding.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                          🧠 Generate Practice Quiz
+                        </button>
+                      </>
+                    )}
+                    <div style={{ flex: 1 }}></div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button disabled={isQuerying} onClick={() => handleRegenerate(i)} className="text-gray-400 hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', opacity: isQuerying ? 0.5 : 1 }} title="Regenerate">
+                        <RefreshCcw className="w-4 h-4" />
+                      </button>
+                      <button disabled={isQuerying} onClick={() => handleFeedback(i, 'up')} className="hover:text-green-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'up' ? '#22C55E' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1 }} title="Good response">
+                        <ThumbsUp className="w-4 h-4" />
+                      </button>
+                      <button disabled={isQuerying} onClick={() => handleFeedback(i, 'down')} className="hover:text-red-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'down' ? '#EF4444' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1 }} title="Bad response">
+                        <ThumbsDown className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
-            ))}
+            )})}
             
             {isQuerying && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
@@ -535,7 +762,7 @@ export default function DashboardPage() {
                 onChange={(e) => setConsoleInput(e.target.value)}
                 type="text" 
                 placeholder="Enter command or query..." 
-                style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', outline: 'none', minWidth: '0' }} 
+                style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '16px', outline: 'none', minWidth: '0' }} 
               />
               <button type="submit" disabled={isQuerying} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0 1rem', borderRadius: '0.5rem', cursor: isQuerying ? 'not-allowed' : 'pointer', fontWeight: 'bold', flexShrink: 0, opacity: isQuerying ? 0.5 : 1 }}>→</button>
             </form>

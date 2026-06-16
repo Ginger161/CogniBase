@@ -14,6 +14,7 @@
     "@uploadthing/react": "^7.3.3",
     "dotenv": "^17.4.2",
     "firebase": "^12.14.0",
+    "lucide-react": "^1.18.0",
     "next": "16.2.9",
     "officeparser": "^7.2.1",
     "pdf2json": "^4.0.3",

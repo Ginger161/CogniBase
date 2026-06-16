@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Space_Grotesk, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 
@@ -17,6 +17,13 @@ export const metadata: Metadata = {
   description: 'AI Study & Exam Prep. Your entire semester, synthesized.',
 };
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  interactiveWidget: 'resizes-content',
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -24,7 +31,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className={`${plusJakartaSans.className} ${spaceGrotesk.variable} antialiased min-h-screen`}>
+      <body className={`${plusJakartaSans.className} ${spaceGrotesk.variable} antialiased min-h-dvh`}>
         {children}
       </body>
     </html>
