@@ -27,7 +27,7 @@ export async function POST(req: Request) {
                 : "docx";
                 
       try {
-        const doc = await parseOffice(buffer, { fileType: ext });
+        const doc = await parseOffice(buffer, { fileType: ext as any });
         contentParts = [doc.toText()];
       } catch (err) {
         console.error("Office parser error:", err);
