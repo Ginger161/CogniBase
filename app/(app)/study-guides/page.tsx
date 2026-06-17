@@ -68,9 +68,9 @@ export default function StudyGuidesPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
             {studyGuides.map(guide => (
               <div key={guide.id} className="w-full overflow-hidden px-4 sm:px-6 py-4 sm:py-6 break-words whitespace-normal hover:border-orange-500 hover:-translate-y-1" style={{ backgroundColor: '#18181B', borderRadius: '0.75rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem', cursor: 'pointer', transition: 'transform 0.2s, border-color 0.2s' }} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }}>
-                <div>
-                  <h3 className="break-words whitespace-normal" style={{ margin: 0, color: 'white', fontSize: '1.1rem', marginBottom: '0.25rem' }}>{guide.sectionConstraint}</h3>
-                  <span className="break-words whitespace-normal" style={{ color: '#71717A', fontSize: '0.85rem' }}>{guide.sourceDocumentName}</span>
+                <div className="min-w-0 w-full">
+                  <h3 className="break-words whitespace-normal min-w-0" style={{ margin: 0, color: 'white', fontSize: '1.1rem', marginBottom: '0.25rem' }}>{guide.sectionConstraint}</h3>
+                  <span className="break-words whitespace-normal min-w-0 block" style={{ color: '#71717A', fontSize: '0.85rem' }}>{guide.sourceDocumentName}</span>
                 </div>
                 <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: '#52525B', fontSize: '0.75rem' }}>
@@ -93,11 +93,11 @@ export default function StudyGuidesPage() {
       {/* Study Guide View Modal */}
       {isStudyGuideViewOpen && activeStudyGuide && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)' }}>
-          <div className="w-full overflow-hidden break-words whitespace-normal" style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', width: '90%', maxWidth: '800px', height: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #27272A', padding: '1.5rem 2rem', backgroundColor: '#18181B' }}>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <h3 className="break-words whitespace-normal" style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>📖 Study Guide: {activeStudyGuide.sectionConstraint}</h3>
-                <span className="break-words whitespace-normal" style={{ color: '#71717A', fontSize: '0.85rem' }}>{activeStudyGuide.sourceDocumentName}</span>
+          <div className="w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden break-words whitespace-normal" style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <div className="flex justify-between items-start sm:items-center p-4 sm:p-6 border-b border-zinc-800 bg-zinc-900 gap-4" style={{ backgroundColor: '#18181B', borderBottomColor: '#27272A' }}>
+              <div className="flex flex-col min-w-0 w-full">
+                <h3 className="break-words whitespace-normal min-w-0" style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>📖 Study Guide: {activeStudyGuide.sectionConstraint}</h3>
+                <span className="break-words whitespace-normal min-w-0 block" style={{ color: '#71717A', fontSize: '0.85rem' }}>{activeStudyGuide.sourceDocumentName}</span>
               </div>
               <button 
                 onClick={() => setIsStudyGuideViewOpen(false)} 

@@ -1721,9 +1721,9 @@ export default function DashboardPage() {
                     }).map(file => (
                       viewMode === 'list' ? (
                         <div key={file.id} className="w-full overflow-hidden px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem' }}>
-                          <div className="flex flex-col sm:flex-row gap-2 sm:gap-0 justify-between items-start sm:items-center w-full overflow-hidden">
-                            <div className="w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span className="break-words whitespace-normal" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{file.fileName}</span>
+                          <div className="flex flex-col sm:flex-row gap-2 sm:gap-0 justify-between items-start sm:items-center w-full min-w-0">
+                            <div className="flex flex-col min-w-0 w-full">
+                              <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{file.fileName}</span>
                               <span style={{ color: '#71717A', fontSize: '0.75rem' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -1751,9 +1751,9 @@ export default function DashboardPage() {
                                 {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={14} style={{ transform: 'rotate(-90deg)' }}/> : <ChevronRight size={14} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
                               </button>
                               {openStudyGuideDropdowns.includes(file.id) && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '1rem' }}>
+                                <div className="flex flex-col min-w-0 w-full" style={{ gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '1rem' }}>
                                   {studyGuides.filter(g => g.sourceDocumentId === file.id).map(guide => (
-                                    <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', padding: '0.25rem 0' }} className="hover:underline">
+                                    <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} className="hover:underline break-words whitespace-normal min-w-0 w-full text-left" style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.8rem', cursor: 'pointer', padding: '0.25rem 0' }}>
                                       📖 Study Guide: {guide.sectionConstraint}
                                     </button>
                                   ))}
@@ -1783,7 +1783,7 @@ export default function DashboardPage() {
                               )}
                             </div>
                           </div>
-                          <span className="break-words whitespace-normal" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }} title={file.fileName}>{file.fileName}</span>
+                          <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }} title={file.fileName}>{file.fileName}</span>
                           <span style={{ color: '#71717A', fontSize: '0.75rem', marginTop: 'auto' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
                           
                           {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
@@ -1792,9 +1792,9 @@ export default function DashboardPage() {
                                 {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={12} style={{ transform: 'rotate(-90deg)' }}/> : <ChevronRight size={12} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
                               </button>
                               {openStudyGuideDropdowns.includes(file.id) && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '0.5rem' }}>
+                                <div className="flex flex-col min-w-0 w-full" style={{ gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '0.5rem' }}>
                                   {studyGuides.filter(g => g.sourceDocumentId === file.id).map(guide => (
-                                    <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.75rem', cursor: 'pointer', textAlign: 'left', padding: '0.1rem 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} className="hover:underline" title={`Study Guide: ${guide.sectionConstraint}`}>
+                                    <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} className="hover:underline truncate min-w-0 w-full text-left" style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.75rem', cursor: 'pointer', padding: '0.1rem 0' }} title={`Study Guide: ${guide.sectionConstraint}`}>
                                       📖 {guide.sectionConstraint}
                                     </button>
                                   ))}
@@ -1869,8 +1869,8 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : msg.type === 'action_required' ? (
-                  <div style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: (msg as any).error?.status === 'clash' ? '1px solid #DC2626' : '1px solid #EA580C', color: '#E4E4E7', fontSize: '0.9rem', width: '100%', maxWidth: '400px' }}>
-                    <p style={{ margin: '0 0 1rem 0', fontWeight: 'bold' }}>{msg.content}</p>
+                  <div className="w-full max-w-md overflow-hidden break-words whitespace-pre-wrap" style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: (msg as any).error?.status === 'clash' ? '1px solid #DC2626' : '1px solid #EA580C', color: '#E4E4E7', fontSize: '0.9rem' }}>
+                    <p className="min-w-0 break-words" style={{ margin: '0 0 1rem 0', fontWeight: 'bold' }}>{msg.content}</p>
                     {(msg as any).error?.status === 'clash' && (
                       <p style={{ margin: '0 0 1rem 0', color: '#FCA5A5', fontWeight: 'bold', fontSize: '0.85rem' }}>
                         ⚠️ WARNING: This class clashes with {(msg as any).error.existingCourse}.
@@ -1886,16 +1886,14 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <div style={{ 
+                  <div className="max-w-full sm:max-w-[90%] break-words whitespace-pre-wrap min-w-0" style={{ 
                     backgroundColor: msg.role === 'user' ? '#27272A' : isError ? '#450a0a' : '#18181B', 
                     padding: '1rem', 
                     borderRadius: '0.5rem', 
                     border: isError ? '1px solid #7f1d1d' : '1px solid #27272A', 
                     color: isError ? '#fca5a5' : '#E4E4E7', 
                     fontSize: '0.9rem', 
-                    lineHeight: '1.6',
-                    maxWidth: '90%',
-                    whiteSpace: 'pre-wrap'
+                    lineHeight: '1.6'
                   }}>
                     {msg.content}
                   </div>
@@ -2085,7 +2083,7 @@ export default function DashboardPage() {
       {/* Study Guide Guardrail Modal */}
       {isStudyGuideModalOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)' }}>
-          <div className="w-full overflow-hidden px-4 sm:px-8 py-4 sm:py-8 break-words whitespace-normal" style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', width: '90%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+          <div className="w-full max-w-xl mx-4 overflow-hidden p-4 sm:p-8 break-words whitespace-normal flex flex-col gap-6" style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 📚 Generate Study Guide
@@ -2132,11 +2130,11 @@ export default function DashboardPage() {
       {/* Study Guide View Modal */}
       {isStudyGuideViewOpen && activeStudyGuide && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)' }}>
-          <div className="w-full overflow-hidden break-words whitespace-normal" style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', width: '90%', maxWidth: '800px', height: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #27272A', padding: '1.5rem 2rem', backgroundColor: '#18181B' }}>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>📖 Study Guide: {activeStudyGuide.sectionConstraint}</h3>
-                <span style={{ color: '#71717A', fontSize: '0.85rem' }}>{activeStudyGuide.sourceDocumentName}</span>
+          <div className="w-full max-w-4xl mx-4 h-[85vh] overflow-hidden break-words whitespace-normal flex flex-col" style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-zinc-800 bg-zinc-900 p-4 sm:p-6 gap-4" style={{ backgroundColor: '#18181B', borderBottomColor: '#27272A' }}>
+              <div className="flex flex-col min-w-0 w-full">
+                <h3 className="break-words whitespace-normal min-w-0" style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>📖 Study Guide: {activeStudyGuide.sectionConstraint}</h3>
+                <span className="break-words whitespace-normal min-w-0" style={{ color: '#71717A', fontSize: '0.85rem' }}>{activeStudyGuide.sourceDocumentName}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <button 
