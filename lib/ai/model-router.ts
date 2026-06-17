@@ -4,11 +4,11 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 export const getAIModel = (taskType: 'simple' | 'complex') => {
   if (taskType === 'simple') {
-    return genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    return genAI.getGenerativeModel({ model: "gemini-pro" });
   } else if (taskType === 'complex') {
-    return genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    return genAI.getGenerativeModel({ model: "gemini-pro" });
   }
   
   // Fallback
-  return genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+  return genAI.getGenerativeModel({ model: "gemini-pro" });
 };

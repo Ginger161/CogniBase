@@ -5,12 +5,15 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc, getDoc, arrayUnion, deleteDoc } from 'firebase/firestore';
 import { useUploadThing } from '../../../utils/uploadthing';
 import { Pencil, Plus, RefreshCcw, ThumbsUp, ThumbsDown, LayoutGrid, List, Trash2, Calendar, MoreVertical, ChevronLeft, ChevronRight, Save } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useThrottle } from '../../hooks/useThrottle';
 import { checkClash } from '../../../lib/utils/timetable';
 
+export type Message = { role: 'ai' | 'user'; content: string; };
+
 export default function DashboardPage() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [userData, setUserData] = useState<any>({ name: 'Loading...', email: '', uid: '', profile: null });
@@ -96,6 +99,9 @@ export default function DashboardPage() {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
 
   const { startUpload } = useUploadThing("vaultUploader", {
+    onClientUploadComplete: () => {
+      router.refresh();
+    },
     onUploadProgress: (p) => {
       setUploadProgress(p);
       if (p === 100) setUploadStatus('Finalizing secure links from server...');
