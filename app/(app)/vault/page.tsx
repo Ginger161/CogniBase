@@ -1373,14 +1373,14 @@ export default function DashboardPage() {
                         const renderCourse = (course: any, i: number) => {
                           const isSelected = selectedCourseCodes.includes(course.courseCode);
                           return (
-                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isSelected ? '#27272A' : '#18181B', padding: '1rem', borderRadius: '0.5rem', border: isSelected ? '1px solid #EA580C' : '1px solid #27272A', transition: 'all 0.2s' }}>
-                              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                <input type="checkbox" checked={isSelected} onChange={() => handleToggleCourseSelection(course.courseCode)} style={{ accentColor: '#EA580C', width: '1.2rem', height: '1.2rem', cursor: 'pointer' }} />
-                                <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '1.1rem', minWidth: '80px' }}>{course.courseCode}</span>
-                                <span style={{ color: 'white' }}>{course.courseTitle}</span>
+                            <div key={i} className={`flex items-center justify-between w-full p-3 sm:p-4 gap-3 rounded-lg overflow-hidden transition-all duration-200 ${isSelected ? 'bg-zinc-800 border border-orange-600' : 'bg-zinc-900 border border-zinc-800'}`}>
+                              <input type="checkbox" checked={isSelected} onChange={() => handleToggleCourseSelection(course.courseCode)} className="accent-orange-600 w-5 h-5 cursor-pointer shrink-0" />
+                              <div className="flex-1 min-w-0 flex flex-col">
+                                <span className="text-orange-600 font-bold text-sm sm:text-base">{course.courseCode}</span>
+                                <span className="text-sm font-medium text-white truncate" title={course.courseTitle}>{course.courseTitle}</span>
                               </div>
-                              <button onClick={() => handleDropCourse(course.courseCode)} style={{ background: 'none', border: 'none', color: '#71717A', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'color 0.2s' }} title="Drop Course">
-                                <Trash2 size={18} className="hover:text-red-500" />
+                              <button onClick={() => handleDropCourse(course.courseCode)} className="shrink-0 p-2 text-gray-400 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer" title="Drop Course">
+                                <Trash2 size={18} />
                               </button>
                             </div>
                           );
