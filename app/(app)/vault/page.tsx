@@ -60,6 +60,15 @@ export default function DashboardPage() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [activeFlashcardTitle, setActiveFlashcardTitle] = useState('');
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+
+  // Study Guide state
+  const [studyGuides, setStudyGuides] = useState<any[]>([]);
+  const [isStudyGuideModalOpen, setIsStudyGuideModalOpen] = useState(false);
+  const [studyGuideConstraint, setStudyGuideConstraint] = useState('');
+  const [isGeneratingStudyGuide, setIsGeneratingStudyGuide] = useState(false);
+  const [isStudyGuideViewOpen, setIsStudyGuideViewOpen] = useState(false);
+  const [activeStudyGuide, setActiveStudyGuide] = useState<any>(null);
+  const [openStudyGuideDropdowns, setOpenStudyGuideDropdowns] = useState<string[]>([]);
   const [isTimetableUploading, setIsTimetableUploading] = useState(false);
   const [isExtractingTimetable, setIsExtractingTimetable] = useState(false);
   const [showRawTimetable, setShowRawTimetable] = useState(false);
@@ -171,6 +180,15 @@ export default function DashboardPage() {
         } catch (error) {
           console.error("Error fetching chats:", error);
         }
+
+        // Fetch Study Guides
+        try {
+          const sq = query(collection(db, 'study_guides'), where('userId', '==', user.uid));
+          const studyGuideSnap = await getDocs(sq);
+          const sGuides = studyGuideSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          sGuides.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+          setStudyGuides(sGuides);
+        } catch(e) { console.error(e) }
       } else {
         setUserData({ name: 'Guest Student', email: 'Not signed in', uid: '', profile: null });
         setChatList([]);
@@ -599,6 +617,101 @@ export default function DashboardPage() {
   };
 
   const { throttledFunction: handleAddManualTimetable, isThrottled: isAddingTimetable } = useThrottle(handleAddManualTimetableCore);
+
+  const handleOpenStudyGuideModal = (file: any) => {
+    setActiveFileDropdown(null);
+    if (!file.downloadURL) {
+      setToastMessage("Cannot generate study guide: Document must be uploaded first.");
+      return;
+    }
+    setActiveDocumentId(file.id);
+    setStudyGuideConstraint('');
+    setIsStudyGuideModalOpen(true);
+  };
+
+  const handleGenerateStudyGuide = async () => {
+    if (!studyGuideConstraint.trim()) {
+      setToastMessage("Please enter a section to cover.");
+      return;
+    }
+    
+    const file = vaultFiles.find(f => f.id === activeDocumentId);
+    if (!file) return;
+
+    setIsGeneratingStudyGuide(true);
+    
+    try {
+      const res = await fetch('/api/engine/generate-study-guide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileUrl: file.downloadURL, sectionConstraint: studyGuideConstraint })
+      });
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.error || "Failed to generate study guide.");
+      
+      const newGuide = {
+        userId: userData.uid,
+        sourceDocumentId: file.id,
+        sourceDocumentName: file.fileName,
+        sectionConstraint: studyGuideConstraint,
+        markdownContent: data.studyGuide,
+        createdAt: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(collection(db, 'study_guides'), newGuide);
+      
+      const fullGuide = { id: docRef.id, ...newGuide, createdAt: { seconds: Math.floor(Date.now() / 1000) } };
+      
+      setStudyGuides(prev => [fullGuide, ...prev]);
+      
+      setIsStudyGuideModalOpen(false);
+      setActiveStudyGuide(fullGuide);
+      setIsStudyGuideViewOpen(true);
+      
+    } catch(err: any) {
+      console.error(err);
+      setToastMessage(err.message || "Failed to generate study guide.");
+    } finally {
+      setIsGeneratingStudyGuide(false);
+    }
+  };
+
+  const handleGenerateFlashcardsFromGuide = async () => {
+    if (!activeStudyGuide) return;
+    
+    setIsGeneratingFlashcards(true);
+    setFlashcards([]);
+    setCurrentFlashcardIndex(0);
+    setIsFlipped(false);
+    setActiveFlashcardTitle(`${activeStudyGuide.sourceDocumentName} - ${activeStudyGuide.sectionConstraint} Flashcards`);
+    setFlashcardModalOpen(true);
+    
+    try {
+      let res;
+      try {
+        res = await fetch('/api/engine/generate-flashcards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: activeStudyGuide.markdownContent })
+        });
+      } catch (networkErr: any) {
+        console.error("Network Error:", networkErr);
+        throw new Error("Could not connect to the server. The request may have timed out.");
+      }
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate flashcards from server.");
+      
+      setFlashcards(data.flashcards);
+    } catch(err: any) {
+      console.error("Flashcard Gen Error:", err);
+      setToastMessage(err.message || "Failed to generate flashcards.");
+      setFlashcardModalOpen(false);
+    } finally {
+      setIsGeneratingFlashcards(false);
+    }
+  };
 
   const handleGenerateFlashcards = async (file: any) => {
     setActiveFileDropdown(null);
@@ -1104,6 +1217,7 @@ export default function DashboardPage() {
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, marginTop: '3rem' }}>
             <a href="/dashboard" style={{ color: pathname === '/dashboard' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/dashboard' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Command Center</a>
             <a href="/vault" style={{ color: pathname === '/vault' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/vault' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>My Vault</a>
+            <a href="/study-guides" style={{ color: pathname === '/study-guides' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/study-guides' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Study Guides</a>
             <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Active Engines</a>
             <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Settings</a>
 
@@ -1606,29 +1720,47 @@ export default function DashboardPage() {
                       return 0;
                     }).map(file => (
                       viewMode === 'list' ? (
-                        <div key={file.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#18181B', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ color: 'white', fontSize: '0.9rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.fileName}</span>
-                            <span style={{ color: '#71717A', fontSize: '0.75rem' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                        <div key={file.id} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ color: 'white', fontSize: '0.9rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.fileName}</span>
+                              <span style={{ color: '#71717A', fontSize: '0.75rem' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                              <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: '1rem', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
+                              <div style={{ position: 'relative' }}>
+                                <button onClick={() => setActiveFileDropdown(activeFileDropdown === file.id ? null : file.id)} style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', padding: '0.25rem' }}>
+                                  <MoreVertical size={16} />
+                                </button>
+                                {activeFileDropdown === file.id && (
+                                  <div style={{ position: 'absolute', right: 0, top: '100%', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.5rem', zIndex: 10, display: 'flex', flexDirection: 'column', minWidth: '180px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
+                                    <button onClick={() => handleOpenStudyGuideModal(file)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: 'white', padding: '0.5rem', cursor: 'pointer', textAlign: 'left', borderRadius: '0.25rem', fontSize: '0.85rem' }} className="hover:bg-zinc-600 transition-colors">
+                                      📚 Generate Study Guide
+                                    </button>
+                                    <button onClick={() => handleDeleteVaultFile(file.id)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: '#EF4444', padding: '0.5rem', cursor: 'pointer', textAlign: 'left', borderRadius: '0.25rem', fontSize: '0.85rem', marginTop: '0.25rem' }} className="hover:bg-zinc-600 transition-colors">
+                                      <Trash2 size={14} /> Delete File
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: '1rem', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
-                            <div style={{ position: 'relative' }}>
-                              <button onClick={() => setActiveFileDropdown(activeFileDropdown === file.id ? null : file.id)} style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', padding: '0.25rem' }}>
-                                <MoreVertical size={16} />
+                          {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
+                            <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #3F3F46' }}>
+                              <button onClick={() => setOpenStudyGuideDropdowns(prev => prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id])} style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}>
+                                {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={14} style={{ transform: 'rotate(-90deg)' }}/> : <ChevronRight size={14} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
                               </button>
-                              {activeFileDropdown === file.id && (
-                                <div style={{ position: 'absolute', right: 0, top: '100%', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.5rem', zIndex: 10, display: 'flex', flexDirection: 'column', minWidth: '180px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
-                                  <button onClick={() => handleGenerateFlashcards(file)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: 'white', padding: '0.5rem', cursor: 'pointer', textAlign: 'left', borderRadius: '0.25rem', fontSize: '0.85rem' }} className="hover:bg-zinc-600 transition-colors">
-                                    ✨ Generate Flashcards
-                                  </button>
-                                  <button onClick={() => handleDeleteVaultFile(file.id)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: '#EF4444', padding: '0.5rem', cursor: 'pointer', textAlign: 'left', borderRadius: '0.25rem', fontSize: '0.85rem', marginTop: '0.25rem' }} className="hover:bg-zinc-600 transition-colors">
-                                    <Trash2 size={14} /> Delete File
-                                  </button>
+                              {openStudyGuideDropdowns.includes(file.id) && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '1rem' }}>
+                                  {studyGuides.filter(g => g.sourceDocumentId === file.id).map(guide => (
+                                    <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', padding: '0.25rem 0' }} className="hover:underline">
+                                      📖 Study Guide: {guide.sectionConstraint}
+                                    </button>
+                                  ))}
                                 </div>
                               )}
                             </div>
-                          </div>
+                          )}
                         </div>
                       ) : (
                         <div key={file.id} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem', position: 'relative' }}>
@@ -1640,8 +1772,8 @@ export default function DashboardPage() {
                               </button>
                               {activeFileDropdown === file.id && (
                                 <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '0.5rem', width: '200px', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.25rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
-                                  <button onClick={() => handleGenerateFlashcards(file)} style={{ width: '100%', textAlign: 'left', padding: '0.5rem', background: 'none', border: 'none', color: '#F9FAFB', cursor: 'pointer', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#3F3F46'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                    ✨ Generate Flashcards
+                                  <button onClick={() => handleOpenStudyGuideModal(file)} style={{ width: '100%', textAlign: 'left', padding: '0.5rem', background: 'none', border: 'none', color: '#F9FAFB', cursor: 'pointer', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#3F3F46'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                    📚 Generate Study Guide
                                   </button>
                                   <button onClick={() => handleDeleteVaultFile(file.id)} style={{ width: '100%', textAlign: 'left', padding: '0.5rem', background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', marginTop: '0.25rem' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#3F3F46'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -1653,6 +1785,23 @@ export default function DashboardPage() {
                           </div>
                           <span style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }} title={file.fileName}>{file.fileName}</span>
                           <span style={{ color: '#71717A', fontSize: '0.75rem', marginTop: 'auto' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                          
+                          {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
+                            <div style={{ marginTop: '0.25rem', paddingTop: '0.5rem', borderTop: '1px dashed #3F3F46' }}>
+                              <button onClick={() => setOpenStudyGuideDropdowns(prev => prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id])} style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}>
+                                {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={12} style={{ transform: 'rotate(-90deg)' }}/> : <ChevronRight size={12} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
+                              </button>
+                              {openStudyGuideDropdowns.includes(file.id) && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '0.5rem' }}>
+                                  {studyGuides.filter(g => g.sourceDocumentId === file.id).map(guide => (
+                                    <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.75rem', cursor: 'pointer', textAlign: 'left', padding: '0.1rem 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} className="hover:underline" title={`Study Guide: ${guide.sectionConstraint}`}>
+                                      📖 {guide.sectionConstraint}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )
                     ))}
@@ -1928,6 +2077,89 @@ export default function DashboardPage() {
               >
                 <Save size={18} /> Save Deck
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Study Guide Guardrail Modal */}
+      {isStudyGuideModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)' }}>
+          <div style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', padding: '2rem', width: '90%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                📚 Generate Study Guide
+              </h3>
+              <button 
+                onClick={() => setIsStudyGuideModalOpen(false)} 
+                style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '1.25rem', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label style={{ color: '#E4E4E7', fontSize: '0.9rem' }}>What section should we cover?</label>
+              <input 
+                type="text" 
+                value={studyGuideConstraint}
+                onChange={(e) => setStudyGuideConstraint(e.target.value)}
+                placeholder="e.g., Pages 1-5, or Chapter 2: Supply & Demand"
+                style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #3F3F46', padding: '0.75rem', borderRadius: '0.5rem', outline: 'none', width: '100%' }}
+                autoFocus
+              />
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
+              <button 
+                onClick={() => setIsStudyGuideModalOpen(false)}
+                style={{ backgroundColor: 'transparent', color: '#E4E4E7', border: '1px solid #3F3F46', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleGenerateStudyGuide}
+                disabled={isGeneratingStudyGuide || !studyGuideConstraint.trim()}
+                style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: (isGeneratingStudyGuide || !studyGuideConstraint.trim()) ? 'not-allowed' : 'pointer', opacity: (isGeneratingStudyGuide || !studyGuideConstraint.trim()) ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                {isGeneratingStudyGuide ? 'Generating...' : 'Generate Guide'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Study Guide View Modal */}
+      {isStudyGuideViewOpen && activeStudyGuide && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)' }}>
+          <div style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', width: '90%', maxWidth: '800px', height: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #27272A', padding: '1.5rem 2rem', backgroundColor: '#18181B' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>📖 Study Guide: {activeStudyGuide.sectionConstraint}</h3>
+                <span style={{ color: '#71717A', fontSize: '0.85rem' }}>{activeStudyGuide.sourceDocumentName}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <button 
+                  onClick={handleGenerateFlashcardsFromGuide}
+                  disabled={isGeneratingFlashcards}
+                  style={{ backgroundColor: '#27272A', color: 'white', border: '1px solid #3F3F46', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontSize: '0.85rem', cursor: isGeneratingFlashcards ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: isGeneratingFlashcards ? 0.5 : 1 }}
+                  className="hover:bg-zinc-700 transition-colors"
+                >
+                  {isGeneratingFlashcards ? 'Generating...' : '✨ Generate Flashcards'}
+                </button>
+                <button 
+                  onClick={() => setIsStudyGuideViewOpen(false)} 
+                  style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '1.5rem', cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            
+            <div style={{ flex: 1, padding: '2rem', overflowY: 'auto', color: '#E4E4E7', lineHeight: '1.6', fontSize: '0.95rem' }}>
+              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
+                {activeStudyGuide.markdownContent}
+              </pre>
             </div>
           </div>
         </div>

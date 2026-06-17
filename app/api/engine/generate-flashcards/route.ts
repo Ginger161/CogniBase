@@ -7,46 +7,51 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const { fileUrl } = await req.json();
+    const { fileUrl, text: providedText } = await req.json();
 
-    if (!fileUrl || typeof fileUrl !== 'string') {
-      return NextResponse.json({ error: "Missing or invalid fileUrl." }, { status: 400 });
-    }
+    let text = providedText || '';
+    let mimeType = 'text/plain';
+    let buffer = Buffer.from('');
 
-    console.log("Fetching fileUrl:", fileUrl);
-    const fileRes = await fetch(fileUrl);
-    if (!fileRes.ok) {
-      console.error(`Failed to fetch file. Status: ${fileRes.status} ${fileRes.statusText}`);
-      if (fileRes.status === 404) {
-        return NextResponse.json({ error: "The file could not be found on the storage server. It may have been deleted or expired." }, { status: 404 });
+    if (!providedText) {
+      if (!fileUrl || typeof fileUrl !== 'string') {
+        return NextResponse.json({ error: "Missing fileUrl or text." }, { status: 400 });
       }
-      return NextResponse.json({ error: `Failed to fetch file from storage provider. Status: ${fileRes.status}` }, { status: fileRes.status });
-    }
-    const arrayBuffer = await fileRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    const rawContentType = fileRes.headers.get('content-type') || 'application/pdf';
-    const mimeType = rawContentType.split(';')[0].trim();
-    
-    let text = '';
-    let ext: any = mimeType.includes("csv") ? "csv" 
-              : mimeType.includes("spreadsheetml") ? "xlsx" 
-              : mimeType.includes("officedocument.presentationml") ? "pptx"
-              : mimeType.includes("officedocument.wordprocessingml") ? "docx"
-              : mimeType.includes("text/plain") ? "txt"
-              : "pdf"; // Fallback extension
-              
-    try {
-      if (ext === 'txt') {
-        text = buffer.toString('utf-8');
-      } else {
-        const doc = await parseOffice(buffer, { fileType: ext });
-        text = doc.toText();
+
+      console.log("Fetching fileUrl:", fileUrl);
+      const fileRes = await fetch(fileUrl);
+      if (!fileRes.ok) {
+        console.error(`Failed to fetch file. Status: ${fileRes.status} ${fileRes.statusText}`);
+        if (fileRes.status === 404) {
+          return NextResponse.json({ error: "The file could not be found on the storage server. It may have been deleted or expired." }, { status: 404 });
+        }
+        return NextResponse.json({ error: `Failed to fetch file from storage provider. Status: ${fileRes.status}` }, { status: fileRes.status });
       }
-    } catch (err) {
-      console.error("Parser error:", err);
-      // Fallback for PDFs if officeparser fails or is incomplete
-      text = "Attached document content for extraction."; // Simplified fallback
+      const arrayBuffer = await fileRes.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+      
+      const rawContentType = fileRes.headers.get('content-type') || 'application/pdf';
+      mimeType = rawContentType.split(';')[0].trim();
+      
+      let ext: any = mimeType.includes("csv") ? "csv" 
+                : mimeType.includes("spreadsheetml") ? "xlsx" 
+                : mimeType.includes("officedocument.presentationml") ? "pptx"
+                : mimeType.includes("officedocument.wordprocessingml") ? "docx"
+                : mimeType.includes("text/plain") ? "txt"
+                : "pdf"; // Fallback extension
+                
+      try {
+        if (ext === 'txt') {
+          text = buffer.toString('utf-8');
+        } else {
+          const doc = await parseOffice(buffer, { fileType: ext });
+          text = doc.toText();
+        }
+      } catch (err) {
+        console.error("Parser error:", err);
+        // Fallback for PDFs if officeparser fails or is incomplete
+        text = "Attached document content for extraction."; // Simplified fallback
+      }
     }
 
     if (!text || text.trim() === '') {
