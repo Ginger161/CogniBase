@@ -9,7 +9,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useThrottle } from '../../hooks/useThrottle';
 import { checkClash } from '../../../lib/utils/timetable';
 
-export type VaultChatMessage = { role: 'ai' | 'user' | 'system'; content: string; type?: string; feedback?: 'up' | 'down'; };
+export type VaultChatMessage = { role: 'ai' | 'user' | 'system'; content: string; type?: string; feedback?: 'up' | 'down'; action?: string; payload?: any; };
 
 export default function DashboardPage() {
   const pathname = usePathname();
