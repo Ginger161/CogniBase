@@ -1373,15 +1373,30 @@ export default function DashboardPage() {
                         const renderCourse = (course: any, i: number) => {
                           const isSelected = selectedCourseCodes.includes(course.courseCode);
                           return (
-                            <div key={i} className={`flex items-center justify-between w-full p-3 sm:p-4 gap-3 rounded-lg overflow-hidden transition-all duration-200 ${isSelected ? 'bg-zinc-800 border border-orange-600' : 'bg-zinc-900 border border-zinc-800'}`}>
-                              <input type="checkbox" checked={isSelected} onChange={() => handleToggleCourseSelection(course.courseCode)} className="accent-orange-600 w-5 h-5 cursor-pointer shrink-0" />
-                              <div className="flex-1 min-w-0 flex flex-col">
-                                <span className="text-orange-600 font-bold text-sm sm:text-base">{course.courseCode}</span>
-                                <span className="text-sm font-medium text-white truncate" title={course.courseTitle}>{course.courseTitle}</span>
+                            <div key={i} className={`flex items-center justify-between w-full p-3 sm:p-4 rounded-xl mb-2 gap-3 transition-colors ${isSelected ? 'bg-zinc-800 border border-orange-600' : 'bg-gray-900 border border-transparent hover:border-gray-700'}`}>
+                              
+                              {/* Left side: Checkbox + Code + Title */}
+                              <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                                <div className="shrink-0 flex items-center">
+                                  <input type="checkbox" checked={isSelected} onChange={() => handleToggleCourseSelection(course.courseCode)} className="accent-orange-600 w-4 h-4 sm:w-5 sm:h-5 cursor-pointer shrink-0" />
+                                </div>
+                                
+                                {/* Course Code (Fixed/Shrink-protected) */}
+                                <span className="text-orange-500 font-semibold shrink-0">
+                                  {course.courseCode}
+                                </span>
+                                
+                                {/* Course Title (Truncated with Ellipsis) */}
+                                <span className="text-gray-200 text-sm sm:text-base truncate" title={course.courseTitle}>
+                                  {course.courseTitle}
+                                </span>
                               </div>
-                              <button onClick={() => handleDropCourse(course.courseCode)} className="shrink-0 p-2 text-gray-400 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer" title="Drop Course">
+
+                              {/* Right side: Trash Icon */}
+                              <button onClick={() => handleDropCourse(course.courseCode)} className="shrink-0 p-2 text-gray-500 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer" title="Drop Course">
                                 <Trash2 size={18} />
                               </button>
+
                             </div>
                           );
                         };
