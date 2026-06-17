@@ -9,7 +9,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useThrottle } from '../../hooks/useThrottle';
 import { checkClash } from '../../../lib/utils/timetable';
 
-export type Message = { role: 'ai' | 'user' | 'system'; content: string; type?: string; };
+export type VaultChatMessage = { role: 'ai' | 'user' | 'system'; content: string; type?: string; };
 
 export default function DashboardPage() {
   const pathname = usePathname();
@@ -21,7 +21,7 @@ export default function DashboardPage() {
   const [chatList, setChatList] = useState<Array<{id: string, title: string, updatedAt: any}>>([]);
 
   // Console state
-  const [messages, setMessages] = useState<Message[]>([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+  const [messages, setMessages] = useState<VaultChatMessage[]>([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
   const [consoleInput, setConsoleInput] = useState('');
   const [isQuerying, setIsQuerying] = useState(false);
 
@@ -968,12 +968,12 @@ export default function DashboardPage() {
     setIsConsoleOpen(true);
   };
 
-  const submitQuery = async (userMessage: string, historyPrefix?: Array<Message>) => {
+  const submitQuery = async (userMessage: string, historyPrefix?: Array<VaultChatMessage>) => {
     if (isQuerying) return;
     const baseMessages = historyPrefix || messages;
     const history = baseMessages.filter(m => m.type !== 'action_required').slice(-10);
     
-    const newUserMsg: Message = { role: 'user', content: userMessage };
+    const newUserMsg: VaultChatMessage = { role: 'user', content: userMessage };
     const updatedMessages = [...baseMessages, newUserMsg];
     
     setMessages(updatedMessages);
@@ -987,7 +987,7 @@ export default function DashboardPage() {
       });
       const data = await response.json();
       
-      let newAiMsg: Message;
+      let newAiMsg: VaultChatMessage;
       if (data.type === 'action_required') {
         let content = '';
         if (data.action === 'add_course') {
