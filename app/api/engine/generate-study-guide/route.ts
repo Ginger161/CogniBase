@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getAIModel } from "@/lib/ai/model-router";
 import { parseOffice } from "officeparser";
 
-export const maxDuration = 10;
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
