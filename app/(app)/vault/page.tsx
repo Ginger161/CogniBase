@@ -17,7 +17,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [chatList, setChatList] = useState<Array<{ id: string, title: string, updatedAt: any }>>([]);
 
@@ -186,7 +185,7 @@ export default function DashboardPage() {
         sGuides.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setStudyGuides(sGuides);
       } catch (e) { console.error(e) }
-      
+
       setIsLoading(false);
     };
 
@@ -368,7 +367,7 @@ export default function DashboardPage() {
   };
 
   const renderErrorCard = (onRetry: () => void) => (
-    <div 
+    <div
       style={{
         padding: '2rem',
         backgroundColor: '#7f1d1d', // Deep red
@@ -384,16 +383,16 @@ export default function DashboardPage() {
       <p style={{ color: '#fecaca', marginBottom: '1.5rem' }}>
         The servers are currently experiencing high traffic. Please wait a moment and try again.
       </p>
-      <button 
+      <button
         onClick={onRetry}
-        style={{ 
-          backgroundColor: '#f87171', 
-          color: '#450a0a', 
-          padding: '0.5rem 1rem', 
-          borderRadius: '0.5rem', 
-          border: 'none', 
+        style={{
+          backgroundColor: '#f87171',
+          color: '#450a0a',
+          padding: '0.5rem 1rem',
+          borderRadius: '0.5rem',
+          border: 'none',
           cursor: 'pointer',
-          fontWeight: 'bold' 
+          fontWeight: 'bold'
         }}
       >
         Try Again
@@ -732,7 +731,7 @@ export default function DashboardPage() {
       // 1. Delete all selected documents from Firebase using the correct collection 'vault_files'
       const deletePromises = selectedMaterials.map(id => deleteDoc(doc(db, 'vault_files', id)));
       await Promise.all(deletePromises);
-      
+
       // 2. Clear local state only after DB deletion succeeds
       setVaultFiles(prev => prev.filter(m => !selectedMaterials.includes(m.id)));
       setSelectedMaterials([]);
@@ -749,7 +748,7 @@ export default function DashboardPage() {
     try {
       // 1. Delete single document from Firebase using the correct collection 'vault_files'
       await deleteDoc(doc(db, 'vault_files', id));
-      
+
       // 2. Clear local state only after DB deletion succeeds
       setVaultFiles(prev => prev.filter(m => m.id !== id));
       setToastMessage("File deleted successfully from your Vault.");
@@ -957,7 +956,7 @@ export default function DashboardPage() {
       console.error('System Error: User context not loaded.');
       setMessages([...updatedMessages, { role: 'ai', content: 'System Error: User context not loaded.' }]);
       setIsQuerying(false);
-      return; 
+      return;
     }
 
     try {
@@ -1367,10 +1366,10 @@ export default function DashboardPage() {
                             50% { opacity: 0.3; }
                           }
                         `}</style>
-                        
+
                         {[1, 2, 3].map((n, index) => (
-                          <div 
-                            key={n} 
+                          <div
+                            key={n}
                             style={{
                               width: '100%',
                               height: '68px',
@@ -1404,10 +1403,10 @@ export default function DashboardPage() {
                                 <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                   {firstSemesterCourses.map((course: any, index: number) => {
                                     const isSelected = selectedCourseCodes.includes(course.courseCode);
-                                    
+
                                     return (
-                                      <div 
-                                        key={course.courseCode || index} 
+                                      <div
+                                        key={course.courseCode || index}
                                         style={{
                                           display: 'flex',
                                           alignItems: 'center',
@@ -1420,7 +1419,7 @@ export default function DashboardPage() {
                                           backgroundColor: '#1f2937' /* Forces the dark gray */
                                         }}
                                       >
-                                        
+
                                         {/* Left: Checkbox and Course Code */}
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                           <input
@@ -1441,7 +1440,7 @@ export default function DashboardPage() {
                                         >
                                           <Trash2 size={20} />
                                         </button>
-                                        
+
                                       </div>
                                     );
                                   })}
@@ -1461,10 +1460,10 @@ export default function DashboardPage() {
                                 <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                   {secondSemesterCourses.map((course: any, index: number) => {
                                     const isSelected = selectedCourseCodes.includes(course.courseCode);
-                                    
+
                                     return (
-                                      <div 
-                                        key={course.courseCode || index} 
+                                      <div
+                                        key={course.courseCode || index}
                                         style={{
                                           display: 'flex',
                                           alignItems: 'center',
@@ -1477,7 +1476,7 @@ export default function DashboardPage() {
                                           backgroundColor: '#1f2937' /* Forces the dark gray */
                                         }}
                                       >
-                                        
+
                                         {/* Left: Checkbox and Course Code */}
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                           <input
@@ -1498,7 +1497,7 @@ export default function DashboardPage() {
                                         >
                                           <Trash2 size={20} />
                                         </button>
-                                        
+
                                       </div>
                                     );
                                   })}
@@ -1530,11 +1529,11 @@ export default function DashboardPage() {
                   {timetableExtractionError && renderErrorCard(() => handleTimetableUpload())}
 
                   <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                    <button 
+                    <button
                       onClick={() => timetableInputRef.current?.click()}
                       disabled={isTimetableUploading || isExtractingTimetable}
-                      style={{ 
-                        backgroundColor: '#f97316', 
+                      style={{
+                        backgroundColor: '#f97316',
                         color: '#ffffff',
                         padding: '0.75rem 1.5rem',
                         borderRadius: '0.5rem',
@@ -1812,11 +1811,11 @@ export default function DashboardPage() {
                           <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>My Files</h3>
                           {filteredSortedFiles.length > 0 && (
                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#A1A1AA', fontSize: '0.85rem' }}>
-                              <input 
-                                type="checkbox" 
-                                checked={allSelected} 
-                                onChange={(e) => handleSelectAllMaterials(filteredSortedFiles, e.target.checked)} 
-                                style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} 
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                onChange={(e) => handleSelectAllMaterials(filteredSortedFiles, e.target.checked)}
+                                style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }}
                               />
                               Select All
                             </label>
@@ -1853,8 +1852,8 @@ export default function DashboardPage() {
                               @keyframes wavePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
                             `}</style>
                             {[1, 2, 3, 4].map((n, index) => (
-                              <div 
-                                key={n} 
+                              <div
+                                key={n}
                                 style={{
                                   height: viewMode === 'grid' ? '150px' : '68px',
                                   backgroundColor: '#27272A',
@@ -1868,115 +1867,115 @@ export default function DashboardPage() {
                         ) : (
                           <>
                             {filteredSortedFiles.map(file => (
-                      viewMode === 'list' ? (
-                        <div key={file.id} className="w-full overflow-hidden px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem' }}>
-                          <div className="flex flex-col sm:flex-row gap-2 sm:gap-0 justify-between items-start sm:items-center w-full min-w-0">
-                            <div className="flex flex-row min-w-0 w-full items-center gap-3">
-                              <input 
-                                type="checkbox" 
-                                checked={selectedMaterials.includes(file.id)} 
-                                onChange={(e) => handleToggleMaterialSelection(file.id, e.target.checked)} 
-                                style={{ accentColor: '#EA580C', width: '1.1rem', height: '1.1rem', cursor: 'pointer', flexShrink: 0 }} 
-                              />
-                              <div className="flex flex-col min-w-0 w-full">
-                                <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{file.fileName}</span>
-                                <span style={{ color: '#71717A', fontSize: '0.75rem' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                              <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: '1rem', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
-                              <div style={{ position: 'relative' }}>
-                                <button onClick={() => setActiveFileDropdown(activeFileDropdown === file.id ? null : file.id)} style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', padding: '0.25rem' }}>
-                                  <MoreVertical size={16} />
-                                </button>
-                                {activeFileDropdown === file.id && (
-                                  <div style={{ position: 'absolute', right: 0, top: '100%', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.5rem', zIndex: 10, display: 'flex', flexDirection: 'column', minWidth: '180px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
-                                    <button onClick={() => handleOpenStudyGuideModal(file)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: 'white', padding: '0.5rem', cursor: 'pointer', textAlign: 'left', borderRadius: '0.25rem', fontSize: '0.85rem' }} className="hover:bg-zinc-600 transition-colors">
-                                      📚 Generate Study Guide
-                                    </button>
-                                    <button onClick={() => handleDeleteVaultFile(file.id)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: '#EF4444', padding: '0.5rem', cursor: 'pointer', textAlign: 'left', borderRadius: '0.25rem', fontSize: '0.85rem', marginTop: '0.25rem' }} className="hover:bg-zinc-600 transition-colors">
-                                      <Trash2 size={14} /> Delete File
-                                    </button>
+                              viewMode === 'list' ? (
+                                <div key={file.id} className="w-full overflow-hidden px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem' }}>
+                                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-0 justify-between items-start sm:items-center w-full min-w-0">
+                                    <div className="flex flex-row min-w-0 w-full items-center gap-3">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedMaterials.includes(file.id)}
+                                        onChange={(e) => handleToggleMaterialSelection(file.id, e.target.checked)}
+                                        style={{ accentColor: '#EA580C', width: '1.1rem', height: '1.1rem', cursor: 'pointer', flexShrink: 0 }}
+                                      />
+                                      <div className="flex flex-col min-w-0 w-full">
+                                        <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{file.fileName}</span>
+                                        <span style={{ color: '#71717A', fontSize: '0.75rem' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                      <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: '1rem', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
+                                      <div style={{ position: 'relative' }}>
+                                        <button onClick={() => setActiveFileDropdown(activeFileDropdown === file.id ? null : file.id)} style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', padding: '0.25rem' }}>
+                                          <MoreVertical size={16} />
+                                        </button>
+                                        {activeFileDropdown === file.id && (
+                                          <div style={{ position: 'absolute', right: 0, top: '100%', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.5rem', zIndex: 10, display: 'flex', flexDirection: 'column', minWidth: '180px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
+                                            <button onClick={() => handleOpenStudyGuideModal(file)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: 'white', padding: '0.5rem', cursor: 'pointer', textAlign: 'left', borderRadius: '0.25rem', fontSize: '0.85rem' }} className="hover:bg-zinc-600 transition-colors">
+                                              📚 Generate Study Guide
+                                            </button>
+                                            <button onClick={() => handleDeleteVaultFile(file.id)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: '#EF4444', padding: '0.5rem', cursor: 'pointer', textAlign: 'left', borderRadius: '0.25rem', fontSize: '0.85rem', marginTop: '0.25rem' }} className="hover:bg-zinc-600 transition-colors">
+                                              <Trash2 size={14} /> Delete File
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
-                            <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #3F3F46' }}>
-                              <button onClick={() => setOpenStudyGuideDropdowns(prev => prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id])} style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}>
-                                {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={14} style={{ transform: 'rotate(-90deg)' }} /> : <ChevronRight size={14} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
-                              </button>
-                              {openStudyGuideDropdowns.includes(file.id) && (
-                                <div className="flex flex-col min-w-0 w-full" style={{ gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '1rem' }}>
-                                  {studyGuides.filter(g => g.sourceDocumentId === file.id).map(guide => (
-                                    <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} className="hover:underline break-words whitespace-normal min-w-0 w-full text-left" style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.8rem', cursor: 'pointer', padding: '0.25rem 0' }}>
-                                      📖 Study Guide: {guide.sectionConstraint}
-                                    </button>
-                                  ))}
+                                  {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
+                                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #3F3F46' }}>
+                                      <button onClick={() => setOpenStudyGuideDropdowns(prev => prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id])} style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}>
+                                        {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={14} style={{ transform: 'rotate(-90deg)' }} /> : <ChevronRight size={14} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
+                                      </button>
+                                      {openStudyGuideDropdowns.includes(file.id) && (
+                                        <div className="flex flex-col min-w-0 w-full" style={{ gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '1rem' }}>
+                                          {studyGuides.filter(g => g.sourceDocumentId === file.id).map(guide => (
+                                            <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} className="hover:underline break-words whitespace-normal min-w-0 w-full text-left" style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.8rem', cursor: 'pointer', padding: '0.25rem 0' }}>
+                                              📖 Study Guide: {guide.sectionConstraint}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div key={file.id} className="w-full overflow-hidden px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem', position: 'relative' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <input 
-                                type="checkbox" 
-                                checked={selectedMaterials.includes(file.id)} 
-                                onChange={(e) => handleToggleMaterialSelection(file.id, e.target.checked)} 
-                                style={{ accentColor: '#EA580C', width: '1.1rem', height: '1.1rem', cursor: 'pointer' }} 
-                              />
-                              <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '1rem', alignSelf: 'flex-start', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
-                            </div>
-                            <div style={{ position: 'relative' }}>
-                              <button onClick={() => setActiveFileDropdown(activeFileDropdown === file.id ? null : file.id)} style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', padding: 0 }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg>
-                              </button>
-                              {activeFileDropdown === file.id && (
-                                <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '0.5rem', width: '200px', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.25rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
-                                  <button onClick={() => handleOpenStudyGuideModal(file)} style={{ width: '100%', textAlign: 'left', padding: '0.5rem', background: 'none', border: 'none', color: '#F9FAFB', cursor: 'pointer', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#3F3F46'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                    📚 Generate Study Guide
-                                  </button>
-                                  <button onClick={() => handleDeleteVaultFile(file.id)} style={{ width: '100%', textAlign: 'left', padding: '0.5rem', background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', marginTop: '0.25rem' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#3F3F46'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
-                                    Delete File
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }} title={file.fileName}>{file.fileName}</span>
-                          <span style={{ color: '#71717A', fontSize: '0.75rem', marginTop: 'auto' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                              ) : (
+                                <div key={file.id} className="w-full overflow-hidden px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem', position: 'relative' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedMaterials.includes(file.id)}
+                                        onChange={(e) => handleToggleMaterialSelection(file.id, e.target.checked)}
+                                        style={{ accentColor: '#EA580C', width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                                      />
+                                      <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '1rem', alignSelf: 'flex-start', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
+                                    </div>
+                                    <div style={{ position: 'relative' }}>
+                                      <button onClick={() => setActiveFileDropdown(activeFileDropdown === file.id ? null : file.id)} style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', padding: 0 }}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg>
+                                      </button>
+                                      {activeFileDropdown === file.id && (
+                                        <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '0.5rem', width: '200px', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.25rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
+                                          <button onClick={() => handleOpenStudyGuideModal(file)} style={{ width: '100%', textAlign: 'left', padding: '0.5rem', background: 'none', border: 'none', color: '#F9FAFB', cursor: 'pointer', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#3F3F46'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                            📚 Generate Study Guide
+                                          </button>
+                                          <button onClick={() => handleDeleteVaultFile(file.id)} style={{ width: '100%', textAlign: 'left', padding: '0.5rem', background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', marginTop: '0.25rem' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#3F3F46'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                                            Delete File
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }} title={file.fileName}>{file.fileName}</span>
+                                  <span style={{ color: '#71717A', fontSize: '0.75rem', marginTop: 'auto' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
 
-                          {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
-                            <div style={{ marginTop: '0.25rem', paddingTop: '0.5rem', borderTop: '1px dashed #3F3F46' }}>
-                              <button onClick={() => setOpenStudyGuideDropdowns(prev => prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id])} style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}>
-                                {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={12} style={{ transform: 'rotate(-90deg)' }} /> : <ChevronRight size={12} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
-                              </button>
-                              {openStudyGuideDropdowns.includes(file.id) && (
-                                <div className="flex flex-col min-w-0 w-full" style={{ gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '0.5rem' }}>
-                                  {studyGuides.filter(g => g.sourceDocumentId === file.id).map(guide => (
-                                    <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} className="hover:underline truncate min-w-0 w-full text-left" style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.75rem', cursor: 'pointer', padding: '0.1rem 0' }} title={`Study Guide: ${guide.sectionConstraint}`}>
-                                      📖 {guide.sectionConstraint}
-                                    </button>
-                                  ))}
+                                  {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
+                                    <div style={{ marginTop: '0.25rem', paddingTop: '0.5rem', borderTop: '1px dashed #3F3F46' }}>
+                                      <button onClick={() => setOpenStudyGuideDropdowns(prev => prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id])} style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}>
+                                        {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={12} style={{ transform: 'rotate(-90deg)' }} /> : <ChevronRight size={12} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
+                                      </button>
+                                      {openStudyGuideDropdowns.includes(file.id) && (
+                                        <div className="flex flex-col min-w-0 w-full" style={{ gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '0.5rem' }}>
+                                          {studyGuides.filter(g => g.sourceDocumentId === file.id).map(guide => (
+                                            <button key={guide.id} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }} className="hover:underline truncate min-w-0 w-full text-left" style={{ background: 'none', border: 'none', color: '#60A5FA', fontSize: '0.75rem', cursor: 'pointer', padding: '0.1rem 0' }} title={`Study Guide: ${guide.sectionConstraint}`}>
+                                              📖 {guide.sectionConstraint}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    ))}
+                              )
+                            ))}
                             {vaultFiles.length === 0 && <p style={{ color: '#A1A1AA', fontSize: '0.9rem', gridColumn: '1 / -1' }}>Your vault is empty.</p>}
                           </>
                         )}
-                  </div>
-                </div>
-              );
-            })()}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
