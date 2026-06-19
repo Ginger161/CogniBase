@@ -6,12 +6,12 @@ import { collection, addDoc, serverTimestamp, getDocs, query, where, doc, update
 import { useUploadThing } from '../../../utils/uploadthing';
 import { Pencil, RefreshCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import { useUserContext } from '../../../lib/hooks/useUserContext';
 
 export default function DashboardPage() {
   const pathname = usePathname();
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [userData, setUserData] = useState<any>({ name: 'Loading...', email: '', uid: '', profile: null });
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [chatList, setChatList] = useState<Array<{id: string, title: string, updatedAt: any}>>([]);
 
@@ -50,47 +50,36 @@ export default function DashboardPage() {
     }
   });
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        let profile = null;
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            profile = userSnap.data();
-          }
-        } catch (error) {
-          console.error("Error fetching user profile", error);
-        }
-        setUserData({ name: profile?.username || user.displayName || 'Student', email: user.email || '', uid: user.uid, profile });
-        
-        // Fetch Vault Files for Smart Selector
-        try {
-          const vq = query(collection(db, 'vault_files'), where('userId', '==', user.uid), where('status', '==', 'analyzed'));
-          const vaultSnap = await getDocs(vq);
-          const vFiles = vaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setVaultFiles(vFiles);
-        } catch(e) { console.error(e) }
+  const { context, isLoading: isContextLoading } = useUserContext();
+  const userData = context || { name: 'Guest Student', email: 'Not signed in', uid: '', profile: null };
 
-        // Fetch Chat List
-        try {
-          const q = query(collection(db, 'chats'), where('userId', '==', user.uid));
-          const chatSnap = await getDocs(q);
-          const chats = chatSnap.docs.map(d => ({ id: d.id, title: d.data().title, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
-          chats.sort((a, b) => b.updatedAt - a.updatedAt);
-          setChatList(chats);
-        } catch (error) {
-          console.error("Error fetching chats:", error);
-        }
-      } else {
-        setUserData({ name: 'Guest Student', email: 'Not signed in', uid: '', profile: null });
-        setChatList([]);
-        setCurrentChatId(null);
+  useEffect(() => {
+    if (!context?.uid) {
+      setChatList([]);
+      setCurrentChatId(null);
+      setVaultFiles([]);
+      return;
+    }
+    const fetchVaultAndChats = async () => {
+      try {
+        const vq = query(collection(db, 'vault_files'), where('userId', '==', context.uid), where('status', '==', 'analyzed'));
+        const vaultSnap = await getDocs(vq);
+        const vFiles = vaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setVaultFiles(vFiles);
+      } catch(e) { console.error(e) }
+
+      try {
+        const q = query(collection(db, 'chats'), where('userId', '==', context.uid));
+        const chatSnap = await getDocs(q);
+        const chats = chatSnap.docs.map(d => ({ id: d.id, title: d.data().title, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
+        chats.sort((a, b) => b.updatedAt - a.updatedAt);
+        setChatList(chats);
+      } catch (error) {
+        console.error("Error fetching chats:", error);
       }
-    });
-    return () => unsubscribe();
-  }, []);
+    };
+    fetchVaultAndChats();
+  }, [context?.uid]);
 
   const processFiles = (files: File[]) => {
     if (files.length > 20) {
@@ -304,14 +293,36 @@ export default function DashboardPage() {
     setMessages(updatedMessages);
     setIsQuerying(true);
 
+    if (isContextLoading) return; // Do not send request if context isn't ready
+    if (!context) {
+      console.error('System Error: User context not loaded.');
+      setMessages([...updatedMessages, { role: 'ai', content: 'System Error: User context not loaded.' }]);
+      setIsQuerying(false);
+      return; 
+    }
+
     try {
+      const userProfilePayload = {
+        name: context.name,
+        school: context.school,
+        department: context.department,
+        courses: context.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
+      };
+
       const response = await fetch('/api/engine/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: userMessage, userId: userData.uid, chatHistory: history, userProfile: userData.profile })
+        body: JSON.stringify({ query: userMessage, userId: context.uid, chatHistory: history, userProfile: userProfilePayload })
       });
       const data = await response.json();
-      const newAiMsg = { role: 'ai' as const, content: data.answer || data.error };
+
+      if (data.error) {
+        setMessages([...updatedMessages, { role: 'ai', content: `System Error: ${data.error}` }]);
+        setIsQuerying(false);
+        return;
+      }
+
+      const newAiMsg = { role: 'ai' as const, content: data.answer };
       const finalMessages = [...updatedMessages, newAiMsg];
       
       setMessages(finalMessages);

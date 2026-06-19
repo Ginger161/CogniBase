@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   try {
     const { query, userId, chatHistory, userProfile } = await req.json();
 
-    if (!query || !userId) {
+    if (!query || !userId || !userProfile) {
       return NextResponse.json({ error: "Missing query or user context." }, { status: 400 });
     }
 

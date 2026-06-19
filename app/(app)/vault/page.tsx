@@ -8,6 +8,7 @@ import { Pencil, Plus, RefreshCcw, ThumbsUp, ThumbsDown, LayoutGrid, List, Trash
 import { usePathname, useRouter } from 'next/navigation';
 import { useThrottle } from '../../hooks/useThrottle';
 import { checkClash } from '../../../lib/utils/timetable';
+import { useUserContext } from '../../../lib/hooks/useUserContext';
 
 export type VaultChatMessage = { role: 'ai' | 'user' | 'system'; content: string; type?: string; feedback?: 'up' | 'down'; action?: string; payload?: any; };
 
@@ -16,7 +17,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [userData, setUserData] = useState<any>({ name: 'Loading...', email: '', uid: '', profile: null });
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [chatList, setChatList] = useState<Array<{ id: string, title: string, updatedAt: any }>>([]);
 
@@ -131,83 +132,66 @@ export default function DashboardPage() {
       setUploadProgress(0);
     }
   });
+  const { context, isLoading: isContextLoading } = useUserContext();
+  const userData = context || { name: 'Guest Student', email: 'Not signed in', uid: '', profile: null };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        let profile = null;
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            profile = userSnap.data();
+    if (!context?.uid) {
+      setChatList([]);
+      setCurrentChatId(null);
+      setVaultFiles([]);
+      setTimetables([]);
+      setStudyGuides([]);
+      setIsLoading(false);
+      return;
+    }
 
-            // Fetch timetables
-            const timetablesSnap = await getDoc(doc(db, 'timetables', user.uid));
-            if (timetablesSnap.exists()) {
-              const fetchedClasses = timetablesSnap.data().scheduled_classes || [];
-              const classesWithIds = fetchedClasses.map((c: any) => c.id ? c : { ...c, id: Date.now().toString(36) + Math.random().toString(36).substring(2) });
-              setTimetables(classesWithIds);
-            }
-
-            // Legacy Migration: flat `courses` array -> `semesters` array
-            let needsMigration = false;
-            if (!profile.semesters || profile.semesters.length === 0) {
-              needsMigration = true;
-              profile.semesters = [{
-                semesterId: 'current_semester_01',
-                title: 'Current Semester',
-                isActive: true,
-                courses: (profile.courses && Array.isArray(profile.courses)) ? profile.courses : [],
-                timetableUrl: ''
-              }];
-            }
-            if (needsMigration) {
-              await updateDoc(userRef, { semesters: profile.semesters });
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching user profile", error);
+    const fetchVaultData = async () => {
+      // Fetch timetables
+      try {
+        const timetablesSnap = await getDoc(doc(db, 'timetables', context.uid));
+        if (timetablesSnap.exists()) {
+          const fetchedClasses = timetablesSnap.data().scheduled_classes || [];
+          const classesWithIds = fetchedClasses.map((c: any) => c.id ? c : { ...c, id: Date.now().toString(36) + Math.random().toString(36).substring(2) });
+          setTimetables(classesWithIds);
         }
-        setUserData({ name: profile?.username || user.displayName || 'Student', email: user.email || '', uid: user.uid, profile });
-
-        // Fetch Vault Files
-        try {
-          const vq = query(collection(db, 'vault_files'), where('userId', '==', user.uid));
-          const vaultSnap = await getDocs(vq);
-          const vFiles = vaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setVaultFiles(vFiles);
-        } catch (e) { console.error(e) }
-
-        // Fetch Chat List
-        try {
-          const q = query(collection(db, 'chats'), where('userId', '==', user.uid));
-          const chatSnap = await getDocs(q);
-          const chats = chatSnap.docs.map(d => ({ id: d.id, title: d.data().title, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
-          chats.sort((a, b) => b.updatedAt - a.updatedAt);
-          setChatList(chats);
-        } catch (error) {
-          console.error("Error fetching chats:", error);
-        }
-
-        // Fetch Study Guides
-        try {
-          const sq = query(collection(db, 'study_guides'), where('userId', '==', user.uid));
-          const studyGuideSnap = await getDocs(sq);
-          const sGuides = studyGuideSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          sGuides.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-          setStudyGuides(sGuides);
-        } catch (e) { console.error(e) }
-        setIsLoading(false);
-      } else {
-        setUserData({ name: 'Guest Student', email: 'Not signed in', uid: '', profile: null });
-        setChatList([]);
-        setCurrentChatId(null);
-        setIsLoading(false);
+      } catch (err) {
+        console.error("Error fetching timetables", err);
       }
-    });
-    return () => unsubscribe();
-  }, []);
+
+      // Fetch Vault Files
+      try {
+        const vq = query(collection(db, 'vault_files'), where('userId', '==', context.uid));
+        const vaultSnap = await getDocs(vq);
+        const vFiles = vaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setVaultFiles(vFiles);
+      } catch (e) { console.error(e) }
+
+      // Fetch Chat List
+      try {
+        const q = query(collection(db, 'chats'), where('userId', '==', context.uid));
+        const chatSnap = await getDocs(q);
+        const chats = chatSnap.docs.map(d => ({ id: d.id, title: d.data().title, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
+        chats.sort((a, b) => b.updatedAt - a.updatedAt);
+        setChatList(chats);
+      } catch (error) {
+        console.error("Error fetching chats:", error);
+      }
+
+      // Fetch Study Guides
+      try {
+        const sq = query(collection(db, 'study_guides'), where('userId', '==', context.uid));
+        const studyGuideSnap = await getDocs(sq);
+        const sGuides = studyGuideSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        sGuides.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        setStudyGuides(sGuides);
+      } catch (e) { console.error(e) }
+      
+      setIsLoading(false);
+    };
+
+    fetchVaultData();
+  }, [context?.uid]);
 
   const processFiles = (files: File[]) => {
     if (files.length > 20) {
@@ -968,13 +952,34 @@ export default function DashboardPage() {
     setMessages(updatedMessages);
     setIsQuerying(true);
 
+    if (isContextLoading) return; // Do not send request if context isn't ready
+    if (!context) {
+      console.error('System Error: User context not loaded.');
+      setMessages([...updatedMessages, { role: 'ai', content: 'System Error: User context not loaded.' }]);
+      setIsQuerying(false);
+      return; 
+    }
+
     try {
+      const userProfilePayload = {
+        name: context.name,
+        school: context.school,
+        department: context.department,
+        courses: context.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
+      };
+
       const response = await fetch('/api/engine/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: userMessage, userId: userData.uid, chatHistory: history, userProfile: userData.profile })
+        body: JSON.stringify({ query: userMessage, userId: context.uid, chatHistory: history, userProfile: userProfilePayload })
       });
       const data = await response.json();
+
+      if (data.error) {
+        setMessages([...updatedMessages, { role: 'ai', content: `System Error: ${data.error}` }]);
+        setIsQuerying(false);
+        return;
+      }
 
       let newAiMsg: VaultChatMessage;
       if (data.type === 'action_required') {
@@ -995,7 +1000,7 @@ export default function DashboardPage() {
           ...(data.error ? { error: data.error } : {})
         } as any;
       } else {
-        newAiMsg = { role: 'ai', content: data.answer || data.error };
+        newAiMsg = { role: 'ai', content: data.answer };
       }
 
       const finalMessages = [...updatedMessages, newAiMsg];
