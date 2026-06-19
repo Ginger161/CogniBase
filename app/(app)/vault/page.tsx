@@ -1374,7 +1374,7 @@ export default function DashboardPage() {
                       const renderCourse = (course: any, i: number) => {
                         const isSelected = selectedCourseCodes.includes(course.courseCode);
                         return (
-                          <div key={i} className="flex items-center justify-between w-full p-4 bg-gray-800 rounded-xl mb-3 shadow-sm border border-transparent hover:border-gray-700 transition-colors">
+                          <div key={i} className="flex items-center justify-between w-full p-4 bg-gray-800 rounded-xl mb-3 border border-gray-700/50 shadow-sm">
                             
                             {/* Left Side: Checkbox and Course Code */}
                             <div className="flex items-center gap-4">
@@ -1387,15 +1387,15 @@ export default function DashboardPage() {
                                 />
                               </div>
                               
-                              {/* Course Code ONLY (Orange and Bold) */}
+                              {/* Course Code (Orange and Bold) */}
                               <span className="text-orange-500 font-bold text-base sm:text-lg">
                                 {course.courseCode}
                               </span>
                             </div>
 
-                            {/* Right Side: Trash Icon (Grey, NOT white) */}
+                            {/* Right Side: Trash Icon (Lightened to text-gray-400 for visibility) */}
                             <div className="shrink-0">
-                              <button onClick={() => handleDropCourse(course.courseCode)} className="p-2 text-gray-500 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer">
+                              <button onClick={() => handleDropCourse(course.courseCode)} className="p-2 text-gray-400 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer">
                                 <Trash2 size={18} />
                               </button>
                             </div>
