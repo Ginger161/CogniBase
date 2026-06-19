@@ -1353,7 +1353,7 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                <div style={{ gridColumn: '1 / -1', backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="w-full max-w-full overflow-hidden" style={{ gridColumn: '1 / -1', backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>My Registered Courses</h3>
                      {selectedCourseCodes.length > 0 && (
@@ -1362,7 +1362,7 @@ export default function DashboardPage() {
                        </button>
                      )}
                    </div>
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                   <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                      {(() => {
                         const activeSem = userData.profile?.semesters?.find((s: any) => s.isActive);
                         if (!activeSem || !activeSem.courses) return <p style={{ color: '#A1A1AA' }}>No courses added yet for the active academic year.</p>;
@@ -1373,7 +1373,7 @@ export default function DashboardPage() {
                         const renderCourse = (course: any, i: number) => {
                           const isSelected = selectedCourseCodes.includes(course.courseCode);
                           return (
-                            <div key={i} className={`flex items-center justify-between w-full p-3 sm:p-4 rounded-xl mb-2 overflow-hidden transition-all ${isSelected ? 'bg-zinc-700 border border-orange-600' : 'bg-gray-800 border border-transparent hover:border-gray-700'}`}>
+                            <div key={i} className="flex items-center justify-between w-full p-3 sm:p-4 bg-gray-800 rounded-xl mb-2 overflow-hidden">
                               
                               {/* 1. Left: Checkbox */}
                               <div className="shrink-0 mr-3 flex items-center">
@@ -1388,7 +1388,7 @@ export default function DashboardPage() {
                                 </span>
                                 
                                 {/* Course Title (Smaller, Grey, with Ellipsis) */}
-                                <span className="text-gray-400 text-xs sm:text-sm truncate mt-0.5" title={course.courseTitle}>
+                                <span className="text-gray-400 text-xs sm:text-sm truncate mt-0.5">
                                   {course.courseTitle}
                                 </span>
                               </div>
@@ -1406,14 +1406,14 @@ export default function DashboardPage() {
 
                         return (
                           <>
-                            <div>
+                            <div className="w-full max-w-full overflow-hidden">
                               {firstSemesterCourses.length > 0 ? (
                                 <>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '0.5rem' }}>
                                     <input type="checkbox" checked={firstSemesterCourses.every((c: any) => selectedCourseCodes.includes(c.courseCode))} onChange={(e) => handleToggleSemesterSelection(firstSemesterCourses, !e.target.checked)} style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} title="Select All First Semester" />
                                     <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>First Semester</h4>
                                   </div>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                  <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     {firstSemesterCourses.map(renderCourse)}
                                   </div>
                                 </>
@@ -1421,14 +1421,14 @@ export default function DashboardPage() {
                                 <p style={{ color: '#71717A', fontSize: '0.9rem', fontStyle: 'italic' }}>No First Semester courses added yet.</p>
                               )}
                             </div>
-                            <div>
+                            <div className="w-full max-w-full overflow-hidden">
                               {secondSemesterCourses.length > 0 ? (
                                 <>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '0.5rem' }}>
                                     <input type="checkbox" checked={secondSemesterCourses.every((c: any) => selectedCourseCodes.includes(c.courseCode))} onChange={(e) => handleToggleSemesterSelection(secondSemesterCourses, !e.target.checked)} style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} title="Select All Second Semester" />
                                     <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>Second Semester</h4>
                                   </div>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                  <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     {secondSemesterCourses.map(renderCourse)}
                                   </div>
                                 </>
