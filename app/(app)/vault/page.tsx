@@ -1537,8 +1537,22 @@ export default function DashboardPage() {
                   <input type="file" accept=".pdf,image/*,.docx,.csv,.xls,.xlsx" ref={timetableInputRef} onChange={handleTimetableUpload} style={{ display: 'none' }} />
 
                   <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                    <button onClick={() => timetableInputRef.current?.click()} disabled={isTimetableUploading || isExtractingTimetable} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', opacity: (isTimetableUploading || isExtractingTimetable) ? 0.5 : 1 }}>
-                      {isExtractingTimetable ? 'Analyzing timetable...' : isTimetableUploading ? 'Uploading...' : (userData.profile?.semesters?.find((s: any) => s.isActive)?.timetableUrl ? 'Replace Timetable' : 'Add Timetable')}
+                    <button 
+                      onClick={() => timetableInputRef.current?.click()}
+                      disabled={isTimetableUploading || isExtractingTimetable}
+                      style={{ 
+                        backgroundColor: '#f97316', 
+                        color: '#ffffff',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: '0.5rem',
+                        fontWeight: '600',
+                        border: 'none',
+                        cursor: 'pointer',
+                        opacity: (isTimetableUploading || isExtractingTimetable) ? 0.5 : 1
+                      }}
+                    >
+                      {/* If timetable exists, show 'Replace', otherwise show 'Add' */}
+                      {isExtractingTimetable ? 'Analyzing timetable...' : isTimetableUploading ? 'Uploading...' : (timetables.length > 0 ? "Replace timetable" : "Add timetable")}
                     </button>
                     <button onClick={() => setShowManualTimetable(!showManualTimetable)} style={{ backgroundColor: showManualTimetable ? '#27272A' : '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' }}>
                       {showManualTimetable ? 'Cancel Manual Entry' : 'Add Manually'}
