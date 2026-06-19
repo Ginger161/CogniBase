@@ -1368,9 +1368,20 @@ export default function DashboardPage() {
                   </div>
                   <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                     {isLoading ? (
-                      <div className="w-full flex flex-col gap-3 mt-4">
-                        {[1, 2, 3, 4].map((n) => (
-                          <div key={n} className="w-full h-[60px] bg-gray-800/50 animate-pulse rounded-xl border border-gray-700/30"></div>
+                      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginTop: '0.5rem' }}>
+                        {[1, 2, 3].map((n) => (
+                          <div 
+                            key={n} 
+                            className="animate-pulse"
+                            style={{
+                              width: '100%',
+                              height: '68px',
+                              backgroundColor: '#374151',
+                              borderRadius: '0.75rem',
+                              marginBottom: '0.75rem',
+                              border: '1px solid #4b5563'
+                            }}
+                          ></div>
                         ))}
                       </div>
                     ) : (() => {
