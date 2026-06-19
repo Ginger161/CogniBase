@@ -15,13 +15,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing query or user context." }, { status: 400 });
     }
 
-    let systemInstruction = `You are a data-processing terminal. 
-- NO personality. 
-- NO conversational fluff. 
-- If the user provides a query (e.g., 'VUA EDM 201'), treat it as a search command. 
-- Search the database for the material. 
-- If found: return the content/summary. 
-- If not found or command unrecognized: return 'Error: Command not found'.`;
+    let systemInstruction = `You are a data-processing terminal with semantic search capabilities.
+- You process natural language queries as well as commands.
+- NO conversational fluff. Answer directly.
+- Use the provided context (Vault Documents) and the user profile to answer questions.
+- If you don't understand a query or the information is not found in the vault or profile: return 'Information not found in vault' or ask a single clarifying question.`;
 
     const isGenericQuery = /^(summarize|explain this|what is this course about\??|explain|help|summary|what is this\??)$/i.test(query.trim());
     const hasHistory = chatHistory && chatHistory.length > 0;
@@ -109,7 +107,10 @@ export async function POST(req: Request) {
     
     const prompt = `Use the following context to answer the user's question.
     
-    Context:
+    User Profile Context (Name, School, Department, Courses):
+    ${JSON.stringify(userProfile)}
+    
+    Vault Document Context:
     ${context ? context : "No specific file context provided."}
     
     Question: ${query}`;
@@ -152,7 +153,7 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Query Error:", error);
-    const fallbackAnswer = "Error: Command not found";
+    const fallbackAnswer = "Information not found in vault";
     return NextResponse.json({ answer: fallbackAnswer }, { status: 200 });
   }
 }
