@@ -15,59 +15,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing query or user context." }, { status: 400 });
     }
 
-    // 1. Intent & Sentinel State Classification
-    const classificationModel = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      generationConfig: { responseMimeType: "application/json" }
-    });
-    const classificationPrompt = `Analyze the user's query and provide a JSON response with two keys:
-    1. "intent": Classify into exactly one of these categories: "Scheduling", "Strategy", "Synthesis", or "Other".
-    2. "implicitState": Identify if the user is expressing stress or overload. Return "Stressed", "Overwhelmed", "Falling Behind", or "Normal".
-    Query: "${query}"`;
-    const classificationResult = await classificationModel.generateContent(classificationPrompt);
-    
-    let intent = 'Other';
-    let implicitState = 'Normal';
-    try {
-      const parsed = JSON.parse(classificationResult.response.text().trim());
-      intent = parsed.intent || 'Other';
-      implicitState = parsed.implicitState || 'Normal';
-    } catch(e) {
-      console.error("Failed to parse classification JSON:", e);
-    }
-
-    // 2. Base System Instruction
-    let systemInstruction = `You are a smart academic companion. You know the student's background but you are subtle. You only mention their specific details when it is logically relevant to help them achieve their goal. Prioritize natural, helpful communication over robotic repetition. If you are asked to build a study schedule, you MUST output it in a strict JSON format.`;
-
-    // 3. Conditional Context Injection (Intent)
-    if (intent === 'Scheduling' || intent === 'Strategy' || intent === 'Synthesis') {
-      if (userProfile && userProfile.username && userProfile.department && userProfile.school) {
-        let activeCoursesText = "No courses currently registered.";
-        if (userProfile.semesters && Array.isArray(userProfile.semesters)) {
-          const activeSem = userProfile.semesters.find((s: any) => s.isActive);
-          if (activeSem && activeSem.courses && activeSem.courses.length > 0) {
-            activeCoursesText = activeSem.courses.map((c: any) => `- ${c.courseCode}: ${c.courseTitle}`).join('\n');
-          }
-        }
-        systemInstruction += `\n\nStudent Profile Context:\nName: ${userProfile.username}\nDepartment: ${userProfile.department}\nSchool: ${userProfile.school}\nActive Courses:\n${activeCoursesText}`;
-      }
-    }
-
-    // 4. Sentinel Engine: Implicit Context Injection
-    if (['Stressed', 'Overwhelmed', 'Falling Behind'].includes(implicitState)) {
-      let timetableContext = "No timetable available.";
-      try {
-        const timetablesDoc = await getDoc(doc(db, 'timetables', userId));
-        if (timetablesDoc.exists()) {
-          const data = timetablesDoc.data();
-          timetableContext = JSON.stringify(data.scheduled_classes || []);
-        }
-      } catch (err) {
-        console.error("Sentinel failed to fetch timetable:", err);
-      }
-      
-      systemInstruction += `\n\n[SENTINEL ENGINE ACTIVE]\nThe user is currently feeling ${implicitState}. Act as an 'Empathetic Executive'. Synthesize their current academic load against their timetable below and provide an actionable solution (e.g., rescheduling a study task) before they ask. Always end your response with an action button format wrapped in brackets, e.g., '[Action: Reschedule Thursday]' or '[Action: Show me lighter days]' that ties back into the system's ability to mutate data.\nTimetable Context: ${timetableContext}`;
-    }
+    let systemInstruction = `You are a data-processing terminal. 
+- NO personality. 
+- NO conversational fluff. 
+- If the user provides a query (e.g., 'VUA EDM 201'), treat it as a search command. 
+- Search the database for the material. 
+- If found: return the content/summary. 
+- If not found or command unrecognized: return 'Error: Command not found'.`;
 
     const isGenericQuery = /^(summarize|explain this|what is this course about\??|explain|help|summary|what is this\??)$/i.test(query.trim());
     const hasHistory = chatHistory && chatHistory.length > 0;
@@ -198,7 +152,7 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Query Error:", error);
-    const fallbackAnswer = "I am unable to process that specific request. However, as your Academic Copilot, I can help you analyze your course materials, build reading timetables, create flashcards, or summarize your notes. Could you rephrase your question, or let me know which of these study tools you would like to focus on?";
+    const fallbackAnswer = "Error: Command not found";
     return NextResponse.json({ answer: fallbackAnswer }, { status: 200 });
   }
 }
