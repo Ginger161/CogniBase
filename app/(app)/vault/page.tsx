@@ -18,10 +18,10 @@ export default function DashboardPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [userData, setUserData] = useState<any>({ name: 'Loading...', email: '', uid: '', profile: null });
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [chatList, setChatList] = useState<Array<{id: string, title: string, updatedAt: any}>>([]);
+  const [chatList, setChatList] = useState<Array<{ id: string, title: string, updatedAt: any }>>([]);
 
   // Console state
-  const [messages, setMessages] = useState<VaultChatMessage[]>([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+  const [messages, setMessages] = useState<VaultChatMessage[]>([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
   const [consoleInput, setConsoleInput] = useState('');
   const [isQuerying, setIsQuerying] = useState(false);
 
@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
-  
+
   // Courses state
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractingPhaseIndex, setExtractingPhaseIndex] = useState(0);
@@ -50,7 +50,7 @@ export default function DashboardPage() {
   const [selectedCategory, setSelectedCategory] = useState<'Note' | 'Assignment' | 'Audio' | 'Video'>('Note');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<string>('newest');
-  
+
   // Flashcard state
   const [activeFileDropdown, setActiveFileDropdown] = useState<string | null>(null);
   const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
@@ -132,7 +132,7 @@ export default function DashboardPage() {
           const userSnap = await getDoc(userRef);
           if (userSnap.exists()) {
             profile = userSnap.data();
-            
+
             // Fetch timetables
             const timetablesSnap = await getDoc(doc(db, 'timetables', user.uid));
             if (timetablesSnap.exists()) {
@@ -140,7 +140,7 @@ export default function DashboardPage() {
               const classesWithIds = fetchedClasses.map((c: any) => c.id ? c : { ...c, id: Date.now().toString(36) + Math.random().toString(36).substring(2) });
               setTimetables(classesWithIds);
             }
-            
+
             // Legacy Migration: flat `courses` array -> `semesters` array
             let needsMigration = false;
             if (!profile.semesters || profile.semesters.length === 0) {
@@ -161,14 +161,14 @@ export default function DashboardPage() {
           console.error("Error fetching user profile", error);
         }
         setUserData({ name: profile?.username || user.displayName || 'Student', email: user.email || '', uid: user.uid, profile });
-        
+
         // Fetch Vault Files
         try {
           const vq = query(collection(db, 'vault_files'), where('userId', '==', user.uid));
           const vaultSnap = await getDocs(vq);
           const vFiles = vaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
           setVaultFiles(vFiles);
-        } catch(e) { console.error(e) }
+        } catch (e) { console.error(e) }
 
         // Fetch Chat List
         try {
@@ -188,7 +188,7 @@ export default function DashboardPage() {
           const sGuides = studyGuideSnap.docs.map(d => ({ id: d.id, ...d.data() }));
           sGuides.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
           setStudyGuides(sGuides);
-        } catch(e) { console.error(e) }
+        } catch (e) { console.error(e) }
       } else {
         setUserData({ name: 'Guest Student', email: 'Not signed in', uid: '', profile: null });
         setChatList([]);
@@ -202,13 +202,13 @@ export default function DashboardPage() {
     if (files.length > 20) {
       setUploadStatus('Error: You can only upload a maximum of 20 files at once.');
       setTimeout(() => setUploadStatus(''), 5000);
-      return; 
+      return;
     }
     const validFiles = files.filter(f => f.name.match(/\.(pdf|pptx|docx|txt)$/i));
     if (validFiles.length !== files.length) {
       setUploadStatus('Error: Legacy .doc files are not supported. Please save as modern .docx or .pdf.');
       setTimeout(() => setUploadStatus(''), 5000);
-      return; 
+      return;
     }
     setPendingFiles((prev) => {
       const combined = [...prev, ...validFiles];
@@ -218,7 +218,7 @@ export default function DashboardPage() {
       if (unique.length > 20) {
         setUploadStatus('Error: Queue limit reached. Maximum 20 files total.');
         setTimeout(() => setUploadStatus(''), 4000);
-        return prev; 
+        return prev;
       }
       return unique;
     });
@@ -232,29 +232,29 @@ export default function DashboardPage() {
   const handleAddManualCourseCore = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualCourseCode.trim() || !manualCourseTitle.trim() || !userData.uid) return;
-    
+
     try {
       const userRef = doc(db, 'users', userData.uid);
       const newCourse = { courseCode: manualCourseCode.toUpperCase(), courseTitle: manualCourseTitle, semester: manualCourseSemester };
-      
+
       const semesters = [...(userData.profile?.semesters || [])];
       const activeSemIdx = semesters.findIndex((s: any) => s.isActive);
       if (activeSemIdx === -1) return;
-      
+
       const activeSem = semesters[activeSemIdx];
       if (activeSem.courses.some((c: any) => c.courseCode === newCourse.courseCode)) {
         setToastMessage("Course already exists in this semester!");
         return;
       }
-      
+
       activeSem.courses.push(newCourse);
-      
+
       await updateDoc(userRef, { semesters });
-      
+
       setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
       setManualCourseCode('');
       setManualCourseTitle('');
-    } catch(err) { console.error(err); }
+    } catch (err) { console.error(err); }
   };
 
   const { throttledFunction: handleAddManualCourse, isThrottled: isAddingCourse } = useThrottle(handleAddManualCourseCore);
@@ -265,13 +265,13 @@ export default function DashboardPage() {
       const semesters = [...(userData.profile?.semesters || [])];
       const activeSemIdx = semesters.findIndex((s: any) => s.isActive);
       if (activeSemIdx === -1) return;
-      
+
       semesters[activeSemIdx].courses = semesters[activeSemIdx].courses.filter((c: any) => c.courseCode !== courseCode);
-      
+
       const userRef = doc(db, 'users', userData.uid);
       await updateDoc(userRef, { semesters });
       setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
-    } catch(err) { console.error(err); }
+    } catch (err) { console.error(err); }
   };
 
   const handleToggleCourseSelection = (courseCode: string) => {
@@ -289,24 +289,24 @@ export default function DashboardPage() {
 
   const handleBulkDeleteCourses = async () => {
     if (selectedCourseCodes.length === 0 || !userData.uid) return;
-    
+
     try {
       const semesters = [...(userData.profile?.semesters || [])];
       const activeSemIdx = semesters.findIndex((s: any) => s.isActive);
       if (activeSemIdx === -1) return;
-      
+
       semesters[activeSemIdx].courses = semesters[activeSemIdx].courses.filter((c: any) => !selectedCourseCodes.includes(c.courseCode));
-      
+
       const userRef = doc(db, 'users', userData.uid);
       await updateDoc(userRef, { semesters });
       setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
       setSelectedCourseCodes([]);
-    } catch(err) { console.error(err); }
+    } catch (err) { console.error(err); }
   };
 
   const processCourseFile = async (file: File) => {
     if (!userData.uid) return;
-    
+
     setIsExtracting(true);
     try {
       // Step 1: Upload the file to UploadThing first
@@ -325,13 +325,13 @@ export default function DashboardPage() {
       const extractRes = await fetch('/api/engine/extract-courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          fileUrl, 
-          userId: userData.uid, 
-          semesterId: semesters[activeSemIdx].semesterId 
+        body: JSON.stringify({
+          fileUrl,
+          userId: userData.uid,
+          semesterId: semesters[activeSemIdx].semesterId
         })
       });
-      
+
       let data;
       try {
         data = await extractRes.json();
@@ -342,7 +342,7 @@ export default function DashboardPage() {
       if (!extractRes.ok) {
         throw new Error(data?.error || `API Error: ${extractRes.status} ${extractRes.statusText}`);
       }
-      
+
       if (data.courses && Array.isArray(data.courses)) {
         const activeSem = semesters[activeSemIdx];
         const newCourses = data.courses.filter((c: any) => !activeSem.courses.some((ext: any) => ext.courseCode === c.courseCode));
@@ -353,11 +353,11 @@ export default function DashboardPage() {
           setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
         }
       }
-      
-    } catch(err: any) {
+
+    } catch (err: any) {
       console.error(err);
       const errorMessage = err.message || "";
-      
+
       if (errorMessage.includes("503") || errorMessage.includes("Service Unavailable") || errorMessage.includes("fetch failed")) {
         setToastMessage("Our AI is currently analyzing a high volume of course registration forms. Please wait a few seconds and try again.");
       } else if (errorMessage.includes("invalid_document")) {
@@ -375,12 +375,12 @@ export default function DashboardPage() {
   const handleTimetableUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !userData.uid) return;
-    
+
     setIsTimetableUploading(true);
     setIsExtractingTimetable(true);
     try {
       const reader = new FileReader();
-      
+
       const extractedTimetable = await new Promise<any>((resolve, reject) => {
         reader.readAsDataURL(file);
         reader.onload = async () => {
@@ -397,7 +397,7 @@ export default function DashboardPage() {
               return;
             }
             resolve(data.timetable);
-          } catch(err) {
+          } catch (err) {
             reject(err);
           }
         };
@@ -406,7 +406,7 @@ export default function DashboardPage() {
 
       // Since extraction succeeded, we safely upload the file
       const uploadRes = await startTimetableUpload([file]);
-      
+
       let finalTimetableUrl = '';
       if (uploadRes && uploadRes.length > 0) {
         finalTimetableUrl = uploadRes[0].url;
@@ -416,7 +416,7 @@ export default function DashboardPage() {
 
       const semesters = [...(userData.profile?.semesters || [])];
       const activeSemIdx = semesters.findIndex((s: any) => s.isActive);
-      
+
       if (finalTimetableUrl && activeSemIdx !== -1) {
         semesters[activeSemIdx].timetableUrl = finalTimetableUrl;
         const userRef = doc(db, 'users', userData.uid);
@@ -439,9 +439,9 @@ export default function DashboardPage() {
             endTime: cls.endTime || '',
             location: cls.location || cls.venue || ''
           };
-          
+
           if (!formattedClass.courseCode || !formattedClass.day || !formattedClass.startTime) continue;
-          
+
           const clashResult = checkClash(formattedClass, currentTimetables);
           if (clashResult.hasClash) {
             clashingClasses.push({ ...formattedClass, clashingWith: clashResult.clashingCourse });
@@ -469,8 +469,8 @@ export default function DashboardPage() {
           setToastMessage("Timetable extracted and saved successfully!");
         }
       }
-      
-    } catch(err: any) {
+
+    } catch (err: any) {
       console.error(err);
       if (err.message?.includes("400")) {
         setToastMessage("Extraction Failed: The image format is not supported or the document is invalid.");
@@ -493,13 +493,13 @@ export default function DashboardPage() {
         const { clashingWith, ...rest } = c;
         return { ...rest, id: rest.id || Date.now().toString(36) + Math.random().toString(36).substring(2) };
       })];
-      
+
       const ttRef = doc(db, 'timetables', userData.uid);
       await updateDoc(ttRef, { scheduled_classes: currentTimetables });
       setTimetables(currentTimetables);
       setPendingClashes(null);
       setToastMessage("Clashing classes overridden and saved.");
-    } catch(err) {
+    } catch (err) {
       console.error(err);
     }
   };
@@ -522,14 +522,14 @@ export default function DashboardPage() {
         courseTitle: manualTimetableCourseTitle,
         location: ''
       };
-      
+
       let newScheduledClasses;
       if (editingClassId) {
         newScheduledClasses = timetables.map(cls => cls.id === editingClassId ? newClass : cls);
       } else {
         newScheduledClasses = [...timetables, newClass];
       }
-      
+
       const ttRef = doc(db, 'timetables', userData.uid);
       const ttSnap = await getDoc(ttRef);
       if (ttSnap.exists()) {
@@ -538,14 +538,14 @@ export default function DashboardPage() {
         const { setDoc } = await import('firebase/firestore');
         await setDoc(ttRef, { scheduled_classes: newScheduledClasses });
       }
-      
+
       setTimetables(newScheduledClasses);
       setManualTimetableCourseCode('');
       setManualTimetableCourseTitle('');
       setEditingClassId(null);
       setShowManualTimetable(false);
       setToastMessage(editingClassId ? "Class updated successfully!" : "Class added successfully!");
-    } catch(err) {
+    } catch (err) {
       console.error(err);
     }
   };
@@ -634,12 +634,12 @@ export default function DashboardPage() {
       setToastMessage("Please enter a section to cover.");
       return;
     }
-    
+
     const file = vaultFiles.find(f => f.id === activeDocumentId);
     if (!file) return;
 
     setIsGeneratingStudyGuide(true);
-    
+
     try {
       const res = await fetch('/api/engine/generate-study-guide', {
         method: 'POST',
@@ -647,9 +647,9 @@ export default function DashboardPage() {
         body: JSON.stringify({ fileUrl: file.downloadURL, sectionConstraint: studyGuideConstraint })
       });
       const data = await res.json();
-      
+
       if (!res.ok) throw new Error(data.error || "Failed to generate study guide.");
-      
+
       const newGuide = {
         userId: userData.uid,
         sourceDocumentId: file.id,
@@ -658,18 +658,18 @@ export default function DashboardPage() {
         markdownContent: data.studyGuide,
         createdAt: serverTimestamp()
       };
-      
+
       const docRef = await addDoc(collection(db, 'study_guides'), newGuide);
-      
+
       const fullGuide = { id: docRef.id, ...newGuide, createdAt: { seconds: Math.floor(Date.now() / 1000) } };
-      
+
       setStudyGuides(prev => [fullGuide, ...prev]);
-      
+
       setIsStudyGuideModalOpen(false);
       setActiveStudyGuide(fullGuide);
       setIsStudyGuideViewOpen(true);
-      
-    } catch(err: any) {
+
+    } catch (err: any) {
       console.error(err);
       setToastMessage(err.message || "Failed to generate study guide.");
     } finally {
@@ -679,14 +679,14 @@ export default function DashboardPage() {
 
   const handleGenerateFlashcardsFromGuide = async () => {
     if (!activeStudyGuide) return;
-    
+
     setIsGeneratingFlashcards(true);
     setFlashcards([]);
     setCurrentFlashcardIndex(0);
     setIsFlipped(false);
     setActiveFlashcardTitle(`${activeStudyGuide.sourceDocumentName} - ${activeStudyGuide.sectionConstraint} Flashcards`);
     setFlashcardModalOpen(true);
-    
+
     try {
       let res;
       try {
@@ -699,12 +699,12 @@ export default function DashboardPage() {
         console.error("Network Error:", networkErr);
         throw new Error("Could not connect to the server. The request may have timed out.");
       }
-      
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate flashcards from server.");
-      
+
       setFlashcards(data.flashcards);
-    } catch(err: any) {
+    } catch (err: any) {
       console.error("Flashcard Gen Error:", err);
       setToastMessage(err.message || "Failed to generate flashcards.");
       setFlashcardModalOpen(false);
@@ -719,7 +719,7 @@ export default function DashboardPage() {
       setToastMessage("Cannot generate flashcards: Document must be uploaded first.");
       return;
     }
-    
+
     setIsGeneratingFlashcards(true);
     setFlashcards([]);
     setCurrentFlashcardIndex(0);
@@ -727,7 +727,7 @@ export default function DashboardPage() {
     setActiveFlashcardTitle(`${file.fileName.split('.')[0]} Flashcards`);
     setActiveDocumentId(file.id);
     setFlashcardModalOpen(true);
-    
+
     try {
       let res;
       try {
@@ -740,12 +740,12 @@ export default function DashboardPage() {
         console.error("Network Error:", networkErr);
         throw new Error("Could not connect to the server. The request may have timed out.");
       }
-      
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate flashcards from server.");
-      
+
       setFlashcards(data.flashcards);
-    } catch(err: any) {
+    } catch (err: any) {
       console.error("Flashcard Gen Error:", err);
       setToastMessage(err.message || "Failed to generate flashcards.");
       setFlashcardModalOpen(false);
@@ -780,7 +780,7 @@ export default function DashboardPage() {
       });
       setToastMessage("Flashcard deck saved successfully!");
       setFlashcardModalOpen(false);
-    } catch(err) {
+    } catch (err) {
       console.error(err);
       setToastMessage("Failed to save flashcards.");
     }
@@ -814,7 +814,7 @@ export default function DashboardPage() {
       else setUploadStatus('Initializing Secure Transfer...');
 
       const res = await startUpload(newFilesToUpload);
-      
+
       if (res && res.length > 0) {
         setUploadStatus('Saving records to Database...');
         try {
@@ -849,11 +849,11 @@ export default function DashboardPage() {
   const handleInitiateAnalysis = async () => {
     if (!userData.uid) return;
     setAnalysisStatus('Scanning Vault...');
-    
+
     try {
       const q = query(collection(db, 'vault_files'), where('userId', '==', userData.uid), where('status', '==', 'raw'));
       const querySnapshot = await getDocs(q);
-      
+
       if (querySnapshot.empty) {
         setAnalysisStatus('All files in your Vault are already analyzed!');
         setTimeout(() => setAnalysisStatus(''), 4000);
@@ -861,7 +861,7 @@ export default function DashboardPage() {
       }
 
       const files = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
+
       // NEW: Sort files by newest first (reverse chronological)
       files.sort((a: any, b: any) => {
         const timeA = a.uploadedAt?.seconds || 0;
@@ -880,17 +880,17 @@ export default function DashboardPage() {
   };
 
   const toggleFileSelection = (id: string) => {
-    setSelectedFileIds(prev => 
+    setSelectedFileIds(prev =>
       prev.includes(id) ? prev.filter(fId => fId !== id) : [...prev, id]
     );
   };
 
   const handleProcessSelected = async () => {
     if (selectedFileIds.length === 0 || isAnalyzing) return;
-    
+
     setIsAnalyzing(true);
     setIsSelectionMode(false);
-    
+
     const filesToProcess = rawFiles.filter(f => selectedFileIds.includes(f.id));
     setAnalysisStatus(`Igniting AI Engine for ${filesToProcess.length} file(s)...`);
 
@@ -899,7 +899,7 @@ export default function DashboardPage() {
     try {
       for (const file of filesToProcess) {
         setAnalysisStatus(`Extracting: ${file.fileName}...`);
-        
+
         const response = await fetch('/api/engine/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -913,7 +913,7 @@ export default function DashboardPage() {
 
         const textResponse = await response.text();
         let result;
-        
+
         try {
           result = JSON.parse(textResponse);
         } catch (parseError) {
@@ -942,7 +942,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchChatHistory = async () => {
       if (!currentChatId) {
-        setMessages([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+        setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
         return;
       }
       try {
@@ -952,7 +952,7 @@ export default function DashboardPage() {
           if (data.messages && data.messages.length > 0) {
             setMessages(data.messages);
           } else {
-            setMessages([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+            setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
           }
         }
       } catch (error) {
@@ -972,10 +972,10 @@ export default function DashboardPage() {
     if (isQuerying) return;
     const baseMessages = historyPrefix || messages;
     const history = baseMessages.filter(m => m.type !== 'action_required').slice(-10);
-    
+
     const newUserMsg: VaultChatMessage = { role: 'user', content: userMessage };
     const updatedMessages = [...baseMessages, newUserMsg];
-    
+
     setMessages(updatedMessages);
     setIsQuerying(true);
 
@@ -986,7 +986,7 @@ export default function DashboardPage() {
         body: JSON.stringify({ query: userMessage, userId: userData.uid, chatHistory: history, userProfile: userData.profile })
       });
       const data = await response.json();
-      
+
       let newAiMsg: VaultChatMessage;
       if (data.type === 'action_required') {
         let content = '';
@@ -997,8 +997,8 @@ export default function DashboardPage() {
         } else if (data.action === 'add_to_timetable') {
           content = `I can add ${data.payload.courseCode} to your timetable on ${data.payload.day} from ${data.payload.startTime} to ${data.payload.endTime}.`;
         }
-        newAiMsg = { 
-          role: 'ai', 
+        newAiMsg = {
+          role: 'ai',
           content,
           type: 'action_required',
           action: data.action,
@@ -1010,7 +1010,7 @@ export default function DashboardPage() {
       }
 
       const finalMessages = [...updatedMessages, newAiMsg];
-      
+
       setMessages(finalMessages);
 
       // Persist to Firestore
@@ -1031,7 +1031,7 @@ export default function DashboardPage() {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
-        
+
         setCurrentChatId(newChatDoc.id);
         setChatList(prev => [{ id: newChatDoc.id, title, updatedAt: Date.now() }, ...prev]);
 
@@ -1041,14 +1041,14 @@ export default function DashboardPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt: userMessage })
         })
-        .then(res => res.json())
-        .then(data => {
-          if (data.title) {
-            updateDoc(doc(db, 'chats', newChatDoc.id), { title: data.title });
-            setChatList(prev => prev.map(c => c.id === newChatDoc.id ? { ...c, title: data.title } : c));
-          }
-        })
-        .catch(e => console.error("Async title generation failed", e));
+          .then(res => res.json())
+          .then(data => {
+            if (data.title) {
+              updateDoc(doc(db, 'chats', newChatDoc.id), { title: data.title });
+              setChatList(prev => prev.map(c => c.id === newChatDoc.id ? { ...c, title: data.title } : c));
+            }
+          })
+          .catch(e => console.error("Async title generation failed", e));
       }
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', content: "Error: Could not reach the brain." }]);
@@ -1059,7 +1059,7 @@ export default function DashboardPage() {
 
   const executeAction = async (msgIndex: number, action: string, payload: any, confirm: boolean) => {
     if (!userData.uid || !userData.profile || !userData.profile.semesters) return;
-    
+
     if (!confirm) {
       setMessages(prev => [...prev, { role: 'ai', content: 'Action cancelled.' }]);
       return;
@@ -1072,9 +1072,9 @@ export default function DashboardPage() {
         setToastMessage("No active semester found.");
         return;
       }
-      
+
       const activeSem = semesters[activeSemIdx];
-      
+
       if (action === 'add_course') {
         if (!activeSem.courses.some((c: any) => c.courseCode === payload.courseCode)) {
           activeSem.courses.push({ courseCode: payload.courseCode, courseTitle: payload.courseTitle, semester: payload.semester });
@@ -1105,7 +1105,7 @@ export default function DashboardPage() {
       const userRef = doc(db, 'users', userData.uid);
       await updateDoc(userRef, { semesters });
       setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
-      
+
       setMessages(prev => [...prev, { role: 'ai', content: 'Action completed successfully.' }]);
     } catch (err: any) {
       console.error(err);
@@ -1141,18 +1141,18 @@ export default function DashboardPage() {
     const newMessages = [...messages];
     newMessages[index] = { ...newMessages[index], feedback: type };
     setMessages(newMessages);
-    
+
     if (currentChatId) {
       try {
         await updateDoc(doc(db, 'chats', currentChatId), {
           messages: newMessages
         });
-      } catch(e) { console.error("Failed to save feedback", e); }
+      } catch (e) { console.error("Failed to save feedback", e); }
     }
   };
 
   const extractionPhases = ['Uploading document...', 'Scanning document structure...', 'Analyzing course codes...', 'Optimizing for high traffic...', 'Finalizing extraction...'];
-  
+
   useEffect(() => {
     let interval: any;
     if (isExtracting) {
@@ -1168,7 +1168,8 @@ export default function DashboardPage() {
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes indeterminate-bar {
           0% { left: -30%; }
           100% { left: 100%; }
@@ -1206,7 +1207,7 @@ export default function DashboardPage() {
           .desktop-text { display: inline; }
         }
       `}} />
-      
+
       <div className="dashboard-layout">
         <div className={`overlay ${isSidebarOpen || isConsoleOpen ? 'visible' : ''}`} onClick={() => { setIsSidebarOpen(false); setIsConsoleOpen(false); }}></div>
         <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
@@ -1224,10 +1225,10 @@ export default function DashboardPage() {
             <div style={{ marginTop: '1.5rem', borderTop: '1px solid #27272A', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden', flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: '#71717A', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recent Chats</span>
-                <button 
+                <button
                   onClick={() => {
                     setCurrentChatId(null);
-                    setMessages([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+                    setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
                     setIsConsoleOpen(true);
                   }}
                   style={{ background: 'none', border: 'none', color: '#EA580C', cursor: 'pointer', fontSize: '1.25rem', lineHeight: '1' }}
@@ -1238,7 +1239,7 @@ export default function DashboardPage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, paddingRight: '0.5rem' }} className="file-list-container">
                 {chatList.map(chat => (
-                  <button 
+                  <button
                     key={chat.id}
                     onClick={() => handleLoadChat(chat.id)}
                     style={{ background: currentChatId === chat.id ? '#18181B' : 'none', border: 'none', color: currentChatId === chat.id ? 'white' : '#A1A1AA', textAlign: 'left', padding: '0.5rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', transition: 'all 0.2s' }}
@@ -1291,10 +1292,10 @@ export default function DashboardPage() {
                 <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Extract from Portal</h3>
                   <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0 }}>Upload a screenshot of your course registration to auto-fill.</p>
-                  
-                  <div 
-                    onDragOver={handleDragOver} 
-                    onDragLeave={handleDragLeave} 
+
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
                     onDrop={(e) => {
                       e.preventDefault();
                       setIsDragging(false);
@@ -1312,7 +1313,7 @@ export default function DashboardPage() {
                     <span style={{ color: isDragging ? '#EA580C' : 'white', fontWeight: 'bold' }}>{isDragging ? 'Drop form here...' : '+ Select Registration Form'}</span>
                     <p style={{ color: '#71717A', fontSize: '0.75rem', margin: '0.5rem 0 0 0' }}>PNG, JPG, PDF</p>
                   </div>
-                  
+
                   {isExtracting && (
                     <div style={{ backgroundColor: '#27272A', padding: '1.5rem', borderRadius: '0.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -1321,11 +1322,11 @@ export default function DashboardPage() {
                           {extractionPhases[extractingPhaseIndex]}
                         </span>
                       </div>
-                      
+
                       <div style={{ width: '100%', height: '4px', backgroundColor: '#3F3F46', borderRadius: '2px', overflow: 'hidden', position: 'relative' }}>
                         <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '30%', backgroundColor: '#EA580C', borderRadius: '2px', animation: 'indeterminate-bar 1.5s infinite ease-in-out' }}></div>
                       </div>
-                      
+
                       <p style={{ color: '#71717A', fontSize: '0.75rem', margin: 0 }}>
                         This usually takes a few seconds, but may take up to 30 seconds during high network traffic.
                       </p>
@@ -1345,7 +1346,7 @@ export default function DashboardPage() {
                     <button type="submit" style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Add Course</button>
                   </form>
                 </div>
-                
+
                 {toastMessage && (
                   <div style={{ gridColumn: '1 / -1', backgroundColor: 'rgba(220, 38, 38, 0.1)', border: '1px solid #DC2626', color: '#FCA5A5', padding: '1rem', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>{toastMessage}</span>
@@ -1354,96 +1355,95 @@ export default function DashboardPage() {
                 )}
 
                 <div className="w-full max-w-full overflow-hidden" style={{ gridColumn: '1 / -1', backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>My Registered Courses</h3>
-                     {selectedCourseCodes.length > 0 && (
-                       <button onClick={handleBulkDeleteCourses} style={{ backgroundColor: '#DC2626', color: 'white', border: '1px solid #B91C1C', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                         <Trash2 size={16} /> Delete Selected ({selectedCourseCodes.length})
-                       </button>
-                     )}
-                   </div>
-                   <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                     {(() => {
-                        const activeSem = userData.profile?.semesters?.find((s: any) => s.isActive);
-                        if (!activeSem || !activeSem.courses) return <p style={{ color: '#A1A1AA' }}>No courses added yet for the active academic year.</p>;
-                        
-                        const firstSemesterCourses = activeSem.courses.filter((c: any) => c.semester === 'First');
-                        const secondSemesterCourses = activeSem.courses.filter((c: any) => c.semester === 'Second');
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>My Registered Courses</h3>
+                    {selectedCourseCodes.length > 0 && (
+                      <button onClick={handleBulkDeleteCourses} style={{ backgroundColor: '#DC2626', color: 'white', border: '1px solid #B91C1C', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Trash2 size={16} /> Delete Selected ({selectedCourseCodes.length})
+                      </button>
+                    )}
+                  </div>
+                  <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    {(() => {
+                      const activeSem = userData.profile?.semesters?.find((s: any) => s.isActive);
+                      if (!activeSem || !activeSem.courses) return <p style={{ color: '#A1A1AA' }}>No courses added yet for the active academic year.</p>;
 
-                        const renderCourse = (course: any, i: number) => {
-                          const isSelected = selectedCourseCodes.includes(course.courseCode);
-                          return (
-                            <div key={i} className="flex items-center justify-between w-full p-3 sm:p-4 bg-gray-800 rounded-xl mb-2 overflow-hidden">
-                              
-                              {/* 1. Left: Checkbox */}
-                              <div className="shrink-0 mr-3 flex items-center">
-                                <input type="checkbox" checked={isSelected} onChange={() => handleToggleCourseSelection(course.courseCode)} className="accent-orange-600 w-4 h-4 sm:w-5 sm:h-5 cursor-pointer" />
-                              </div>
+                      const firstSemesterCourses = activeSem.courses.filter((c: any) => c.semester === 'First');
+                      const secondSemesterCourses = activeSem.courses.filter((c: any) => c.semester === 'Second');
 
-                              {/* 2. Middle: Text container (min-w-0 forces the ellipsis to work) */}
-                              <div className="flex flex-col flex-1 min-w-0 pr-3">
-                                {/* Course Code (Orange & Bold) */}
-                                <span className="text-orange-500 font-bold text-sm sm:text-base leading-tight truncate">
-                                  {course.courseCode}
-                                </span>
-                                
-                                {/* Course Title (Smaller, Grey, with Ellipsis) */}
-                                <span className="text-gray-400 text-xs sm:text-sm truncate mt-0.5">
-                                  {course.courseTitle}
-                                </span>
-                              </div>
-
-                              {/* 3. Right: Trash Icon (shrink-0 protects it from being crushed) */}
-                              <div className="shrink-0 ml-2">
-                                <button onClick={() => handleDropCourse(course.courseCode)} className="p-2 text-gray-500 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer" title="Drop Course">
-                                  <Trash2 size={18} />
-                                </button>
-                              </div>
-
-                            </div>
-                          );
-                        };
-
+                      const renderCourse = (course: any, i: number) => {
+                        const isSelected = selectedCourseCodes.includes(course.courseCode);
                         return (
-                          <>
-                            <div className="w-full max-w-full overflow-hidden">
-                              {firstSemesterCourses.length > 0 ? (
-                                <>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '0.5rem' }}>
-                                    <input type="checkbox" checked={firstSemesterCourses.every((c: any) => selectedCourseCodes.includes(c.courseCode))} onChange={(e) => handleToggleSemesterSelection(firstSemesterCourses, !e.target.checked)} style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} title="Select All First Semester" />
-                                    <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>First Semester</h4>
-                                  </div>
-                                  <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    {firstSemesterCourses.map(renderCourse)}
-                                  </div>
-                                </>
-                              ) : (
-                                <p style={{ color: '#71717A', fontSize: '0.9rem', fontStyle: 'italic' }}>No First Semester courses added yet.</p>
-                              )}
+                          <div key={i} className="flex items-center justify-between w-full p-4 bg-gray-800 rounded-xl mb-3 shadow-sm border border-transparent hover:border-gray-700 transition-colors">
+                            
+                            {/* Left Side: Checkbox and Course Code */}
+                            <div className="flex items-center gap-4">
+                              <div className="shrink-0 flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleCourseSelection(course.courseCode)}
+                                  className="accent-orange-600 w-4 h-4 sm:w-5 sm:h-5 cursor-pointer"
+                                />
+                              </div>
+                              
+                              {/* Course Code ONLY (Orange and Bold) */}
+                              <span className="text-orange-500 font-bold text-base sm:text-lg">
+                                {course.courseCode}
+                              </span>
                             </div>
-                            <div className="w-full max-w-full overflow-hidden">
-                              {secondSemesterCourses.length > 0 ? (
-                                <>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '0.5rem' }}>
-                                    <input type="checkbox" checked={secondSemesterCourses.every((c: any) => selectedCourseCodes.includes(c.courseCode))} onChange={(e) => handleToggleSemesterSelection(secondSemesterCourses, !e.target.checked)} style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} title="Select All Second Semester" />
-                                    <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>Second Semester</h4>
-                                  </div>
-                                  <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    {secondSemesterCourses.map(renderCourse)}
-                                  </div>
-                                </>
-                              ) : (
-                                <p style={{ color: '#71717A', fontSize: '0.9rem', fontStyle: 'italic' }}>No Second Semester courses added yet.</p>
-                              )}
+
+                            {/* Right Side: Trash Icon (Grey, NOT white) */}
+                            <div className="shrink-0">
+                              <button onClick={() => handleDropCourse(course.courseCode)} className="p-2 text-gray-500 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer">
+                                <Trash2 size={18} />
+                              </button>
                             </div>
-                          </>
+
+                          </div>
                         );
-                     })()}
-                   </div>
+                      };
+
+                      return (
+                        <>
+                          <div className="w-full max-w-full overflow-hidden">
+                            {firstSemesterCourses.length > 0 ? (
+                              <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '0.5rem' }}>
+                                  <input type="checkbox" checked={firstSemesterCourses.every((c: any) => selectedCourseCodes.includes(c.courseCode))} onChange={(e) => handleToggleSemesterSelection(firstSemesterCourses, !e.target.checked)} style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} title="Select All First Semester" />
+                                  <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>First Semester</h4>
+                                </div>
+                                <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                  {firstSemesterCourses.map(renderCourse)}
+                                </div>
+                              </>
+                            ) : (
+                              <p style={{ color: '#71717A', fontSize: '0.9rem', fontStyle: 'italic' }}>No First Semester courses added yet.</p>
+                            )}
+                          </div>
+                          <div className="w-full max-w-full overflow-hidden">
+                            {secondSemesterCourses.length > 0 ? (
+                              <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '0.5rem' }}>
+                                  <input type="checkbox" checked={secondSemesterCourses.every((c: any) => selectedCourseCodes.includes(c.courseCode))} onChange={(e) => handleToggleSemesterSelection(secondSemesterCourses, !e.target.checked)} style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} title="Select All Second Semester" />
+                                  <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>Second Semester</h4>
+                                </div>
+                                <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                  {secondSemesterCourses.map(renderCourse)}
+                                </div>
+                              </>
+                            ) : (
+                              <p style={{ color: '#71717A', fontSize: '0.9rem', fontStyle: 'italic' }}>No Second Semester courses added yet.</p>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
             )}
-            
+
             {activeTab === 'timetable' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', textAlign: 'center' }}>
@@ -1452,9 +1452,9 @@ export default function DashboardPage() {
                     <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>My Timetable</h3>
                   </div>
                   <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0 }}>Upload your class schedule to keep it handy.</p>
-                  
+
                   <input type="file" accept=".pdf,image/*,.docx,.csv,.xls,.xlsx" ref={timetableInputRef} onChange={handleTimetableUpload} style={{ display: 'none' }} />
-                  
+
                   <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                     <button onClick={() => timetableInputRef.current?.click()} disabled={isTimetableUploading || isExtractingTimetable} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', opacity: (isTimetableUploading || isExtractingTimetable) ? 0.5 : 1 }}>
                       {isExtractingTimetable ? 'Analyzing timetable...' : isTimetableUploading ? 'Uploading...' : (userData.profile?.semesters?.find((s: any) => s.isActive)?.timetableUrl ? 'Replace Timetable' : 'Add Timetable')}
@@ -1510,7 +1510,7 @@ export default function DashboardPage() {
 
                 {(() => {
                   const activeSem = userData.profile?.semesters?.find((s: any) => s.isActive);
-                  
+
                   return (
                     <>
                       {pendingClashes && pendingClashes.length > 0 && (
@@ -1536,7 +1536,7 @@ export default function DashboardPage() {
                           const isClash = arr.some((otherCls, j) => i !== j && otherCls.day.toLowerCase() === cls.day.toLowerCase() && otherCls.startTime === cls.startTime);
                           return { ...cls, isClash };
                         });
-                        
+
                         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1645,16 +1645,16 @@ export default function DashboardPage() {
                 })()}
               </div>
             )}
-            
+
             {activeTab === 'materials' && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
                 <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Upload Material</h3>
                   <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0 }}>Upload lecture slides or PDFs to build your knowledge base.</p>
-                  
+
                   <input type="file" multiple accept=".pdf,.pptx,.docx,.txt" ref={fileInputRef} onChange={handleFileInput} style={{ display: 'none' }} />
 
-                  <div 
+                  <div
                     onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
                     style={{ backgroundColor: isDragging ? '#27272A' : '#18181B', padding: '1.5rem', borderRadius: '0.5rem', border: isDragging ? '1px dashed #EA580C' : '1px dashed #3F3F46', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginTop: 'auto', opacity: isUploading ? 0.5 : 1, pointerEvents: isUploading ? 'none' : 'auto' }}
                   >
@@ -1673,7 +1673,7 @@ export default function DashboardPage() {
                           </div>
                         ))}
                       </div>
-                      
+
                       {pendingFiles.length > 0 && !isUploading && (
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
                           <select value={selectedCategory} onChange={(e: any) => setSelectedCategory(e.target.value)} style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #3F3F46', padding: '0.5rem', borderRadius: '0.25rem', outline: 'none', flex: 1 }}>
@@ -1682,7 +1682,7 @@ export default function DashboardPage() {
                             <option value="Audio">Audio Recording</option>
                             <option value="Video">Video Recording</option>
                           </select>
-                          <button 
+                          <button
                             onClick={handleUploadToVault} disabled={isUploading}
                             style={{ backgroundColor: '#EA580C', color: 'white', padding: '0.5rem 1rem', borderRadius: '0.25rem', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', transition: 'all 0.2s' }}
                           >
@@ -1705,7 +1705,7 @@ export default function DashboardPage() {
                     </div>
                   )}
                 </div>
-                
+
                 <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem', gridColumn: '1 / -1' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                     <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>My Files</h3>
@@ -1766,7 +1766,7 @@ export default function DashboardPage() {
                           {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
                             <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #3F3F46' }}>
                               <button onClick={() => setOpenStudyGuideDropdowns(prev => prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id])} style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}>
-                                {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={14} style={{ transform: 'rotate(-90deg)' }}/> : <ChevronRight size={14} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
+                                {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={14} style={{ transform: 'rotate(-90deg)' }} /> : <ChevronRight size={14} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
                               </button>
                               {openStudyGuideDropdowns.includes(file.id) && (
                                 <div className="flex flex-col min-w-0 w-full" style={{ gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '1rem' }}>
@@ -1786,7 +1786,7 @@ export default function DashboardPage() {
                             <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '1rem', alignSelf: 'flex-start', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
                             <div style={{ position: 'relative' }}>
                               <button onClick={() => setActiveFileDropdown(activeFileDropdown === file.id ? null : file.id)} style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', padding: 0 }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg>
                               </button>
                               {activeFileDropdown === file.id && (
                                 <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '0.5rem', width: '200px', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.25rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
@@ -1794,7 +1794,7 @@ export default function DashboardPage() {
                                     📚 Generate Study Guide
                                   </button>
                                   <button onClick={() => handleDeleteVaultFile(file.id)} style={{ width: '100%', textAlign: 'left', padding: '0.5rem', background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', marginTop: '0.25rem' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#3F3F46'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
                                     Delete File
                                   </button>
                                 </div>
@@ -1803,11 +1803,11 @@ export default function DashboardPage() {
                           </div>
                           <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }} title={file.fileName}>{file.fileName}</span>
                           <span style={{ color: '#71717A', fontSize: '0.75rem', marginTop: 'auto' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
-                          
+
                           {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
                             <div style={{ marginTop: '0.25rem', paddingTop: '0.5rem', borderTop: '1px dashed #3F3F46' }}>
                               <button onClick={() => setOpenStudyGuideDropdowns(prev => prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id])} style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}>
-                                {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={12} style={{ transform: 'rotate(-90deg)' }}/> : <ChevronRight size={12} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
+                                {openStudyGuideDropdowns.includes(file.id) ? <ChevronLeft size={12} style={{ transform: 'rotate(-90deg)' }} /> : <ChevronRight size={12} />} Study Guides ({studyGuides.filter(g => g.sourceDocumentId === file.id).length})
                               </button>
                               {openStudyGuideDropdowns.includes(file.id) && (
                                 <div className="flex flex-col min-w-0 w-full" style={{ gap: '0.25rem', marginTop: '0.5rem', paddingLeft: '0.5rem' }}>
@@ -1834,11 +1834,11 @@ export default function DashboardPage() {
         <aside className={`console-panel ${isConsoleOpen ? 'open' : ''}`}>
           <div style={{ padding: '1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ color: '#EA580C', fontWeight: 'bold' }}>&gt;_</span> 
+              <span style={{ color: '#EA580C', fontWeight: 'bold' }}>&gt;_</span>
               <span style={{ fontWeight: 'bold', letterSpacing: '0.05em' }}>console</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <button 
+              <button
                 onClick={() => {
                   setCurrentChatId(null);
                   setToastMessage("Fresh session started");
@@ -1854,118 +1854,119 @@ export default function DashboardPage() {
           </div>
           <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div style={{ color: '#A1A1AA', fontSize: '0.75rem', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px dashed #27272A', paddingBottom: '0.5rem' }}>Secure Session Established</div>
-            
+
             {messages.map((msg, i) => {
               const isError = msg.content.startsWith("Error:") || msg.content.includes("Failed to query the AI brain.");
-              
+
               const lowerMsg = msg.content.toLowerCase();
               const needsDisambiguation = lowerMsg.includes("which specific") || lowerMsg.includes("which document") || lowerMsg.includes("tell me which");
-              
+
               return (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ color: msg.role === 'user' ? '#A1A1AA' : isError ? '#EF4444' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                    {msg.role === 'user' ? userData.name.split(' ')[0] : '>_console'}
-                  </span>
-                  {msg.role === 'user' && (
-                    <button onClick={() => { setEditingMessageIndex(i); setEditInput(msg.content); }} className="hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: '#9CA3AF', padding: 0 }} title="Edit">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ color: msg.role === 'user' ? '#A1A1AA' : isError ? '#EF4444' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                      {msg.role === 'user' ? userData.name.split(' ')[0] : '>_console'}
+                    </span>
+                    {msg.role === 'user' && (
+                      <button onClick={() => { setEditingMessageIndex(i); setEditInput(msg.content); }} className="hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: '#9CA3AF', padding: 0 }} title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {editingMessageIndex === i ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '90%', alignItems: 'flex-end' }}>
+                      <textarea
+                        value={editInput}
+                        onChange={e => setEditInput(e.target.value)}
+                        style={{ width: '100%', backgroundColor: '#27272A', color: 'white', border: '1px solid #EA580C', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', outline: 'none', resize: 'vertical', minHeight: '80px' }}
+                      />
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button onClick={() => setEditingMessageIndex(null)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
+                        <button onClick={() => handleEditSubmit(i)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>Save & Resubmit</button>
+                      </div>
+                    </div>
+                  ) : msg.type === 'action_required' ? (
+                    <div className="w-full max-w-md overflow-hidden break-words whitespace-pre-wrap" style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: (msg as any).error?.status === 'clash' ? '1px solid #DC2626' : '1px solid #EA580C', color: '#E4E4E7', fontSize: '0.9rem' }}>
+                      <p className="min-w-0 break-words" style={{ margin: '0 0 1rem 0', fontWeight: 'bold' }}>{msg.content}</p>
+                      {(msg as any).error?.status === 'clash' && (
+                        <p style={{ margin: '0 0 1rem 0', color: '#FCA5A5', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          ⚠️ WARNING: This class clashes with {(msg as any).error.existingCourse}.
+                        </p>
+                      )}
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <button onClick={() => executeAction(i, msg.action!, msg.payload, false)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.5rem 1rem', borderRadius: '0.25rem', fontSize: '0.85rem', cursor: 'pointer' }}>Cancel</button>
+                        {(msg as any).error?.status === 'clash' ? (
+                          <button onClick={() => executeAction(i, msg.action!, msg.payload, true)} style={{ backgroundColor: '#DC2626', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.25rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }}>Override & Save</button>
+                        ) : (
+                          <button onClick={() => executeAction(i, msg.action!, msg.payload, true)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.25rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }}>Confirm Action</button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="max-w-full sm:max-w-[90%] break-words whitespace-pre-wrap min-w-0" style={{
+                      backgroundColor: msg.role === 'user' ? '#27272A' : isError ? '#450a0a' : '#18181B',
+                      padding: '1rem',
+                      borderRadius: '0.5rem',
+                      border: isError ? '1px solid #7f1d1d' : '1px solid #27272A',
+                      color: isError ? '#fca5a5' : '#E4E4E7',
+                      fontSize: '0.9rem',
+                      lineHeight: '1.6'
+                    }}>
+                      {msg.content}
+                    </div>
+                  )}
+
+                  {/* Smart Vault Selector for Disambiguation */}
+                  {msg.role === 'ai' && needsDisambiguation && !isError && i === messages.length - 1 && vaultFiles.length > 0 && (
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem', maxWidth: '90%' }}>
+                      {vaultFiles.map(file => (
+                        <button
+                          key={file.id}
+                          disabled={isQuerying}
+                          onClick={() => submitQuery(`Please use the document: ${file.fileName} as the context.`)}
+                          style={{ backgroundColor: '#18181B', color: '#A1A1AA', border: '1px solid #EA580C', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}
+                        >
+                          📄 {file.fileName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* AI Action Buttons & Controls */}
+                  {msg.role === 'ai' && msg.type !== 'action_required' && !isError && i > 0 && (
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem', alignItems: 'center' }}>
+                      {!needsDisambiguation && (
+                        <>
+                          <button disabled={isQuerying} onClick={() => submitQuery("Based on the response above, please create a set of interactive flashcards for me.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                            ✨ Create Flashcards
+                          </button>
+                          <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                            📝 Summarize Key Terms
+                          </button>
+                          <button disabled={isQuerying} onClick={() => submitQuery("Please generate a quick 3-question multiple-choice quiz based on the information above to test my understanding.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                            🧠 Generate Practice Quiz
+                          </button>
+                        </>
+                      )}
+                      <div style={{ flex: 1 }}></div>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button disabled={isQuerying} onClick={() => handleRegenerate(i)} className="hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: '#9CA3AF', opacity: isQuerying ? 0.5 : 1, padding: 0 }} title="Regenerate">
+                          <RefreshCcw className="w-3.5 h-3.5" />
+                        </button>
+                        <button disabled={isQuerying} onClick={() => handleFeedback(i, 'up')} className="hover:text-green-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'up' ? '#22C55E' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1, padding: 0 }} title="Good response">
+                          <ThumbsUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button disabled={isQuerying} onClick={() => handleFeedback(i, 'down')} className="hover:text-red-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'down' ? '#EF4444' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1, padding: 0 }} title="Bad response">
+                          <ThumbsDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-                
-                {editingMessageIndex === i ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '90%', alignItems: 'flex-end' }}>
-                    <textarea 
-                      value={editInput}
-                      onChange={e => setEditInput(e.target.value)}
-                      style={{ width: '100%', backgroundColor: '#27272A', color: 'white', border: '1px solid #EA580C', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', outline: 'none', resize: 'vertical', minHeight: '80px' }}
-                    />
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => setEditingMessageIndex(null)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
-                      <button onClick={() => handleEditSubmit(i)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>Save & Resubmit</button>
-                    </div>
-                  </div>
-                ) : msg.type === 'action_required' ? (
-                  <div className="w-full max-w-md overflow-hidden break-words whitespace-pre-wrap" style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: (msg as any).error?.status === 'clash' ? '1px solid #DC2626' : '1px solid #EA580C', color: '#E4E4E7', fontSize: '0.9rem' }}>
-                    <p className="min-w-0 break-words" style={{ margin: '0 0 1rem 0', fontWeight: 'bold' }}>{msg.content}</p>
-                    {(msg as any).error?.status === 'clash' && (
-                      <p style={{ margin: '0 0 1rem 0', color: '#FCA5A5', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                        ⚠️ WARNING: This class clashes with {(msg as any).error.existingCourse}.
-                      </p>
-                    )}
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                      <button onClick={() => executeAction(i, msg.action!, msg.payload, false)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.5rem 1rem', borderRadius: '0.25rem', fontSize: '0.85rem', cursor: 'pointer' }}>Cancel</button>
-                      {(msg as any).error?.status === 'clash' ? (
-                        <button onClick={() => executeAction(i, msg.action!, msg.payload, true)} style={{ backgroundColor: '#DC2626', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.25rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }}>Override & Save</button>
-                      ) : (
-                        <button onClick={() => executeAction(i, msg.action!, msg.payload, true)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.25rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }}>Confirm Action</button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="max-w-full sm:max-w-[90%] break-words whitespace-pre-wrap min-w-0" style={{ 
-                    backgroundColor: msg.role === 'user' ? '#27272A' : isError ? '#450a0a' : '#18181B', 
-                    padding: '1rem', 
-                    borderRadius: '0.5rem', 
-                    border: isError ? '1px solid #7f1d1d' : '1px solid #27272A', 
-                    color: isError ? '#fca5a5' : '#E4E4E7', 
-                    fontSize: '0.9rem', 
-                    lineHeight: '1.6'
-                  }}>
-                    {msg.content}
-                  </div>
-                )}
+              )
+            })}
 
-                {/* Smart Vault Selector for Disambiguation */}
-                {msg.role === 'ai' && needsDisambiguation && !isError && i === messages.length - 1 && vaultFiles.length > 0 && (
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem', maxWidth: '90%' }}>
-                    {vaultFiles.map(file => (
-                      <button 
-                        key={file.id} 
-                        disabled={isQuerying}
-                        onClick={() => submitQuery(`Please use the document: ${file.fileName} as the context.`)} 
-                        style={{ backgroundColor: '#18181B', color: '#A1A1AA', border: '1px solid #EA580C', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}
-                      >
-                        📄 {file.fileName}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* AI Action Buttons & Controls */}
-                {msg.role === 'ai' && msg.type !== 'action_required' && !isError && i > 0 && (
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem', alignItems: 'center' }}>
-                    {!needsDisambiguation && (
-                      <>
-                        <button disabled={isQuerying} onClick={() => submitQuery("Based on the response above, please create a set of interactive flashcards for me.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                          ✨ Create Flashcards
-                        </button>
-                        <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                          📝 Summarize Key Terms
-                        </button>
-                        <button disabled={isQuerying} onClick={() => submitQuery("Please generate a quick 3-question multiple-choice quiz based on the information above to test my understanding.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                          🧠 Generate Practice Quiz
-                        </button>
-                      </>
-                    )}
-                    <div style={{ flex: 1 }}></div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button disabled={isQuerying} onClick={() => handleRegenerate(i)} className="hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: '#9CA3AF', opacity: isQuerying ? 0.5 : 1, padding: 0 }} title="Regenerate">
-                        <RefreshCcw className="w-3.5 h-3.5" />
-                      </button>
-                      <button disabled={isQuerying} onClick={() => handleFeedback(i, 'up')} className="hover:text-green-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'up' ? '#22C55E' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1, padding: 0 }} title="Good response">
-                        <ThumbsUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button disabled={isQuerying} onClick={() => handleFeedback(i, 'down')} className="hover:text-red-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'down' ? '#EF4444' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1, padding: 0 }} title="Bad response">
-                        <ThumbsDown className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )})}
-            
             {isQuerying && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
                 <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>&gt;_console</span>
@@ -1978,19 +1979,19 @@ export default function DashboardPage() {
           </div>
           <div style={{ padding: '1.5rem', borderTop: '1px solid #27272A', backgroundColor: '#000000' }}>
             <form style={{ display: 'flex', gap: '0.5rem' }} onSubmit={handleConsoleSubmit}>
-              <input 
-                value={consoleInput} 
+              <input
+                value={consoleInput}
                 onChange={(e) => setConsoleInput(e.target.value)}
-                type="text" 
-                placeholder="Enter command or query..." 
-                style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '16px', outline: 'none', minWidth: '0' }} 
+                type="text"
+                placeholder="Enter command or query..."
+                style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '16px', outline: 'none', minWidth: '0' }}
               />
               <button type="submit" disabled={isQuerying} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0 1rem', borderRadius: '0.5rem', cursor: isQuerying ? 'not-allowed' : 'pointer', fontWeight: 'bold', flexShrink: 0, opacity: isQuerying ? 0.5 : 1 }}>→</button>
             </form>
           </div>
         </aside>
       </div>
-      
+
       {/* Clear Timetable Custom Modal */}
       {isClearModalOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}>
@@ -2002,14 +2003,14 @@ export default function DashboardPage() {
               </p>
             </div>
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-              <button 
-                onClick={() => setIsClearModalOpen(false)} 
+              <button
+                onClick={() => setIsClearModalOpen(false)}
                 style={{ backgroundColor: 'transparent', color: '#E4E4E7', border: '1px solid #3F3F46', padding: '0.6rem 1.25rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' }}
               >
                 Cancel
               </button>
-              <button 
-                onClick={handleClearTimetableConfirm} 
+              <button
+                onClick={handleClearTimetableConfirm}
                 style={{ backgroundColor: '#DC2626', color: 'white', border: 'none', padding: '0.6rem 1.25rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s' }}
               >
                 Wipe Schedule
@@ -2018,18 +2019,18 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      
+
       {/* Flashcard Active Engine Modal */}
       {flashcardModalOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)' }}>
           <div style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', padding: '2rem', width: '90%', maxWidth: '800px', height: '80vh', display: 'flex', flexDirection: 'column', gap: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-            
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #27272A', paddingBottom: '1rem' }}>
               <h3 style={{ color: 'white', margin: 0, fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 ✨ {activeFlashcardTitle}
               </h3>
-              <button 
-                onClick={() => setFlashcardModalOpen(false)} 
+              <button
+                onClick={() => setFlashcardModalOpen(false)}
                 style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '1.5rem', cursor: 'pointer' }}
               >
                 ✕
@@ -2044,9 +2045,9 @@ export default function DashboardPage() {
                 </div>
               ) : flashcards.length > 0 ? (
                 <>
-                  <div 
+                  <div
                     onClick={() => setIsFlipped(!isFlipped)}
-                    style={{ 
+                    style={{
                       width: '100%', maxWidth: '600px', height: '350px', cursor: 'pointer', position: 'relative', transition: 'transform 0.6s', transformStyle: 'preserve-3d', transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
                     }}
                   >
@@ -2060,9 +2061,9 @@ export default function DashboardPage() {
                       <p style={{ color: 'white', fontSize: '1.25rem', lineHeight: '1.6' }}>{flashcards[currentFlashcardIndex].back}</p>
                     </div>
                   </div>
-                  
+
                   <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', marginTop: '3rem' }}>
-                    <button 
+                    <button
                       onClick={() => { setIsFlipped(false); setTimeout(() => setCurrentFlashcardIndex(Math.max(0, currentFlashcardIndex - 1)), 150); }}
                       disabled={currentFlashcardIndex === 0}
                       style={{ background: 'none', border: '1px solid #3F3F46', color: 'white', padding: '0.75rem', borderRadius: '50%', cursor: currentFlashcardIndex === 0 ? 'not-allowed' : 'pointer', opacity: currentFlashcardIndex === 0 ? 0.3 : 1, transition: 'all 0.2s' }}
@@ -2070,7 +2071,7 @@ export default function DashboardPage() {
                       <ChevronLeft size={24} />
                     </button>
                     <span style={{ color: '#A1A1AA', fontSize: '1.1rem', fontWeight: 'bold' }}>{currentFlashcardIndex + 1} / {flashcards.length}</span>
-                    <button 
+                    <button
                       onClick={() => { setIsFlipped(false); setTimeout(() => setCurrentFlashcardIndex(Math.min(flashcards.length - 1, currentFlashcardIndex + 1)), 150); }}
                       disabled={currentFlashcardIndex === flashcards.length - 1}
                       style={{ background: 'none', border: '1px solid #3F3F46', color: 'white', padding: '0.75rem', borderRadius: '50%', cursor: currentFlashcardIndex === flashcards.length - 1 ? 'not-allowed' : 'pointer', opacity: currentFlashcardIndex === flashcards.length - 1 ? 0.3 : 1, transition: 'all 0.2s' }}
@@ -2085,7 +2086,7 @@ export default function DashboardPage() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #27272A', paddingTop: '1.5rem' }}>
-              <button 
+              <button
                 onClick={handleSaveDeck}
                 disabled={isGeneratingFlashcards || flashcards.length === 0}
                 style={{ backgroundColor: '#27272A', color: 'white', border: '1px solid #3F3F46', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: (isGeneratingFlashcards || flashcards.length === 0) ? 'not-allowed' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: (isGeneratingFlashcards || flashcards.length === 0) ? 0.5 : 1 }}
@@ -2106,18 +2107,18 @@ export default function DashboardPage() {
               <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 📚 Generate Study Guide
               </h3>
-              <button 
-                onClick={() => setIsStudyGuideModalOpen(false)} 
+              <button
+                onClick={() => setIsStudyGuideModalOpen(false)}
                 style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '1.25rem', cursor: 'pointer' }}
               >
                 ✕
               </button>
             </div>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label style={{ color: '#E4E4E7', fontSize: '0.9rem' }}>What section should we cover?</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={studyGuideConstraint}
                 onChange={(e) => setStudyGuideConstraint(e.target.value)}
                 placeholder="e.g., Pages 1-5, or Chapter 2: Supply & Demand"
@@ -2125,15 +2126,15 @@ export default function DashboardPage() {
                 autoFocus
               />
             </div>
-            
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
-              <button 
+              <button
                 onClick={() => setIsStudyGuideModalOpen(false)}
                 style={{ backgroundColor: 'transparent', color: '#E4E4E7', border: '1px solid #3F3F46', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', cursor: 'pointer' }}
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleGenerateStudyGuide}
                 disabled={isGeneratingStudyGuide || !studyGuideConstraint.trim()}
                 style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: (isGeneratingStudyGuide || !studyGuideConstraint.trim()) ? 'not-allowed' : 'pointer', opacity: (isGeneratingStudyGuide || !studyGuideConstraint.trim()) ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
@@ -2155,7 +2156,7 @@ export default function DashboardPage() {
                 <span className="break-words whitespace-normal min-w-0" style={{ color: '#71717A', fontSize: '0.85rem' }}>{activeStudyGuide.sourceDocumentName}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <button 
+                <button
                   onClick={handleGenerateFlashcardsFromGuide}
                   disabled={isGeneratingFlashcards}
                   style={{ backgroundColor: '#27272A', color: 'white', border: '1px solid #3F3F46', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontSize: '0.85rem', cursor: isGeneratingFlashcards ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: isGeneratingFlashcards ? 0.5 : 1 }}
@@ -2163,15 +2164,15 @@ export default function DashboardPage() {
                 >
                   {isGeneratingFlashcards ? 'Generating...' : '✨ Generate Flashcards'}
                 </button>
-                <button 
-                  onClick={() => setIsStudyGuideViewOpen(false)} 
+                <button
+                  onClick={() => setIsStudyGuideViewOpen(false)}
                   style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '1.5rem', cursor: 'pointer' }}
                 >
                   ✕
                 </button>
               </div>
             </div>
-            
+
             <div className="px-3 sm:px-8 py-3 sm:py-8" style={{ flex: 1, overflowY: 'auto', color: '#E4E4E7', lineHeight: '1.6', fontSize: '0.95rem' }}>
               <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
                 {activeStudyGuide.markdownContent}
