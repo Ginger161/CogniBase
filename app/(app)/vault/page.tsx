@@ -49,17 +49,23 @@ export default function DashboardPage() {
   // Materials state
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<'Note' | 'Assignment' | 'Audio' | 'Video'>('Note');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('vaultViewMode') as 'grid' | 'list') || 'grid';
+    }
+    return 'grid';
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('vaultViewMode', viewMode);
+    }
+  }, [viewMode]);
   const [sortBy, setSortBy] = useState<string>('newest');
 
-  // Flashcard state
+  // Material Selection State
+  const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const [activeFileDropdown, setActiveFileDropdown] = useState<string | null>(null);
-  const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
-  const [flashcardModalOpen, setFlashcardModalOpen] = useState(false);
-  const [flashcards, setFlashcards] = useState<any[]>([]);
-  const [currentFlashcardIndex, setCurrentFlashcardIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [activeFlashcardTitle, setActiveFlashcardTitle] = useState('');
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
 
   // Study Guide state
@@ -79,6 +85,8 @@ export default function DashboardPage() {
   const [manualTimetableDay, setManualTimetableDay] = useState('Monday');
   const [manualTimetableTime, setManualTimetableTime] = useState('08:00 AM');
   const [manualTimetableEndTime, setManualTimetableEndTime] = useState('09:00 AM');
+  const [timetableExtractionError, setTimetableExtractionError] = useState(false);
+  const [pendingTimetableFile, setPendingTimetableFile] = useState<File | null>(null);
   const timetableInputRef = useRef<HTMLInputElement>(null);
 
   const { startUpload: startTimetableUpload } = useUploadThing("vaultUploader", {
@@ -375,10 +383,45 @@ export default function DashboardPage() {
     }
   };
 
-  const handleTimetableUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const renderErrorCard = (onRetry: () => void) => (
+    <div 
+      style={{
+        padding: '2rem',
+        backgroundColor: '#7f1d1d', // Deep red
+        border: '1px solid #991b1b',
+        borderRadius: '1rem',
+        textAlign: 'center',
+        margin: '1rem 0'
+      }}
+    >
+      <h3 style={{ color: '#fee2e2', fontSize: '1.25rem', marginBottom: '0.5rem' }}>
+        Our AI is a bit overwhelmed
+      </h3>
+      <p style={{ color: '#fecaca', marginBottom: '1.5rem' }}>
+        The servers are currently experiencing high traffic. Please wait a moment and try again.
+      </p>
+      <button 
+        onClick={onRetry}
+        style={{ 
+          backgroundColor: '#f87171', 
+          color: '#450a0a', 
+          padding: '0.5rem 1rem', 
+          borderRadius: '0.5rem', 
+          border: 'none', 
+          cursor: 'pointer',
+          fontWeight: 'bold' 
+        }}
+      >
+        Try Again
+      </button>
+    </div>
+  );
+
+  const handleTimetableUpload = async (e?: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e?.target?.files?.[0] || pendingTimetableFile;
     if (!file || !userData.uid) return;
 
+    setTimetableExtractionError(false);
     setIsTimetableUploading(true);
     setIsExtractingTimetable(true);
     try {
@@ -396,6 +439,7 @@ export default function DashboardPage() {
             });
             const data = await res.json();
             if (!res.ok) {
+              console.error('Full API Error Response:', data);
               reject(new Error(data.error || "Failed to extract timetable"));
               return;
             }
@@ -480,7 +524,8 @@ export default function DashboardPage() {
       } else if (err.message?.includes("No timetable detected")) {
         setToastMessage("Extraction Failed: We couldn't detect a valid timetable in that document. Please try a different image or file.");
       } else {
-        setToastMessage("Extraction Failed: Could not extract timetable data automatically.");
+        setTimetableExtractionError(true);
+        setPendingTimetableFile(file || null);
       }
     } finally {
       setIsTimetableUploading(false);
@@ -680,80 +725,37 @@ export default function DashboardPage() {
     }
   };
 
-  const handleGenerateFlashcardsFromGuide = async () => {
-    if (!activeStudyGuide) return;
-
-    setIsGeneratingFlashcards(true);
-    setFlashcards([]);
-    setCurrentFlashcardIndex(0);
-    setIsFlipped(false);
-    setActiveFlashcardTitle(`${activeStudyGuide.sourceDocumentName} - ${activeStudyGuide.sectionConstraint} Flashcards`);
-    setFlashcardModalOpen(true);
-
-    try {
-      let res;
-      try {
-        res = await fetch('/api/engine/generate-flashcards', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: activeStudyGuide.markdownContent })
-        });
-      } catch (networkErr: any) {
-        console.error("Network Error:", networkErr);
-        throw new Error("Could not connect to the server. The request may have timed out.");
-      }
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate flashcards from server.");
-
-      setFlashcards(data.flashcards);
-    } catch (err: any) {
-      console.error("Flashcard Gen Error:", err);
-      setToastMessage(err.message || "Failed to generate flashcards.");
-      setFlashcardModalOpen(false);
-    } finally {
-      setIsGeneratingFlashcards(false);
+  const handleToggleMaterialSelection = (id: string, isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedMaterials(prev => [...prev, id]);
+    } else {
+      setSelectedMaterials(prev => prev.filter(m => m !== id));
     }
   };
 
-  const handleGenerateFlashcards = async (file: any) => {
-    setActiveFileDropdown(null);
-    if (!file.downloadURL) {
-      setToastMessage("Cannot generate flashcards: Document must be uploaded first.");
-      return;
+  const handleSelectAllMaterials = (filteredFiles: any[], isSelectAll: boolean) => {
+    if (isSelectAll) {
+      const allIds = filteredFiles.map(f => f.id);
+      setSelectedMaterials(allIds);
+    } else {
+      setSelectedMaterials([]);
     }
+  };
 
-    setIsGeneratingFlashcards(true);
-    setFlashcards([]);
-    setCurrentFlashcardIndex(0);
-    setIsFlipped(false);
-    setActiveFlashcardTitle(`${file.fileName.split('.')[0]} Flashcards`);
-    setActiveDocumentId(file.id);
-    setFlashcardModalOpen(true);
-
+  const handleBulkDeleteMaterials = async () => {
+    if (!userData.uid || selectedMaterials.length === 0) return;
     try {
-      let res;
-      try {
-        res = await fetch('/api/engine/generate-flashcards', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileUrl: file.downloadURL })
-        });
-      } catch (networkErr: any) {
-        console.error("Network Error:", networkErr);
-        throw new Error("Could not connect to the server. The request may have timed out.");
-      }
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate flashcards from server.");
-
-      setFlashcards(data.flashcards);
-    } catch (err: any) {
-      console.error("Flashcard Gen Error:", err);
-      setToastMessage(err.message || "Failed to generate flashcards.");
-      setFlashcardModalOpen(false);
-    } finally {
-      setIsGeneratingFlashcards(false);
+      // 1. Delete all selected documents from Firebase using the correct collection 'vault_files'
+      const deletePromises = selectedMaterials.map(id => deleteDoc(doc(db, 'vault_files', id)));
+      await Promise.all(deletePromises);
+      
+      // 2. Clear local state only after DB deletion succeeds
+      setVaultFiles(prev => prev.filter(m => !selectedMaterials.includes(m.id)));
+      setSelectedMaterials([]);
+      setToastMessage(`Successfully deleted ${selectedMaterials.length} materials.`);
+    } catch (err) {
+      console.error("Failed to sync deletion with database:", err);
+      setToastMessage("Could not delete materials. Please check your connection.");
     }
   };
 
@@ -761,31 +763,15 @@ export default function DashboardPage() {
     setActiveFileDropdown(null);
     if (!userData.uid) return;
     try {
-      await deleteDoc(doc(db, 'materials', id));
+      // 1. Delete single document from Firebase using the correct collection 'vault_files'
+      await deleteDoc(doc(db, 'vault_files', id));
+      
+      // 2. Clear local state only after DB deletion succeeds
       setVaultFiles(prev => prev.filter(m => m.id !== id));
       setToastMessage("File deleted successfully from your Vault.");
     } catch (err) {
-      console.error("Error deleting file:", err);
-      setToastMessage("Failed to delete file.");
-    }
-  };
-
-  const handleSaveDeck = async () => {
-    if (!userData.uid || flashcards.length === 0) return;
-    try {
-      await addDoc(collection(db, 'flashcards'), {
-        userId: userData.uid,
-        deckId: Date.now().toString(36) + Math.random().toString(36).substring(2),
-        sourceDocumentId: activeDocumentId,
-        title: activeFlashcardTitle,
-        cards: flashcards,
-        createdAt: serverTimestamp()
-      });
-      setToastMessage("Flashcard deck saved successfully!");
-      setFlashcardModalOpen(false);
-    } catch (err) {
-      console.error(err);
-      setToastMessage("Failed to save flashcards.");
+      console.error("Failed to sync deletion with database:", err);
+      setToastMessage("Could not delete file. Please check your connection.");
     }
   };
 
@@ -1536,6 +1522,8 @@ export default function DashboardPage() {
 
                   <input type="file" accept=".pdf,image/*,.docx,.csv,.xls,.xlsx" ref={timetableInputRef} onChange={handleTimetableUpload} style={{ display: 'none' }} />
 
+                  {timetableExtractionError && renderErrorCard(() => handleTimetableUpload())}
+
                   <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                     <button 
                       onClick={() => timetableInputRef.current?.click()}
@@ -1801,43 +1789,94 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem', gridColumn: '1 / -1' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                    <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>My Files</h3>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                      <select value={sortBy} onChange={(e: any) => setSortBy(e.target.value)} style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #3F3F46', padding: '0.5rem', borderRadius: '0.25rem', outline: 'none', fontSize: '0.85rem' }}>
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                        <option value="nameAsc">Name (A-Z)</option>
-                        <option value="nameDesc">Name (Z-A)</option>
-                        <option value="category">Category</option>
-                      </select>
-                      <div style={{ display: 'flex', backgroundColor: '#18181B', border: '1px solid #3F3F46', borderRadius: '0.25rem', overflow: 'hidden' }}>
-                        <button onClick={() => setViewMode('list')} style={{ backgroundColor: viewMode === 'list' ? '#27272A' : 'transparent', color: viewMode === 'list' ? 'white' : '#71717A', border: 'none', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <List size={16} />
-                        </button>
-                        <button onClick={() => setViewMode('grid')} style={{ backgroundColor: viewMode === 'grid' ? '#27272A' : 'transparent', color: viewMode === 'grid' ? 'white' : '#71717A', border: 'none', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <LayoutGrid size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                {(() => {
+                  const filteredSortedFiles = [...vaultFiles].sort((a, b) => {
+                    if (sortBy === 'newest') return (b.uploadedAt?.seconds || 0) - (a.uploadedAt?.seconds || 0);
+                    if (sortBy === 'oldest') return (a.uploadedAt?.seconds || 0) - (b.uploadedAt?.seconds || 0);
+                    if (sortBy === 'nameAsc') return (a.fileName || '').localeCompare(b.fileName || '');
+                    if (sortBy === 'nameDesc') return (b.fileName || '').localeCompare(a.fileName || '');
+                    if (sortBy === 'category') return (a.category || '').localeCompare(b.category || '');
+                    return 0;
+                  });
+                  const allSelected = filteredSortedFiles.length > 0 && filteredSortedFiles.every(f => selectedMaterials.includes(f.id));
 
-                  <div style={{ display: viewMode === 'grid' ? 'grid' : 'flex', flexDirection: viewMode === 'list' ? 'column' : 'row', gridTemplateColumns: viewMode === 'grid' ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'none', gap: viewMode === 'grid' ? '1rem' : '0.5rem', flex: 1, overflowY: 'auto' }}>
-                    {[...vaultFiles].sort((a, b) => {
-                      if (sortBy === 'newest') return (b.uploadedAt?.seconds || 0) - (a.uploadedAt?.seconds || 0);
-                      if (sortBy === 'oldest') return (a.uploadedAt?.seconds || 0) - (b.uploadedAt?.seconds || 0);
-                      if (sortBy === 'nameAsc') return (a.fileName || '').localeCompare(b.fileName || '');
-                      if (sortBy === 'nameDesc') return (b.fileName || '').localeCompare(a.fileName || '');
-                      if (sortBy === 'category') return (a.category || '').localeCompare(b.category || '');
-                      return 0;
-                    }).map(file => (
+                  return (
+                    <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem', gridColumn: '1 / -1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+                          <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>My Files</h3>
+                          {filteredSortedFiles.length > 0 && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#A1A1AA', fontSize: '0.85rem' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={allSelected} 
+                                onChange={(e) => handleSelectAllMaterials(filteredSortedFiles, e.target.checked)} 
+                                style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} 
+                              />
+                              Select All
+                            </label>
+                          )}
+                          {selectedMaterials.length > 0 && (
+                            <button onClick={handleBulkDeleteMaterials} style={{ backgroundColor: '#DC2626', color: 'white', border: '1px solid #B91C1C', padding: '0.4rem 0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s' }}>
+                              <Trash2 size={14} /> Delete Selected ({selectedMaterials.length})
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                          <select value={sortBy} onChange={(e: any) => setSortBy(e.target.value)} style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #3F3F46', padding: '0.5rem', borderRadius: '0.25rem', outline: 'none', fontSize: '0.85rem' }}>
+                            <option value="newest">Newest First</option>
+                            <option value="oldest">Oldest First</option>
+                            <option value="nameAsc">Name (A-Z)</option>
+                            <option value="nameDesc">Name (Z-A)</option>
+                            <option value="category">Category</option>
+                          </select>
+                          <div style={{ display: 'flex', backgroundColor: '#18181B', border: '1px solid #3F3F46', borderRadius: '0.25rem', overflow: 'hidden' }}>
+                            <button onClick={() => setViewMode('list')} style={{ backgroundColor: viewMode === 'list' ? '#27272A' : 'transparent', color: viewMode === 'list' ? 'white' : '#71717A', border: 'none', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <List size={16} />
+                            </button>
+                            <button onClick={() => setViewMode('grid')} style={{ backgroundColor: viewMode === 'grid' ? '#27272A' : 'transparent', color: viewMode === 'grid' ? 'white' : '#71717A', border: 'none', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <LayoutGrid size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: viewMode === 'grid' ? 'grid' : 'flex', flexDirection: viewMode === 'list' ? 'column' : 'row', gridTemplateColumns: viewMode === 'grid' ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'none', gap: viewMode === 'grid' ? '1rem' : '0.5rem', flex: 1, overflowY: 'auto' }}>
+                        {isLoading ? (
+                          <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'grid' ? 'repeat(auto-fill, minmax(200px, 1fr))' : '1fr', gap: '1rem', width: '100%' }}>
+                            <style>{`
+                              @keyframes wavePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+                            `}</style>
+                            {[1, 2, 3, 4].map((n, index) => (
+                              <div 
+                                key={n} 
+                                style={{
+                                  height: viewMode === 'grid' ? '150px' : '68px',
+                                  backgroundColor: '#27272A',
+                                  borderRadius: '0.75rem',
+                                  animation: 'wavePulse 1.5s infinite ease-in-out',
+                                  animationDelay: `${index * 0.2}s`
+                                }}
+                              ></div>
+                            ))}
+                          </div>
+                        ) : (
+                          <>
+                            {filteredSortedFiles.map(file => (
                       viewMode === 'list' ? (
                         <div key={file.id} className="w-full overflow-hidden px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem' }}>
                           <div className="flex flex-col sm:flex-row gap-2 sm:gap-0 justify-between items-start sm:items-center w-full min-w-0">
-                            <div className="flex flex-col min-w-0 w-full">
-                              <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{file.fileName}</span>
-                              <span style={{ color: '#71717A', fontSize: '0.75rem' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                            <div className="flex flex-row min-w-0 w-full items-center gap-3">
+                              <input 
+                                type="checkbox" 
+                                checked={selectedMaterials.includes(file.id)} 
+                                onChange={(e) => handleToggleMaterialSelection(file.id, e.target.checked)} 
+                                style={{ accentColor: '#EA580C', width: '1.1rem', height: '1.1rem', cursor: 'pointer', flexShrink: 0 }} 
+                              />
+                              <div className="flex flex-col min-w-0 w-full">
+                                <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{file.fileName}</span>
+                                <span style={{ color: '#71717A', fontSize: '0.75rem' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                              </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                               <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: '1rem', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
@@ -1878,7 +1917,15 @@ export default function DashboardPage() {
                       ) : (
                         <div key={file.id} className="w-full overflow-hidden px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem', position: 'relative' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '1rem', alignSelf: 'flex-start', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={selectedMaterials.includes(file.id)} 
+                                onChange={(e) => handleToggleMaterialSelection(file.id, e.target.checked)} 
+                                style={{ accentColor: '#EA580C', width: '1.1rem', height: '1.1rem', cursor: 'pointer' }} 
+                              />
+                              <span style={{ backgroundColor: '#27272A', color: '#A1A1AA', fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '1rem', alignSelf: 'flex-start', border: '1px solid #3F3F46' }}>{file.category || 'Note'}</span>
+                            </div>
                             <div style={{ position: 'relative' }}>
                               <button onClick={() => setActiveFileDropdown(activeFileDropdown === file.id ? null : file.id)} style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', padding: 0 }}>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg>
@@ -1918,9 +1965,13 @@ export default function DashboardPage() {
                         </div>
                       )
                     ))}
-                    {vaultFiles.length === 0 && <p style={{ color: '#A1A1AA', fontSize: '0.9rem', gridColumn: '1 / -1' }}>Your vault is empty.</p>}
+                            {vaultFiles.length === 0 && <p style={{ color: '#A1A1AA', fontSize: '0.9rem', gridColumn: '1 / -1' }}>Your vault is empty.</p>}
+                          </>
+                        )}
                   </div>
                 </div>
+              );
+            })()}
               </div>
             )}
           </div>
@@ -2033,9 +2084,7 @@ export default function DashboardPage() {
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem', alignItems: 'center' }}>
                       {!needsDisambiguation && (
                         <>
-                          <button disabled={isQuerying} onClick={() => submitQuery("Based on the response above, please create a set of interactive flashcards for me.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                            ✨ Create Flashcards
-                          </button>
+
                           <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
                             📝 Summarize Key Terms
                           </button>
@@ -2115,84 +2164,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Flashcard Active Engine Modal */}
-      {flashcardModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)' }}>
-          <div style={{ backgroundColor: '#111111', border: '1px solid #27272A', borderRadius: '1rem', padding: '2rem', width: '90%', maxWidth: '800px', height: '80vh', display: 'flex', flexDirection: 'column', gap: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #27272A', paddingBottom: '1rem' }}>
-              <h3 style={{ color: 'white', margin: 0, fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                ✨ {activeFlashcardTitle}
-              </h3>
-              <button
-                onClick={() => setFlashcardModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '1.5rem', cursor: 'pointer' }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', perspective: '1000px' }}>
-              {isGeneratingFlashcards ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                  <div style={{ width: '40px', height: '40px', border: '3px solid #EA580C', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                  <p style={{ color: '#A1A1AA' }}>Engine is synthesizing flashcards...</p>
-                </div>
-              ) : flashcards.length > 0 ? (
-                <>
-                  <div
-                    onClick={() => setIsFlipped(!isFlipped)}
-                    style={{
-                      width: '100%', maxWidth: '600px', height: '350px', cursor: 'pointer', position: 'relative', transition: 'transform 0.6s', transformStyle: 'preserve-3d', transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
-                    }}
-                  >
-                    {/* Front */}
-                    <div style={{ position: 'absolute', width: '100%', height: '100%', backfaceVisibility: 'hidden', backgroundColor: '#18181B', border: '1px solid #27272A', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
-                      <h2 style={{ color: 'white', fontSize: '1.75rem', fontWeight: 'bold' }}>{flashcards[currentFlashcardIndex].front}</h2>
-                      <span style={{ position: 'absolute', bottom: '1rem', color: '#71717A', fontSize: '0.85rem' }}>Click to flip</span>
-                    </div>
-                    {/* Back */}
-                    <div style={{ position: 'absolute', width: '100%', height: '100%', backfaceVisibility: 'hidden', backgroundColor: '#EA580C', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center', transform: 'rotateY(180deg)', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
-                      <p style={{ color: 'white', fontSize: '1.25rem', lineHeight: '1.6' }}>{flashcards[currentFlashcardIndex].back}</p>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', marginTop: '3rem' }}>
-                    <button
-                      onClick={() => { setIsFlipped(false); setTimeout(() => setCurrentFlashcardIndex(Math.max(0, currentFlashcardIndex - 1)), 150); }}
-                      disabled={currentFlashcardIndex === 0}
-                      style={{ background: 'none', border: '1px solid #3F3F46', color: 'white', padding: '0.75rem', borderRadius: '50%', cursor: currentFlashcardIndex === 0 ? 'not-allowed' : 'pointer', opacity: currentFlashcardIndex === 0 ? 0.3 : 1, transition: 'all 0.2s' }}
-                    >
-                      <ChevronLeft size={24} />
-                    </button>
-                    <span style={{ color: '#A1A1AA', fontSize: '1.1rem', fontWeight: 'bold' }}>{currentFlashcardIndex + 1} / {flashcards.length}</span>
-                    <button
-                      onClick={() => { setIsFlipped(false); setTimeout(() => setCurrentFlashcardIndex(Math.min(flashcards.length - 1, currentFlashcardIndex + 1)), 150); }}
-                      disabled={currentFlashcardIndex === flashcards.length - 1}
-                      style={{ background: 'none', border: '1px solid #3F3F46', color: 'white', padding: '0.75rem', borderRadius: '50%', cursor: currentFlashcardIndex === flashcards.length - 1 ? 'not-allowed' : 'pointer', opacity: currentFlashcardIndex === flashcards.length - 1 ? 0.3 : 1, transition: 'all 0.2s' }}
-                    >
-                      <ChevronRight size={24} />
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <p style={{ color: '#EF4444' }}>No flashcards could be generated.</p>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #27272A', paddingTop: '1.5rem' }}>
-              <button
-                onClick={handleSaveDeck}
-                disabled={isGeneratingFlashcards || flashcards.length === 0}
-                style={{ backgroundColor: '#27272A', color: 'white', border: '1px solid #3F3F46', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: (isGeneratingFlashcards || flashcards.length === 0) ? 'not-allowed' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: (isGeneratingFlashcards || flashcards.length === 0) ? 0.5 : 1 }}
-                className="hover:bg-zinc-800"
-              >
-                <Save size={18} /> Save Deck
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Study Guide Guardrail Modal */}
       {isStudyGuideModalOpen && (
@@ -2251,14 +2223,7 @@ export default function DashboardPage() {
                 <span className="break-words whitespace-normal min-w-0" style={{ color: '#71717A', fontSize: '0.85rem' }}>{activeStudyGuide.sourceDocumentName}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <button
-                  onClick={handleGenerateFlashcardsFromGuide}
-                  disabled={isGeneratingFlashcards}
-                  style={{ backgroundColor: '#27272A', color: 'white', border: '1px solid #3F3F46', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontSize: '0.85rem', cursor: isGeneratingFlashcards ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: isGeneratingFlashcards ? 0.5 : 1 }}
-                  className="hover:bg-zinc-700 transition-colors"
-                >
-                  {isGeneratingFlashcards ? 'Generating...' : '✨ Generate Flashcards'}
-                </button>
+
                 <button
                   onClick={() => setIsStudyGuideViewOpen(false)}
                   style={{ background: 'none', border: 'none', color: '#A1A1AA', fontSize: '1.5rem', cursor: 'pointer' }}

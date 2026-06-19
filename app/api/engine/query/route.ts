@@ -15,49 +15,58 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing query or user context." }, { status: 400 });
     }
 
-    // Fetch user profile from Firestore
-    let systemInstruction: string = `
-You are CogniBase, an expert Academic Copilot.
-If specific file context is provided, prioritize it. If no file context is provided, use your baseline academic knowledge to answer the student's question thoroughly.
-
-If the user asks for a summary or explanation without specifying a subject, document, or course, DO NOT guess or merge random documents. Instead, immediately ask the user for clarification. Example: "I see you have a few documents in your vault. Which specific course or document would you like me to summarize?"
-`;
+    // 1. Intent & Sentinel State Classification
+    const classificationModel = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      generationConfig: { responseMimeType: "application/json" }
+    });
+    const classificationPrompt = `Analyze the user's query and provide a JSON response with two keys:
+    1. "intent": Classify into exactly one of these categories: "Scheduling", "Strategy", "Synthesis", or "Other".
+    2. "implicitState": Identify if the user is expressing stress or overload. Return "Stressed", "Overwhelmed", "Falling Behind", or "Normal".
+    Query: "${query}"`;
+    const classificationResult = await classificationModel.generateContent(classificationPrompt);
     
-    if (userProfile && userProfile.username && userProfile.department && userProfile.school) {
-      let activeCoursesText = "No courses currently registered.";
-      if (userProfile.semesters && Array.isArray(userProfile.semesters)) {
-        const activeSem = userProfile.semesters.find((s: any) => s.isActive);
-        if (activeSem && activeSem.courses && activeSem.courses.length > 0) {
-          activeCoursesText = activeSem.courses.map((c: any) => `- ${c.courseCode}: ${c.courseTitle}`).join('\n');
+    let intent = 'Other';
+    let implicitState = 'Normal';
+    try {
+      const parsed = JSON.parse(classificationResult.response.text().trim());
+      intent = parsed.intent || 'Other';
+      implicitState = parsed.implicitState || 'Normal';
+    } catch(e) {
+      console.error("Failed to parse classification JSON:", e);
+    }
+
+    // 2. Base System Instruction
+    let systemInstruction = `You are a smart academic companion. You know the student's background but you are subtle. You only mention their specific details when it is logically relevant to help them achieve their goal. Prioritize natural, helpful communication over robotic repetition. If you are asked to build a study schedule, you MUST output it in a strict JSON format.`;
+
+    // 3. Conditional Context Injection (Intent)
+    if (intent === 'Scheduling' || intent === 'Strategy' || intent === 'Synthesis') {
+      if (userProfile && userProfile.username && userProfile.department && userProfile.school) {
+        let activeCoursesText = "No courses currently registered.";
+        if (userProfile.semesters && Array.isArray(userProfile.semesters)) {
+          const activeSem = userProfile.semesters.find((s: any) => s.isActive);
+          if (activeSem && activeSem.courses && activeSem.courses.length > 0) {
+            activeCoursesText = activeSem.courses.map((c: any) => `- ${c.courseCode}: ${c.courseTitle}`).join('\n');
+          }
         }
+        systemInstruction += `\n\nStudent Profile Context:\nName: ${userProfile.username}\nDepartment: ${userProfile.department}\nSchool: ${userProfile.school}\nActive Courses:\n${activeCoursesText}`;
       }
+    }
 
-      systemInstruction = `
-You are CogniBase, an expert Academic Copilot assisting ${userProfile.username}, a student studying ${userProfile.department} at ${userProfile.school}. Address the user by their first name occasionally to make the interaction feel more like a personal mentorship.
-
-The student's active semester courses are:
-${activeCoursesText}
-
-When the user's input does not directly match their uploaded documents, follow these strict communication guidelines:
-
-1. Capability Limits (Hard Stops): If the user asks for something outside your technical capabilities as a text-based AI (such as generating images, creating videos, or executing code), skip any coursework preamble entirely. Gracefully state your limitations as an Academic Copilot and offer what you CAN do (e.g., analyze materials, build timetables, create flashcards).
-
-2. Stop Assuming "Questions": Do not refer to every user input as a "question". If they give a command or request, treat it as such.
-
-3. The Coursework Bridge: ONLY use the "This doesn't directly relate to your coursework..." transition when the user is asking an actual academic or conceptual question that falls outside their uploaded documents. When you do, be transparent but natural.
-
-4. Avoid Forced Analogies: Do not forcefully twist basic technical concepts into weird department-specific analogies if they don't naturally fit. Explain the concept clearly and accurately first.
-
-5. Natural Connections Only: Only bridge the concept to their field if there is a real-world, logical application. For instance, if an Educational Management student asks about databases, explain that while it's a general tech concept, it forms the backbone of tools like EMIS used to track student enrollment.
-
-Keep your tone encouraging, academic, clear, and professional.
-
-If the user asks for a summary or explanation without specifying a subject, document, or course, DO NOT guess or merge random documents. Instead, immediately ask the user for clarification. Example: "I see you have a few documents in your vault. Which specific course or document would you like me to summarize?"
-
-You have access to tools to manage the user's vault. If the user asks to add or remove a course, do not write code or instructions. Instead, call the appropriate tool.
-If the user asks to add a course but does not explicitly state the semester, you MUST ask them which semester they want before calling the add_course tool.
-CRITICAL RULE: If you ask the user for a missing parameter to complete a tool call (e.g., asking for the semester to add a course), and the user provides that parameter in the next message, your IMMEDIATE and ONLY response must be to call the corresponding function (e.g., add_course). DO NOT generate conversational text. DO NOT list the user's courses. Execute the tool immediately.
-`;
+    // 4. Sentinel Engine: Implicit Context Injection
+    if (['Stressed', 'Overwhelmed', 'Falling Behind'].includes(implicitState)) {
+      let timetableContext = "No timetable available.";
+      try {
+        const timetablesDoc = await getDoc(doc(db, 'timetables', userId));
+        if (timetablesDoc.exists()) {
+          const data = timetablesDoc.data();
+          timetableContext = JSON.stringify(data.scheduled_classes || []);
+        }
+      } catch (err) {
+        console.error("Sentinel failed to fetch timetable:", err);
+      }
+      
+      systemInstruction += `\n\n[SENTINEL ENGINE ACTIVE]\nThe user is currently feeling ${implicitState}. Act as an 'Empathetic Executive'. Synthesize their current academic load against their timetable below and provide an actionable solution (e.g., rescheduling a study task) before they ask. Always end your response with an action button format wrapped in brackets, e.g., '[Action: Reschedule Thursday]' or '[Action: Show me lighter days]' that ties back into the system's ability to mutate data.\nTimetable Context: ${timetableContext}`;
     }
 
     const isGenericQuery = /^(summarize|explain this|what is this course about\??|explain|help|summary|what is this\??)$/i.test(query.trim());
@@ -136,8 +145,8 @@ CRITICAL RULE: If you ask the user for a missing parameter to complete a tool ca
     };
     const chatModel = genAI.getGenerativeModel(modelConfig);
     
-    // Format history for Gemini
-    const formattedHistory = chatHistory ? chatHistory.map((msg: any) => ({
+    // Format history for Gemini (keep only last 5 interactions)
+    const formattedHistory = chatHistory ? chatHistory.slice(-5).map((msg: any) => ({
       role: msg.role === 'ai' ? 'model' : 'user',
       parts: [{ text: msg.content || '' }]
     })) : [];

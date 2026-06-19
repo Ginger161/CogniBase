@@ -12,7 +12,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing image or mimeType." }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `First, evaluate the document. If it does not contain a recognizable timetable or schedule, immediately return a JSON object exactly like this: { "error": "NOT_A_TIMETABLE" }. Do not attempt to guess.\n\nRegardless of the input format (handwritten photo, Excel sheet, plain text), extract all detected classes into this standardized JSON format. Return ONLY a clean JSON array of objects. Each object must have the following exact keys: "courseCode" (e.g. "CSC 101"), "day" (e.g. "Monday", "Tuesday"), "startTime" (e.g. "10:00 AM"), "endTime" (e.g. "11:30 AM"), and "location" (e.g. "Room 404"). If the location is missing, set it to an empty string. Do not include any markdown backticks. Return the raw JSON array or the error object.`;
 

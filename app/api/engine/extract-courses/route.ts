@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       console.error("Cache read error:", e);
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `First, verify if this document is a university course registration form or student schedule. If it is NOT, do not extract any courses. Instead, return a JSON object containing strictly: { "error": "invalid_document" }.\n\nIf it IS a valid form, you are analyzing a university course registration form. This form may contain multiple semesters. Please extract the courses and the semester they belong to. Return ONLY a raw JSON array of objects with keys "courseCode", "courseTitle", and "semester" (strictly string values of either 'First' or 'Second').\n\nCRITICAL: Do NOT wrap the response in markdown code blocks (e.g., no \`\`\`json). Return ONLY the raw array bracket structure or the error JSON object.`;
     const imageParts = [{ inlineData: { data: imageBase64, mimeType } }];
 
