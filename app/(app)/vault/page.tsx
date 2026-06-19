@@ -1373,26 +1373,27 @@ export default function DashboardPage() {
                         const renderCourse = (course: any, i: number) => {
                           const isSelected = selectedCourseCodes.includes(course.courseCode);
                           return (
-                            <div key={i} className={`flex items-center justify-between w-full p-3 sm:p-4 rounded-xl mb-2 gap-3 transition-colors ${isSelected ? 'bg-zinc-800 border border-orange-600' : 'bg-gray-900 border border-transparent hover:border-gray-700'}`}>
+                            <div key={i} className={`flex items-center justify-between w-full p-3 sm:p-4 rounded-xl mb-3 gap-3 overflow-hidden transition-all ${isSelected ? 'bg-zinc-800 border border-orange-600' : 'bg-gray-900 border border-transparent hover:border-gray-700'}`}>
                               
-                              {/* Left side: Checkbox + Code + Title */}
-                              <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                                <div className="shrink-0 flex items-center">
-                                  <input type="checkbox" checked={isSelected} onChange={() => handleToggleCourseSelection(course.courseCode)} className="accent-orange-600 w-4 h-4 sm:w-5 sm:h-5 cursor-pointer shrink-0" />
-                                </div>
-                                
-                                {/* Course Code (Fixed/Shrink-protected) */}
-                                <span className="text-orange-500 font-semibold shrink-0">
+                              {/* 1. Left: Checkbox (Protected from shrinking) */}
+                              <div className="shrink-0 flex items-center justify-center">
+                                <input type="checkbox" checked={isSelected} onChange={() => handleToggleCourseSelection(course.courseCode)} className="accent-orange-600 w-4 h-4 sm:w-5 sm:h-5 cursor-pointer" />
+                              </div>
+
+                              {/* 2. Middle: Stacked Text Container (Allows shrinking and wrapping) */}
+                              <div className="flex flex-col flex-1 min-w-0">
+                                {/* Course Code (Title) */}
+                                <span className="text-orange-500 font-bold text-base leading-tight">
                                   {course.courseCode}
                                 </span>
                                 
-                                {/* Course Title (Truncated with Ellipsis) */}
-                                <span className="text-gray-200 text-sm sm:text-base truncate" title={course.courseTitle}>
+                                {/* Course Name (Subtitle - Truncated with Ellipsis) */}
+                                <span className="text-gray-400 text-sm truncate mt-0.5" title={course.courseTitle}>
                                   {course.courseTitle}
                                 </span>
                               </div>
 
-                              {/* Right side: Trash Icon */}
+                              {/* 3. Right: Trash Icon (Protected from shrinking) */}
                               <button onClick={() => handleDropCourse(course.courseCode)} className="shrink-0 p-2 text-gray-500 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer" title="Drop Course">
                                 <Trash2 size={18} />
                               </button>
