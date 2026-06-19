@@ -1369,17 +1369,27 @@ export default function DashboardPage() {
                   <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                     {isLoading ? (
                       <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginTop: '0.5rem' }}>
-                        {[1, 2, 3].map((n) => (
+                        {/* Injecting raw CSS to bypass Tailwind completely */}
+                        <style>{`
+                          @keyframes wavePulse {
+                            0%, 100% { opacity: 1; }
+                            50% { opacity: 0.3; }
+                          }
+                        `}</style>
+                        
+                        {[1, 2, 3].map((n, index) => (
                           <div 
                             key={n} 
-                            className="animate-pulse"
                             style={{
                               width: '100%',
                               height: '68px',
                               backgroundColor: '#374151',
                               borderRadius: '0.75rem',
                               marginBottom: '0.75rem',
-                              border: '1px solid #4b5563'
+                              border: '1px solid #4b5563',
+                              /* The Sequential Animation Logic */
+                              animation: 'wavePulse 1.5s infinite ease-in-out',
+                              animationDelay: `${index * 0.2}s`
                             }}
                           ></div>
                         ))}
