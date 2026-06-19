@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Materials state
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<'Note' | 'Assignment' | 'Audio' | 'Video'>('Note');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<string>('newest');
@@ -189,10 +190,12 @@ export default function DashboardPage() {
           sGuides.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
           setStudyGuides(sGuides);
         } catch (e) { console.error(e) }
+        setIsLoading(false);
       } else {
         setUserData({ name: 'Guest Student', email: 'Not signed in', uid: '', profile: null });
         setChatList([]);
         setCurrentChatId(null);
+        setIsLoading(false);
       }
     });
     return () => unsubscribe();
@@ -1364,7 +1367,13 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    {(() => {
+                    {isLoading ? (
+                      <div className="w-full flex flex-col gap-3 mt-4">
+                        {[1, 2, 3, 4].map((n) => (
+                          <div key={n} className="w-full h-[60px] bg-gray-800/50 animate-pulse rounded-xl border border-gray-700/30"></div>
+                        ))}
+                      </div>
+                    ) : (() => {
                       const activeSem = userData.profile?.semesters?.find((s: any) => s.isActive);
                       if (!activeSem || !activeSem.courses) return <p style={{ color: '#A1A1AA' }}>No courses added yet for the active academic year.</p>;
 
