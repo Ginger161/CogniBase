@@ -1374,7 +1374,7 @@ export default function DashboardPage() {
                       const renderCourse = (course: any, i: number) => {
                         const isSelected = selectedCourseCodes.includes(course.courseCode);
                         return (
-                          <div key={i} className="flex items-center justify-between w-full p-4 bg-gray-800 rounded-xl mb-3 border border-gray-700/50 shadow-sm">
+                          <div key={i} className="flex items-center justify-between w-full p-4 bg-gray-800 rounded-xl mb-3 shadow-md border border-gray-700">
                             
                             {/* Left Side: Checkbox and Course Code */}
                             <div className="flex items-center gap-4">
@@ -1393,10 +1393,11 @@ export default function DashboardPage() {
                               </span>
                             </div>
 
-                            {/* Right Side: Trash Icon (Lightened to text-gray-400 for visibility) */}
+                            {/* Right Side: Trash Icon (Forced Light Grey) */}
                             <div className="shrink-0">
                               <button onClick={() => handleDropCourse(course.courseCode)} className="p-2 text-gray-400 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer">
-                                <Trash2 size={18} />
+                                {/* FORCE the icon to be light grey using the color prop or currentColor */}
+                                <Trash2 size={18} color="#9ca3af" />
                               </button>
                             </div>
 
