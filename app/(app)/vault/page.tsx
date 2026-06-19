@@ -131,8 +131,16 @@ export default function DashboardPage() {
       setUploadProgress(0);
     }
   });
+  const [userData, setUserData] = useState<any>({ name: 'Loading...', email: '', uid: '', profile: null });
   const { context, isLoading: isContextLoading } = useUserContext();
-  const userData = context || { name: 'Guest Student', email: 'Not signed in', uid: '', profile: null };
+
+  useEffect(() => {
+    if (context) {
+      setUserData(context);
+    } else if (!isContextLoading) {
+      setUserData({ name: 'Guest Student', email: 'Not signed in', uid: '', profile: null });
+    }
+  }, [context, isContextLoading]);
 
   useEffect(() => {
     if (!context?.uid) {
