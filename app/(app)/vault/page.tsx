@@ -1394,26 +1394,38 @@ export default function DashboardPage() {
                                     const isSelected = selectedCourseCodes.includes(course.courseCode);
                                     
                                     return (
-                                      <div key={course.courseCode || index} className="flex items-center justify-between w-full p-4 mb-3 rounded-xl shadow-md border border-gray-700 bg-[#1f2937]">
+                                      <div 
+                                        key={course.courseCode || index} 
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          width: '100%',
+                                          padding: '1rem',
+                                          marginBottom: '0.75rem',
+                                          borderRadius: '0.75rem',
+                                          border: '1px solid #374151',
+                                          backgroundColor: '#1f2937' /* Forces the dark gray */
+                                        }}
+                                      >
                                         
                                         {/* Left: Checkbox and Course Code */}
-                                        <div className="flex items-center gap-4">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                           <input
                                             type="checkbox"
                                             checked={isSelected}
                                             onChange={() => handleToggleCourseSelection(course.courseCode)}
-                                            className="w-5 h-5 accent-orange-500 cursor-pointer"
+                                            style={{ width: '1.25rem', height: '1.25rem', accentColor: '#f97316', cursor: 'pointer' }}
                                           />
-                                          <span className="font-bold text-lg text-[#f97316]">
+                                          <span style={{ fontWeight: 'bold', fontSize: '1.125rem', color: '#f97316' }}>
                                             {course.courseCode}
                                           </span>
                                         </div>
 
-                                        {/* Right: Trash Icon (Forced inline color to guarantee visibility) */}
+                                        {/* Right: Trash Icon */}
                                         <button
                                           onClick={() => handleDropCourse(course.courseCode)}
-                                          className="p-2 hover:opacity-75 transition-opacity bg-transparent border-none cursor-pointer"
-                                          style={{ color: '#9ca3af' }}
+                                          style={{ padding: '0.5rem', color: '#9ca3af', background: 'transparent', border: 'none', cursor: 'pointer' }}
                                         >
                                           <Trash2 size={20} />
                                         </button>
@@ -1439,26 +1451,38 @@ export default function DashboardPage() {
                                     const isSelected = selectedCourseCodes.includes(course.courseCode);
                                     
                                     return (
-                                      <div key={course.courseCode || index} className="flex items-center justify-between w-full p-4 mb-3 rounded-xl shadow-md border border-gray-700 bg-[#1f2937]">
+                                      <div 
+                                        key={course.courseCode || index} 
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          width: '100%',
+                                          padding: '1rem',
+                                          marginBottom: '0.75rem',
+                                          borderRadius: '0.75rem',
+                                          border: '1px solid #374151',
+                                          backgroundColor: '#1f2937' /* Forces the dark gray */
+                                        }}
+                                      >
                                         
                                         {/* Left: Checkbox and Course Code */}
-                                        <div className="flex items-center gap-4">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                           <input
                                             type="checkbox"
                                             checked={isSelected}
                                             onChange={() => handleToggleCourseSelection(course.courseCode)}
-                                            className="w-5 h-5 accent-orange-500 cursor-pointer"
+                                            style={{ width: '1.25rem', height: '1.25rem', accentColor: '#f97316', cursor: 'pointer' }}
                                           />
-                                          <span className="font-bold text-lg text-[#f97316]">
+                                          <span style={{ fontWeight: 'bold', fontSize: '1.125rem', color: '#f97316' }}>
                                             {course.courseCode}
                                           </span>
                                         </div>
 
-                                        {/* Right: Trash Icon (Forced inline color to guarantee visibility) */}
+                                        {/* Right: Trash Icon */}
                                         <button
                                           onClick={() => handleDropCourse(course.courseCode)}
-                                          className="p-2 hover:opacity-75 transition-opacity bg-transparent border-none cursor-pointer"
-                                          style={{ color: '#9ca3af' }}
+                                          style={{ padding: '0.5rem', color: '#9ca3af', background: 'transparent', border: 'none', cursor: 'pointer' }}
                                         >
                                           <Trash2 size={20} />
                                         </button>
