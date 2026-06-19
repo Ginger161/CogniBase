@@ -1380,40 +1380,6 @@ export default function DashboardPage() {
                       const firstSemesterCourses = activeSem.courses.filter((c: any) => c.semester === 'First');
                       const secondSemesterCourses = activeSem.courses.filter((c: any) => c.semester === 'Second');
 
-                      const renderCourse = (course: any, i: number) => {
-                        const isSelected = selectedCourseCodes.includes(course.courseCode);
-                        return (
-                          <div key={i} className="flex items-center justify-between w-full p-4 bg-gray-800 rounded-xl mb-3 shadow-md border border-gray-700">
-                            
-                            {/* Left Side: Checkbox and Course Code */}
-                            <div className="flex items-center gap-4">
-                              <div className="shrink-0 flex items-center">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => handleToggleCourseSelection(course.courseCode)}
-                                  className="accent-orange-600 w-4 h-4 sm:w-5 sm:h-5 cursor-pointer"
-                                />
-                              </div>
-                              
-                              {/* Course Code (Orange and Bold) */}
-                              <span className="text-orange-500 font-bold text-base sm:text-lg">
-                                {course.courseCode}
-                              </span>
-                            </div>
-
-                            {/* Right Side: Trash Icon (Forced Light Grey) */}
-                            <div className="shrink-0">
-                              <button onClick={() => handleDropCourse(course.courseCode)} className="p-2 text-gray-400 hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer">
-                                {/* FORCE the icon to be light grey using the color prop or currentColor */}
-                                <Trash2 size={18} color="#9ca3af" />
-                              </button>
-                            </div>
-
-                          </div>
-                        );
-                      };
-
                       return (
                         <>
                           <div className="w-full max-w-full overflow-hidden">
@@ -1424,7 +1390,37 @@ export default function DashboardPage() {
                                   <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>First Semester</h4>
                                 </div>
                                 <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                  {firstSemesterCourses.map(renderCourse)}
+                                  {firstSemesterCourses.map((course: any, index: number) => {
+                                    const isSelected = selectedCourseCodes.includes(course.courseCode);
+                                    
+                                    return (
+                                      <div key={course.courseCode || index} className="flex items-center justify-between w-full p-4 mb-3 rounded-xl shadow-md border border-gray-700 bg-[#1f2937]">
+                                        
+                                        {/* Left: Checkbox and Course Code */}
+                                        <div className="flex items-center gap-4">
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => handleToggleCourseSelection(course.courseCode)}
+                                            className="w-5 h-5 accent-orange-500 cursor-pointer"
+                                          />
+                                          <span className="font-bold text-lg text-[#f97316]">
+                                            {course.courseCode}
+                                          </span>
+                                        </div>
+
+                                        {/* Right: Trash Icon (Forced inline color to guarantee visibility) */}
+                                        <button
+                                          onClick={() => handleDropCourse(course.courseCode)}
+                                          className="p-2 hover:opacity-75 transition-opacity bg-transparent border-none cursor-pointer"
+                                          style={{ color: '#9ca3af' }}
+                                        >
+                                          <Trash2 size={20} />
+                                        </button>
+                                        
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </>
                             ) : (
@@ -1439,7 +1435,37 @@ export default function DashboardPage() {
                                   <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>Second Semester</h4>
                                 </div>
                                 <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                  {secondSemesterCourses.map(renderCourse)}
+                                  {secondSemesterCourses.map((course: any, index: number) => {
+                                    const isSelected = selectedCourseCodes.includes(course.courseCode);
+                                    
+                                    return (
+                                      <div key={course.courseCode || index} className="flex items-center justify-between w-full p-4 mb-3 rounded-xl shadow-md border border-gray-700 bg-[#1f2937]">
+                                        
+                                        {/* Left: Checkbox and Course Code */}
+                                        <div className="flex items-center gap-4">
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => handleToggleCourseSelection(course.courseCode)}
+                                            className="w-5 h-5 accent-orange-500 cursor-pointer"
+                                          />
+                                          <span className="font-bold text-lg text-[#f97316]">
+                                            {course.courseCode}
+                                          </span>
+                                        </div>
+
+                                        {/* Right: Trash Icon (Forced inline color to guarantee visibility) */}
+                                        <button
+                                          onClick={() => handleDropCourse(course.courseCode)}
+                                          className="p-2 hover:opacity-75 transition-opacity bg-transparent border-none cursor-pointer"
+                                          style={{ color: '#9ca3af' }}
+                                        >
+                                          <Trash2 size={20} />
+                                        </button>
+                                        
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </>
                             ) : (
