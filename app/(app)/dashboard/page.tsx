@@ -13,10 +13,10 @@ export default function DashboardPage() {
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [chatList, setChatList] = useState<Array<{id: string, title: string, updatedAt: any}>>([]);
+  const [chatList, setChatList] = useState<Array<{ id: string, title: string, updatedAt: any }>>([]);
 
   // Console state
-  const [messages, setMessages] = useState<Array<{role: 'user' | 'ai', content: string, feedback?: 'up'|'down', type?: string}>>([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai', content: string, feedback?: 'up' | 'down', type?: string }>>([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
   const [consoleInput, setConsoleInput] = useState('');
   const [isQuerying, setIsQuerying] = useState(false);
 
@@ -66,7 +66,7 @@ export default function DashboardPage() {
         const vaultSnap = await getDocs(vq);
         const vFiles = vaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         setVaultFiles(vFiles);
-      } catch(e) { console.error(e) }
+      } catch (e) { console.error(e) }
 
       try {
         const q = query(collection(db, 'chats'), where('userId', '==', context.uid));
@@ -85,13 +85,13 @@ export default function DashboardPage() {
     if (files.length > 20) {
       setUploadStatus('Error: You can only upload a maximum of 20 files at once.');
       setTimeout(() => setUploadStatus(''), 5000);
-      return; 
+      return;
     }
     const validFiles = files.filter(f => f.name.match(/\.(pdf|pptx|docx|txt)$/i));
     if (validFiles.length !== files.length) {
       setUploadStatus('Error: Legacy .doc files are not supported. Please save as modern .docx or .pdf.');
       setTimeout(() => setUploadStatus(''), 5000);
-      return; 
+      return;
     }
     setPendingFiles((prev) => {
       const combined = [...prev, ...validFiles];
@@ -101,7 +101,7 @@ export default function DashboardPage() {
       if (unique.length > 20) {
         setUploadStatus('Error: Queue limit reached. Maximum 20 files total.');
         setTimeout(() => setUploadStatus(''), 4000);
-        return prev; 
+        return prev;
       }
       return unique;
     });
@@ -140,7 +140,7 @@ export default function DashboardPage() {
       else setUploadStatus('Initializing Secure Transfer...');
 
       const res = await startUpload(newFilesToUpload);
-      
+
       if (res && res.length > 0) {
         setUploadStatus('Saving records to Database...');
         try {
@@ -172,11 +172,11 @@ export default function DashboardPage() {
   const handleInitiateAnalysis = async () => {
     if (!userData.uid) return;
     setAnalysisStatus('Scanning Vault...');
-    
+
     try {
       const q = query(collection(db, 'vault_files'), where('userId', '==', userData.uid), where('status', '==', 'raw'));
       const querySnapshot = await getDocs(q);
-      
+
       if (querySnapshot.empty) {
         setAnalysisStatus('All files in your Vault are already analyzed!');
         setTimeout(() => setAnalysisStatus(''), 4000);
@@ -184,7 +184,7 @@ export default function DashboardPage() {
       }
 
       const files = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
+
       // NEW: Sort files by newest first (reverse chronological)
       files.sort((a: any, b: any) => {
         const timeA = a.uploadedAt?.seconds || 0;
@@ -203,17 +203,17 @@ export default function DashboardPage() {
   };
 
   const toggleFileSelection = (id: string) => {
-    setSelectedFileIds(prev => 
+    setSelectedFileIds(prev =>
       prev.includes(id) ? prev.filter(fId => fId !== id) : [...prev, id]
     );
   };
 
   const handleProcessSelected = async () => {
     if (selectedFileIds.length === 0 || isAnalyzing) return;
-    
+
     setIsAnalyzing(true);
     setIsSelectionMode(false);
-    
+
     const filesToProcess = rawFiles.filter(f => selectedFileIds.includes(f.id));
     setAnalysisStatus(`Igniting AI Engine for ${filesToProcess.length} file(s)...`);
 
@@ -222,7 +222,7 @@ export default function DashboardPage() {
     try {
       for (const file of filesToProcess) {
         setAnalysisStatus(`Extracting: ${file.fileName}...`);
-        
+
         const response = await fetch('/api/engine/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -236,7 +236,7 @@ export default function DashboardPage() {
 
         const textResponse = await response.text();
         let result;
-        
+
         try {
           result = JSON.parse(textResponse);
         } catch (parseError) {
@@ -272,7 +272,7 @@ export default function DashboardPage() {
         if (data.messages && data.messages.length > 0) {
           setMessages(data.messages);
         } else {
-          setMessages([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+          setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
         }
       }
     } catch (error) {
@@ -281,22 +281,22 @@ export default function DashboardPage() {
   };
 
   // --- NEW: Console Query Logic ---
-  const submitQuery = async (userMessage: string, historyPrefix?: Array<{role: 'user' | 'ai', content: string, feedback?: 'up'|'down'}>) => {
+  const submitQuery = async (userMessage: string, historyPrefix?: Array<{ role: 'user' | 'ai', content: string, feedback?: 'up' | 'down' }>) => {
     if (isQuerying) return;
-    
+
     const baseMessages = historyPrefix || messages;
     const history = baseMessages.filter(m => m.role === 'user');
-    
+
     const newUserMsg = { role: 'user' as const, content: userMessage };
     const updatedMessages = [...baseMessages, newUserMsg];
-    
+
     setMessages(updatedMessages);
     setIsQuerying(true);
 
     if (isContextLoading || !context) {
       setMessages([...updatedMessages, { role: 'ai', content: 'Syncing Academic Data... Please wait.' }]);
       setIsQuerying(false);
-      return; 
+      return;
     }
 
     try {
@@ -310,8 +310,8 @@ export default function DashboardPage() {
       const response = await fetch('/api/engine/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          messages: updatedMessages.filter(m => m.type !== 'action_required').slice(-10),
+        body: JSON.stringify({
+          messages: updatedMessages.filter(m => (m as any).type !== 'action_required').slice(-10),
           activeFileId: selectedFileIds.length > 0 ? selectedFileIds[0] : null,
           sessionId: currentChatId,
           userProfile: userProfilePayload
@@ -338,7 +338,7 @@ export default function DashboardPage() {
         const decoder = new TextDecoder();
         let aiContent = '';
         let newAiMsg = { role: 'ai' as const, content: '' };
-        
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -370,7 +370,7 @@ export default function DashboardPage() {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
-        
+
         setCurrentChatId(newChatDoc.id);
         setChatList(prev => [{ id: newChatDoc.id, title, updatedAt: Date.now() }, ...prev]);
 
@@ -380,14 +380,14 @@ export default function DashboardPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt: userMessage })
         })
-        .then(res => res.json())
-        .then(data => {
-          if (data.title) {
-            updateDoc(doc(db, 'chats', newChatDoc.id), { title: data.title });
-            setChatList(prev => prev.map(c => c.id === newChatDoc.id ? { ...c, title: data.title } : c));
-          }
-        })
-        .catch(e => console.error("Async title generation failed", e));
+          .then(res => res.json())
+          .then(data => {
+            if (data.title) {
+              updateDoc(doc(db, 'chats', newChatDoc.id), { title: data.title });
+              setChatList(prev => prev.map(c => c.id === newChatDoc.id ? { ...c, title: data.title } : c));
+            }
+          })
+          .catch(e => console.error("Async title generation failed", e));
       }
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', content: "Error: Could not reach the brain." }]);
@@ -416,13 +416,13 @@ export default function DashboardPage() {
     const newMessages = [...messages];
     newMessages[index] = { ...newMessages[index], feedback: type };
     setMessages(newMessages);
-    
+
     if (currentChatId) {
       try {
         await updateDoc(doc(db, 'chats', currentChatId), {
           messages: newMessages
         });
-      } catch(e) { console.error("Failed to save feedback", e); }
+      } catch (e) { console.error("Failed to save feedback", e); }
     }
   };
 
@@ -436,7 +436,8 @@ export default function DashboardPage() {
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .dashboard-layout, .dashboard-layout * { box-sizing: border-box; }
         .dashboard-layout { display: flex; flex-direction: column; height: 100dvh; background-color: #0A1128; color: white; overflow-x: hidden; overflow-y: hidden; position: relative; width: 100%; max-width: 100vw; }
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 40; display: none; opacity: 0; transition: opacity 0.3s; }
@@ -470,7 +471,7 @@ export default function DashboardPage() {
           .desktop-text { display: inline; }
         }
       `}} />
-      
+
       <div className="dashboard-layout">
         <div className={`overlay ${isSidebarOpen || isConsoleOpen ? 'visible' : ''}`} onClick={() => { setIsSidebarOpen(false); setIsConsoleOpen(false); }}></div>
         <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
@@ -488,10 +489,10 @@ export default function DashboardPage() {
             <div style={{ marginTop: '1.5rem', borderTop: '1px solid #27272A', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden', flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: '#71717A', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recent Chats</span>
-                <button 
+                <button
                   onClick={() => {
                     setCurrentChatId(null);
-                    setMessages([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+                    setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
                     setIsConsoleOpen(true);
                   }}
                   style={{ background: 'none', border: 'none', color: '#EA580C', cursor: 'pointer', fontSize: '1.25rem', lineHeight: '1' }}
@@ -502,7 +503,7 @@ export default function DashboardPage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, paddingRight: '0.5rem' }} className="file-list-container">
                 {chatList.map(chat => (
-                  <button 
+                  <button
                     key={chat.id}
                     onClick={() => handleLoadChat(chat.id)}
                     style={{ background: currentChatId === chat.id ? '#18181B' : 'none', border: 'none', color: currentChatId === chat.id ? 'white' : '#A1A1AA', textAlign: 'left', padding: '0.5rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', transition: 'all 0.2s' }}
@@ -545,14 +546,14 @@ export default function DashboardPage() {
           </header>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-            
+
             <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>1. Add Course Materials</h3>
               <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0 }}>Upload Educational Management lecture slides or PDFs to build your knowledge base.</p>
-              
+
               <input type="file" multiple accept=".pdf,.pptx,.docx,.txt" ref={fileInputRef} onChange={handleFileInput} style={{ display: 'none' }} />
 
-              <div 
+              <div
                 onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
                 style={{ backgroundColor: isDragging ? '#27272A' : '#18181B', padding: '1.5rem', borderRadius: '0.5rem', border: isDragging ? '1px dashed #EA580C' : '1px dashed #3F3F46', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginTop: 'auto', opacity: isUploading ? 0.5 : 1, pointerEvents: isUploading ? 'none' : 'auto' }}
               >
@@ -571,7 +572,7 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
-                  
+
                   {isUploading && (
                     <div style={{ width: '100%', backgroundColor: '#27272A', borderRadius: '0.25rem', height: '6px', overflow: 'hidden', marginTop: '0.25rem' }}>
                       <div style={{ width: `${uploadProgress}%`, backgroundColor: '#EA580C', height: '100%', transition: 'width 0.2s ease' }}></div>
@@ -585,7 +586,7 @@ export default function DashboardPage() {
                   ) : null}
 
                   {pendingFiles.length > 0 && !isUploading && (
-                    <button 
+                    <button
                       onClick={handleUploadToVault} disabled={isUploading}
                       style={{ backgroundColor: '#EA580C', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginTop: '0.25rem', transition: 'all 0.2s' }}
                     >
@@ -595,10 +596,10 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-            
+
             <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>2. Smart Analysis</h3>
-              
+
               {!isSelectionMode && !isAnalyzing && (
                 <>
                   <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0, flex: 1 }}>Select unprocessed files from your Vault to extract key concepts and formulas.</p>
@@ -607,7 +608,7 @@ export default function DashboardPage() {
                       {analysisStatus}
                     </div>
                   )}
-                  <button 
+                  <button
                     onClick={handleInitiateAnalysis}
                     style={{ backgroundColor: '#27272A', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #3F3F46', cursor: 'pointer', fontWeight: 'bold', width: '100%', transition: 'all 0.2s' }}
                   >
@@ -619,12 +620,12 @@ export default function DashboardPage() {
               {isSelectionMode && (
                 <>
                   <p style={{ color: '#EA580C', fontSize: '0.9rem', margin: 0, fontWeight: 'bold' }}>Select files for this session:</p>
-                  
+
                   <div className="file-list-container" style={{ flex: 1, maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingRight: '0.25rem', marginTop: '0.5rem' }}>
                     {rawFiles.map((file) => (
                       <label key={file.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#18181B', padding: '0.75rem', borderRadius: '0.5rem', border: selectedFileIds.includes(file.id) ? '1px solid #EA580C' : '1px solid #27272A', cursor: 'pointer', transition: 'all 0.2s' }}>
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           className="custom-checkbox"
                           checked={selectedFileIds.includes(file.id)}
                           onChange={() => toggleFileSelection(file.id)}
@@ -640,8 +641,8 @@ export default function DashboardPage() {
                     <button onClick={() => setIsSelectionMode(false)} style={{ flex: 1, backgroundColor: 'transparent', color: '#A1A1AA', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #3F3F46', cursor: 'pointer', fontSize: '0.85rem' }}>
                       Cancel
                     </button>
-                    <button 
-                      onClick={handleProcessSelected} 
+                    <button
+                      onClick={handleProcessSelected}
                       disabled={selectedFileIds.length === 0}
                       style={{ flex: 2, backgroundColor: selectedFileIds.length === 0 ? '#3F3F46' : '#EA580C', color: selectedFileIds.length === 0 ? '#A1A1AA' : 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: selectedFileIds.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', transition: 'all 0.2s' }}
                     >
@@ -656,7 +657,7 @@ export default function DashboardPage() {
                   <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0, flex: 1 }}>Processing selected files through the AI engine...</p>
                   <div style={{ backgroundColor: '#27272A', color: '#E4E4E7', padding: '1rem', borderRadius: '0.5rem', textAlign: 'center', fontSize: '0.85rem', border: '1px solid #3F3F46' }}>
                     <div style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #EA580C', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '0.5rem' }}></div>
-                    <style dangerouslySetInnerHTML={{__html: `@keyframes spin { to { transform: rotate(360deg); } }`}} />
+                    <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
                     <div>{analysisStatus}</div>
                   </div>
                 </>
@@ -678,110 +679,111 @@ export default function DashboardPage() {
         <aside className={`console-panel ${isConsoleOpen ? 'open' : ''}`}>
           <div style={{ padding: '1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ color: '#EA580C', fontWeight: 'bold' }}>&gt;_</span> 
+              <span style={{ color: '#EA580C', fontWeight: 'bold' }}>&gt;_</span>
               <span style={{ fontWeight: 'bold', letterSpacing: '0.05em' }}>console</span>
             </div>
             <button className="menu-btn lg:hidden" onClick={() => setIsConsoleOpen(false)}>✕</button>
           </div>
           <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div style={{ color: '#A1A1AA', fontSize: '0.75rem', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px dashed #27272A', paddingBottom: '0.5rem' }}>Secure Session Established</div>
-            
+
             {messages.map((msg, i) => {
               const isError = msg.content.startsWith("Error:") || msg.content.includes("Failed to query the AI brain.");
-              
+
               const lowerMsg = msg.content.toLowerCase();
               const needsDisambiguation = lowerMsg.includes("which specific") || lowerMsg.includes("which document") || lowerMsg.includes("tell me which");
-              
+
               return (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ color: msg.role === 'user' ? '#A1A1AA' : isError ? '#EF4444' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                    {msg.role === 'user' ? userData.name.split(' ')[0] : '>_console'}
-                  </span>
-                  {msg.role === 'user' && (
-                    <button onClick={() => { setEditingMessageIndex(i); setEditInput(msg.content); }} className="text-gray-400 hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none' }} title="Edit">
-                      <Pencil className="w-4 h-4" />
-                    </button>
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ color: msg.role === 'user' ? '#A1A1AA' : isError ? '#EF4444' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                      {msg.role === 'user' ? userData.name.split(' ')[0] : '>_console'}
+                    </span>
+                    {msg.role === 'user' && (
+                      <button onClick={() => { setEditingMessageIndex(i); setEditInput(msg.content); }} className="text-gray-400 hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none' }} title="Edit">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {editingMessageIndex === i ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '90%', alignItems: 'flex-end' }}>
+                      <textarea
+                        value={editInput}
+                        onChange={e => setEditInput(e.target.value)}
+                        style={{ width: '100%', backgroundColor: '#27272A', color: 'white', border: '1px solid #EA580C', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', outline: 'none', resize: 'vertical', minHeight: '80px' }}
+                      />
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button onClick={() => setEditingMessageIndex(null)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
+                        <button onClick={() => handleEditSubmit(i)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>Save & Resubmit</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      backgroundColor: msg.role === 'user' ? '#27272A' : isError ? '#450a0a' : '#18181B',
+                      padding: '1rem',
+                      borderRadius: '0.5rem',
+                      border: isError ? '1px solid #7f1d1d' : '1px solid #27272A',
+                      color: isError ? '#fca5a5' : '#E4E4E7',
+                      fontSize: '0.9rem',
+                      lineHeight: '1.6',
+                      maxWidth: '90%',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {msg.content}
+                    </div>
+                  )}
+
+                  {/* Smart Vault Selector for Disambiguation */}
+                  {msg.role === 'ai' && needsDisambiguation && !isError && i === messages.length - 1 && vaultFiles.length > 0 && (
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem', maxWidth: '90%' }}>
+                      {vaultFiles.map(file => (
+                        <button
+                          key={file.id}
+                          disabled={isQuerying}
+                          onClick={() => submitQuery(`Please use the document: ${file.fileName} as the context.`)}
+                          style={{ backgroundColor: '#18181B', color: '#A1A1AA', border: '1px solid #EA580C', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}
+                        >
+                          📄 {file.fileName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* AI Action Buttons & Controls */}
+                  {msg.role === 'ai' && !isError && i > 0 && (
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem', alignItems: 'center' }}>
+                      {!needsDisambiguation && (
+                        <>
+                          <button disabled={isQuerying} onClick={() => submitQuery("Based on the response above, please create a set of interactive flashcards for me.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                            ✨ Create Flashcards
+                          </button>
+                          <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                            📝 Summarize Key Terms
+                          </button>
+                          <button disabled={isQuerying} onClick={() => submitQuery("Please generate a quick 3-question multiple-choice quiz based on the information above to test my understanding.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
+                            🧠 Generate Practice Quiz
+                          </button>
+                        </>
+                      )}
+                      <div style={{ flex: 1 }}></div>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button disabled={isQuerying} onClick={() => handleRegenerate(i)} className="text-gray-400 hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', opacity: isQuerying ? 0.5 : 1 }} title="Regenerate">
+                          <RefreshCcw className="w-4 h-4" />
+                        </button>
+                        <button disabled={isQuerying} onClick={() => handleFeedback(i, 'up')} className="hover:text-green-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'up' ? '#22C55E' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1 }} title="Good response">
+                          <ThumbsUp className="w-4 h-4" />
+                        </button>
+                        <button disabled={isQuerying} onClick={() => handleFeedback(i, 'down')} className="hover:text-red-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'down' ? '#EF4444' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1 }} title="Bad response">
+                          <ThumbsDown className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-                
-                {editingMessageIndex === i ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '90%', alignItems: 'flex-end' }}>
-                    <textarea 
-                      value={editInput}
-                      onChange={e => setEditInput(e.target.value)}
-                      style={{ width: '100%', backgroundColor: '#27272A', color: 'white', border: '1px solid #EA580C', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', outline: 'none', resize: 'vertical', minHeight: '80px' }}
-                    />
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => setEditingMessageIndex(null)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
-                      <button onClick={() => handleEditSubmit(i)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>Save & Resubmit</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ 
-                    backgroundColor: msg.role === 'user' ? '#27272A' : isError ? '#450a0a' : '#18181B', 
-                    padding: '1rem', 
-                    borderRadius: '0.5rem', 
-                    border: isError ? '1px solid #7f1d1d' : '1px solid #27272A', 
-                    color: isError ? '#fca5a5' : '#E4E4E7', 
-                    fontSize: '0.9rem', 
-                    lineHeight: '1.6',
-                    maxWidth: '90%',
-                    whiteSpace: 'pre-wrap'
-                  }}>
-                    {msg.content}
-                  </div>
-                )}
+              )
+            })}
 
-                {/* Smart Vault Selector for Disambiguation */}
-                {msg.role === 'ai' && needsDisambiguation && !isError && i === messages.length - 1 && vaultFiles.length > 0 && (
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem', maxWidth: '90%' }}>
-                    {vaultFiles.map(file => (
-                      <button 
-                        key={file.id} 
-                        disabled={isQuerying}
-                        onClick={() => submitQuery(`Please use the document: ${file.fileName} as the context.`)} 
-                        style={{ backgroundColor: '#18181B', color: '#A1A1AA', border: '1px solid #EA580C', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}
-                      >
-                        📄 {file.fileName}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* AI Action Buttons & Controls */}
-                {msg.role === 'ai' && !isError && i > 0 && (
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem', alignItems: 'center' }}>
-                    {!needsDisambiguation && (
-                      <>
-                        <button disabled={isQuerying} onClick={() => submitQuery("Based on the response above, please create a set of interactive flashcards for me.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                          ✨ Create Flashcards
-                        </button>
-                        <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                          📝 Summarize Key Terms
-                        </button>
-                        <button disabled={isQuerying} onClick={() => submitQuery("Please generate a quick 3-question multiple-choice quiz based on the information above to test my understanding.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                          🧠 Generate Practice Quiz
-                        </button>
-                      </>
-                    )}
-                    <div style={{ flex: 1 }}></div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button disabled={isQuerying} onClick={() => handleRegenerate(i)} className="text-gray-400 hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', opacity: isQuerying ? 0.5 : 1 }} title="Regenerate">
-                        <RefreshCcw className="w-4 h-4" />
-                      </button>
-                      <button disabled={isQuerying} onClick={() => handleFeedback(i, 'up')} className="hover:text-green-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'up' ? '#22C55E' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1 }} title="Good response">
-                        <ThumbsUp className="w-4 h-4" />
-                      </button>
-                      <button disabled={isQuerying} onClick={() => handleFeedback(i, 'down')} className="hover:text-red-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'down' ? '#EF4444' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1 }} title="Bad response">
-                        <ThumbsDown className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )})}
-            
             {isQuerying && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
                 <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>&gt;_console</span>
@@ -794,12 +796,12 @@ export default function DashboardPage() {
           </div>
           <div style={{ padding: '1.5rem', borderTop: '1px solid #27272A', backgroundColor: '#000000' }}>
             <form style={{ display: 'flex', gap: '0.5rem' }} onSubmit={handleQueryConsole}>
-              <input 
-                value={consoleInput} 
+              <input
+                value={consoleInput}
                 onChange={(e) => setConsoleInput(e.target.value)}
-                type="text" 
-                placeholder="Enter command or query..." 
-                style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '16px', outline: 'none', minWidth: '0' }} 
+                type="text"
+                placeholder="Enter command or query..."
+                style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '16px', outline: 'none', minWidth: '0' }}
               />
               <button type="submit" disabled={isQuerying} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0 1rem', borderRadius: '0.5rem', cursor: isQuerying ? 'not-allowed' : 'pointer', fontWeight: 'bold', flexShrink: 0, opacity: isQuerying ? 0.5 : 1 }}>→</button>
             </form>
