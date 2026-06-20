@@ -15,7 +15,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing messages or user context." }, { status: 400 });
     }
 
-    const query = messages[messages.length - 1].content;
+    const userQueryText = messages[messages.length - 1]?.content || "";
 
     let systemInstruction = `YOU ARE AN ELITE ACADEMIC TUTOR AND EXAM STRATEGIST. Your sole purpose is to help university students master their course materials, synthesize complex information, and ace their exams. You are empathetic, proactive, and highly structured.
 
@@ -47,7 +47,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
     let activeCourseCode = null;
     const userCourses = userProfile.courses || [];
     for (const c of userCourses) {
-      if (query.toUpperCase().includes(c.courseCode.toUpperCase())) {
+      if (c.courseCode && userQueryText.toUpperCase().includes(c.courseCode.toUpperCase())) {
          activeCourseCode = c.courseCode.toUpperCase();
          break;
       }
@@ -55,59 +55,63 @@ You have access to the user's cloud Vault database. When they mention an uploade
 
     // Vault Interceptor Trigger: Detect filename mentions
     let activeFileName = null;
-    const filenameMatch = query.match(/[\w\s-]+\.(pdf|docx|txt|pptx|xlsx|csv)/i);
+    const filenameMatch = userQueryText.match(/[\w\s-]+\.(pdf|docx|txt|pptx|xlsx|csv)/i);
     if (filenameMatch) {
        activeFileName = filenameMatch[0].trim();
     } else {
-       const docMatch = query.match(/document:?\s+([^\s,.]+)/i);
-       if (docMatch && docMatch[1].length > 3) {
+       const docMatch = userQueryText.match(/document:?\s+([^\s,.]+)/i);
+       if (docMatch && docMatch[1] && docMatch[1].length > 3) {
           activeFileName = docMatch[1].replace(/['"]/g, '').trim();
        }
     }
 
     let fileUrls: string[] = [];
 
-    if (activeCourseCode || activeFileName || activeFileId) {
-       const vaultRef = collection(db, 'vault_files');
-       const q = query(vaultRef, where('userId', '==', userId));
-       const querySnapshot = await getDocs(q);
+    try {
+      if (activeCourseCode || activeFileName || activeFileId) {
+         const vaultRef = collection(db, 'vault_files');
+         const q = query(vaultRef, where('userId', '==', userId));
+         const querySnapshot = await getDocs(q);
 
-       querySnapshot.forEach((docSnap) => {
-          const data = docSnap.data() as { name?: string; fileName?: string; downloadURL?: string };
-          const nameUpper = (data.name || data.fileName || '').toUpperCase();
-          
-          let isMatch = false;
-          if (activeCourseCode && nameUpper.includes(activeCourseCode)) isMatch = true;
-          if (activeFileName && nameUpper.includes(activeFileName.toUpperCase())) isMatch = true;
-          if (activeFileId && docSnap.id === activeFileId) isMatch = true;
+         querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data() as { name?: string; fileName?: string; downloadURL?: string };
+            const nameUpper = (data.name || data.fileName || '').toUpperCase();
+            
+            let isMatch = false;
+            if (activeCourseCode && nameUpper.includes(activeCourseCode)) isMatch = true;
+            if (activeFileName && nameUpper.includes(activeFileName.toUpperCase())) isMatch = true;
+            if (activeFileId && docSnap.id === activeFileId) isMatch = true;
 
-          if (isMatch && data.downloadURL) {
-             fileUrls.push(data.downloadURL);
-          }
-       });
-    }
-
-    // Fetch Buffers
-    const fileParts: any[] = [];
-    if (fileUrls.length > 0) {
-      await Promise.all(fileUrls.map(async (url) => {
-        try {
-          const fileResponse = await fetch(url);
-          if (!fileResponse.ok) return;
-          const fileBuffer = await fileResponse.arrayBuffer();
-          const mimeType = fileResponse.headers.get('content-type') || 'application/pdf';
-          const base64Data = Buffer.from(fileBuffer).toString('base64');
-          
-          fileParts.push({
-            inlineData: {
-              data: base64Data,
-              mimeType: mimeType
+            if (isMatch && data.downloadURL) {
+               fileUrls.push(data.downloadURL);
             }
-          });
-        } catch (e) {
-          console.error("Failed to fetch file buffer:", e);
-        }
-      }));
+         });
+      }
+
+      // Fetch Buffers
+      const fileParts: any[] = [];
+      if (fileUrls.length > 0) {
+        await Promise.all(fileUrls.map(async (url) => {
+          try {
+            const fileResponse = await fetch(url);
+            if (!fileResponse.ok) return;
+            const fileBuffer = await fileResponse.arrayBuffer();
+            const mimeType = fileResponse.headers.get('content-type') || 'application/pdf';
+            const base64Data = Buffer.from(fileBuffer).toString('base64');
+            
+            fileParts.push({
+              inlineData: {
+                data: base64Data,
+                mimeType: mimeType
+              }
+            });
+          } catch (e) {
+            console.error("Failed to fetch file buffer:", e);
+          }
+        }));
+      }
+    } catch (error) {
+      console.error("Vault Interceptor Database Fetch Error:", error);
     }
 
     // 3. Token Exhaustion Mitigation (600,000 threshold for history)
@@ -118,7 +122,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
        }
     }
 
-    const isGenericQuery = /^(summarize|explain this|what is this course about\??|explain|help|summary|what is this\??)$/i.test(query.trim());
+    const isGenericQuery = /^(summarize|explain this|what is this course about\??|explain|help|summary|what is this\??)$/i.test(userQueryText.trim());
     const hasHistory = dbHistory.length > 0 || (messages && messages.length > 0);
 
     let context = "";
@@ -127,7 +131,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
     if (!isGenericQuery || hasHistory) {
       // Embed the user's query using the same model as the ingest engine
       const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
-      const queryResult = await embeddingModel.embedContent(query);
+      const queryResult = await embeddingModel.embedContent(userQueryText);
       const queryEmbedding = queryResult.embedding.values;
 
       // Query Pinecone for the most similar context
@@ -223,7 +227,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
     Vault Document Context:
     ${context ? context : "No specific file context provided."}
     
-    Question: ${query}`;
+    Question: ${userQueryText}`;
 
     const promptParts: any[] = [...fileParts, { text: prompt }];
 
