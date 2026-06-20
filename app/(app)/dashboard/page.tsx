@@ -603,19 +603,7 @@ export default function DashboardPage() {
             ) : (
               <div className="flex flex-col lg:flex-row w-full gap-6 h-[calc(100vh-200px)]">
                 
-                {/* Source Sidebar */}
-                <div className="w-full lg:w-[250px] bg-[#111111] rounded-xl border border-[#27272A] p-4 flex flex-col gap-4 flex-shrink-0">
-                  <h3 style={{ margin: 0, fontSize: '1rem', color: '#EA580C', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sources</h3>
-                  <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {activeSources.map(source => (
-                      <div key={source.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#18181B', padding: '0.5rem 0.75rem', borderRadius: '0.5rem', border: '1px solid #3F3F46' }}>
-                        <span style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }} title={source.title}>{source.title}</span>
-                        <button onClick={() => setActiveSources(prev => prev.filter(s => s.id !== source.id))} style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: '0 0.25rem' }}>&times;</button>
-                      </div>
-                    ))}
-                  </div>
-                  <button onClick={() => setIsAddSourceModalOpen(true)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>+ Add Source</button>
-                </div>
+
 
                 {/* The Tutor */}
                 <div className="w-full lg:w-2/3 flex flex-col h-full bg-[#111111] rounded-xl border border-[#27272A] overflow-hidden">
@@ -628,7 +616,7 @@ export default function DashboardPage() {
                     </button>
                   </div>
                   
-                  <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-6 hide-scrollbar">
+                  <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-6 hide-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                     {messages.map((msg, i) => (
                       <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
                         <span style={{ color: msg.role === 'user' ? '#A1A1AA' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
