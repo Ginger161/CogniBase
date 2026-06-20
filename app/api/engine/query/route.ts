@@ -33,7 +33,8 @@ MOCK TEST PROTOCOL:
 If asked for a test, generate a structured exam based strictly on the uploaded materials. Include a mix of Multiple Choice, True/False, Fill-in-the-Blank, and Short Answer questions. Emulate the style of Nigerian University exams (direct, concept-focused, not trick questions). Invite the student to answer them and wait to grade their responses.
 
 BOUNDARIES:
-You are elite at studying, research, and academia. If asked to generate images, write code (unless for a CS class), or do business strategy outside of an academic context, politely decline and steer the conversation back to their studies.`;
+You are elite at studying, research, and academia. If asked to generate images, write code (unless for a CS class), or do business strategy outside of an academic context, politely decline and steer the conversation back to their studies.
+You have access to the user's cloud Vault database. When they mention an uploaded file name, the system will automatically inject its contents into your context window. Never tell the user you cannot access local files; the files are securely stored on our servers.`;
 
     // 1. Use conversation history injected directly from the frontend
     let dbHistory = messages.slice(0, -1);
@@ -52,6 +53,18 @@ You are elite at studying, research, and academia. If asked to generate images, 
       }
     }
 
+    // Vault Interceptor Trigger: Detect filename mentions
+    let activeFileName = null;
+    const filenameMatch = query.match(/[\w\s-]+\.(pdf|docx|txt|pptx|xlsx|csv)/i);
+    if (filenameMatch) {
+       activeFileName = filenameMatch[0].trim();
+    } else {
+       const docMatch = query.match(/document:?\s+([^\s,.]+)/i);
+       if (docMatch && docMatch[1].length > 3) {
+          activeFileName = docMatch[1].replace(/['"]/g, '').trim();
+       }
+    }
+
     let extractedText = "";
     let fileName = "";
     if (activeFileId) {
@@ -65,7 +78,7 @@ You are elite at studying, research, and academia. If asked to generate images, 
 
     // Wait to calculate totalContextSize until all files are fetched.
 
-    if (activeCourseCode) {
+    if (activeCourseCode || activeFileName) {
        // Two-Pass Database Query
        const vq = query(collection(db, 'vault_files'), where('userId', '==', userId));
        const vaultSnap = await getDocs(vq);
@@ -78,8 +91,12 @@ You are elite at studying, research, and academia. If asked to generate images, 
 
        // Filtering
        const matchingIds = metadataList
-          .filter(m => m.name.toUpperCase().includes(activeCourseCode!.toUpperCase()) || m.hasText) // If we can't search inside text yet, we rely on filename or just fetch if we must. Actually, filtering by filename:
-          .filter(m => m.name.toUpperCase().includes(activeCourseCode!.toUpperCase()))
+          .filter(m => {
+             const nameUpper = m.name.toUpperCase();
+             if (activeCourseCode && nameUpper.includes(activeCourseCode)) return true;
+             if (activeFileName && nameUpper.includes(activeFileName.toUpperCase())) return true;
+             return false;
+          })
           .map(m => m.id);
 
        let combinedCourseText = "";
@@ -93,11 +110,16 @@ You are elite at studying, research, and academia. If asked to generate images, 
                 combinedCourseText += `\n--- Document: ${data.name || data.fileName} ---\n${data.extractedText || 'No text extracted'}\n`;
              }
           }
-          activeFileContext = `\nCourse Material for ${activeCourseCode}:\n${combinedCourseText}\n`;
+          const triggerReason = activeCourseCode ? `Course Material for ${activeCourseCode}` : `Requested File: ${activeFileName}`;
+          activeFileContext = `\n${triggerReason}:\n${combinedCourseText}\n`;
           extractedText = combinedCourseText; // For token truncation calculation
        } else {
           // Fallback Handling
-          activeFileContext = `\nSYSTEM ALERT: The user asked about ${activeCourseCode}, but no uploaded materials were found for this course in the vault. You MUST inform the user that you cannot answer because they haven't uploaded notes for ${activeCourseCode} yet, and politely ask them to upload the relevant materials.\n`;
+          if (activeCourseCode) {
+              activeFileContext = `\nSYSTEM ALERT: The user asked about ${activeCourseCode}, but no uploaded materials were found for this course in the vault. You MUST inform the user that you cannot answer because they haven't uploaded notes for ${activeCourseCode} yet, and politely ask them to upload the relevant materials.\n`;
+          } else if (activeFileName) {
+              activeFileContext = `\nSYSTEM ALERT: The user asked to use the document '${activeFileName}', but no such document was found in their vault. Inform the user they need to upload this document first.\n`;
+          }
        }
     } else if (activeFileId) {
        activeFileContext = `\nActive Document Context (Prioritize this if the user asks about the 'current' file):\nTitle: ${fileName}\nExtracted Text: ${extractedText || 'No text extracted'}\n`;
