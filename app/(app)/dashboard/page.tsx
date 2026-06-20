@@ -433,6 +433,8 @@ export default function DashboardPage() {
       <style dangerouslySetInnerHTML={{
         __html: `
         .dashboard-layout, .dashboard-layout * { box-sizing: border-box; }
+        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
         .dashboard-layout { display: flex; flex-direction: column; height: 100dvh; background-color: #0A1128; color: white; overflow-x: hidden; overflow-y: hidden; position: relative; width: 100%; max-width: 100vw; }
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 40; display: none; opacity: 0; transition: opacity 0.3s; }
         .overlay.visible { display: block; opacity: 1; }
@@ -536,6 +538,16 @@ export default function DashboardPage() {
                     </div>
                   )}
                   <p className="text-sm md:text-base text-[#A1A1AA] mt-2">Active Workspace loaded. Chat with your tutor or generate study tools.</p>
+                  
+                  <div className="flex flex-wrap gap-2 mt-4 items-center">
+                    {activeSources.map(source => (
+                      <div key={source.id} className="flex items-center gap-2 bg-[#18181B] border border-[#27272A] rounded-full px-3 py-1 text-sm text-gray-300">
+                        <span className="truncate max-w-[150px]" title={source.title}>{source.title}</span>
+                        <button onClick={() => setActiveSources(prev => prev.filter(s => s.id !== source.id))} className="text-gray-500 hover:text-white">&times;</button>
+                      </div>
+                    ))}
+                    <button onClick={() => setIsAddSourceModalOpen(true)} className="flex items-center gap-1 border border-[#EA580C] text-[#EA580C] rounded-full px-3 py-1 text-sm hover:bg-[#EA580C] hover:text-white transition-colors">+ Add Source</button>
+                  </div>
                 </>
               )}
             </div>
@@ -589,7 +601,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              <div className="w-full flex flex-col lg:flex-row gap-6 md:gap-8 h-full">
+              <div className="flex flex-col lg:flex-row w-full gap-6 h-[calc(100vh-200px)]">
                 
                 {/* Source Sidebar */}
                 <div className="w-full lg:w-[250px] bg-[#111111] rounded-xl border border-[#27272A] p-4 flex flex-col gap-4 flex-shrink-0">
@@ -606,7 +618,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* The Tutor */}
-                <div className="w-full lg:flex-1 bg-[#111111] rounded-xl border border-[#27272A] flex flex-col overflow-hidden min-h-[500px]">
+                <div className="w-full lg:w-2/3 flex flex-col h-full bg-[#111111] rounded-xl border border-[#27272A] overflow-hidden">
                   <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#09090B' }}>
                     <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ color: '#EA580C' }}>&gt;_</span> console
@@ -616,7 +628,7 @@ export default function DashboardPage() {
                     </button>
                   </div>
                   
-                  <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-6 hide-scrollbar">
                     {messages.map((msg, i) => (
                       <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
                         <span style={{ color: msg.role === 'user' ? '#A1A1AA' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
@@ -666,7 +678,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* The Studio */}
-                <div className="w-full lg:w-[350px] flex flex-col gap-6 overflow-hidden box-border flex-shrink-0">
+                <div className="w-full lg:w-1/3 flex flex-col h-full overflow-y-auto">
                   <div className="w-full bg-[#111111] rounded-xl border border-[#27272A] p-4 md:p-6 overflow-hidden box-border flex-1 flex flex-col">
                     <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       The Studio
