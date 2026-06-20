@@ -12,6 +12,10 @@ export default function DashboardPage() {
   const pathname = usePathname();
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [activeDocumentContext, setActiveDocumentContext] = useState<string | null>(null);
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+  const [activeDocumentName, setActiveDocumentName] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
   const [isLoadingVault, setIsLoadingVault] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -275,6 +279,23 @@ export default function DashboardPage() {
 
 
   // --- NEW: Console Query Logic ---
+  const handleRenameDocument = async () => {
+    if (!newTitle.trim() || !activeDocumentId || newTitle === activeDocumentName) {
+      setIsEditingTitle(false);
+      return;
+    }
+    const finalName = newTitle.trim();
+    try {
+      await updateDoc(doc(db, 'vault_files', activeDocumentId), { fileName: finalName });
+      setActiveDocumentName(finalName);
+      setVaultFiles(prev => prev.map(f => f.id === activeDocumentId ? { ...f, fileName: finalName } : f));
+      console.log("Document renamed successfully.");
+    } catch (e) {
+      console.error("Failed to rename document:", e);
+    }
+    setIsEditingTitle(false);
+  };
+
   const submitQuery = async (userMessage: string, historyPrefix?: Array<{ role: 'user' | 'ai', content: string, feedback?: 'up' | 'down' }>) => {
     if (isQuerying) return;
 
@@ -455,9 +476,45 @@ export default function DashboardPage() {
           </div>
 
           <header style={{ borderBottom: '1px solid #27272A', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-            <div>
-              <h1 style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em' }}>Command Center</h1>
-              <p style={{ color: '#A1A1AA', margin: '0.5rem 0 0 0', fontSize: '1rem' }}>Initialize and monitor your study engines.</p>
+            <div style={{ flex: 1 }}>
+              {!activeDocumentContext ? (
+                <>
+                  <h1 style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em' }}>Command Center</h1>
+                  <p style={{ color: '#A1A1AA', margin: '0.5rem 0 0 0', fontSize: '1rem' }}>Initialize and monitor your study engines.</p>
+                </>
+              ) : (
+                <>
+                  {isEditingTitle ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="text"
+                        value={newTitle}
+                        onChange={(e) => setNewTitle(e.target.value)}
+                        onBlur={handleRenameDocument}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleRenameDocument(); }}
+                        autoFocus
+                        style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em', fontWeight: 'bold', backgroundColor: 'transparent', color: 'white', border: '1px solid #EA580C', outline: 'none', borderRadius: '0.5rem', padding: '0 0.5rem', width: '100%', maxWidth: '600px' }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }} className="group">
+                      <h1 style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em', display: 'flex', alignItems: 'center' }}>
+                        {activeDocumentName}
+                        <button
+                          onClick={() => setIsEditingTitle(true)}
+                          style={{ background: 'none', border: 'none', color: '#A1A1AA', cursor: 'pointer', marginLeft: '0.5rem', opacity: 0.5, transition: 'opacity 0.2s' }}
+                          title="Rename Document"
+                          onMouseOver={(e) => e.currentTarget.style.opacity = '1'}
+                          onMouseOut={(e) => e.currentTarget.style.opacity = '0.5'}
+                        >
+                          <Pencil size={18} />
+                        </button>
+                      </h1>
+                    </div>
+                  )}
+                  <p style={{ color: '#A1A1AA', margin: '0.5rem 0 0 0', fontSize: '1rem' }}>Active Workspace loaded. Chat with your tutor or generate study tools.</p>
+                </>
+              )}
             </div>
           </header>
 
@@ -474,7 +531,14 @@ export default function DashboardPage() {
                     <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Upload New Document</h3>
                     <input type="file" accept=".pdf,.pptx,.docx,.txt" ref={fileInputRef} onChange={(e) => {
                        handleFileInput(e);
-                       setTimeout(() => setActiveDocumentContext("Extracted text from newly uploaded file..."), 1000);
+                       setTimeout(() => {
+                           setActiveDocumentContext("Extracted text from newly uploaded file...");
+                           // For mock purposes during upload:
+                           setActiveDocumentId("temp-id");
+                           const fileName = e.target.files?.[0]?.name || "New Document";
+                           setActiveDocumentName(fileName);
+                           setNewTitle(fileName);
+                       }, 1000);
                     }} style={{ display: 'none' }} />
                     <div
                       onClick={() => fileInputRef.current?.click()}
@@ -496,8 +560,11 @@ export default function DashboardPage() {
                           <button
                             key={file.id}
                             onClick={() => {
-                               setActiveDocumentContext(file.extractedText || "Mock extracted text from vault file: " + file.fileName);
-                            }}
+                             setActiveDocumentContext(file.extractedText || "Mock extracted text from vault file: " + file.fileName);
+                             setActiveDocumentId(file.id);
+                             setActiveDocumentName(file.fileName || file.name || "Untitled Document");
+                             setNewTitle(file.fileName || file.name || "Untitled Document");
+                          }}
                             style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'border-color 0.2s' }}
                             onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'}
                             onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}
@@ -520,7 +587,7 @@ export default function DashboardPage() {
                     <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ color: '#EA580C' }}>&gt;_</span> The Tutor
                     </h3>
-                    <button onClick={() => setActiveDocumentContext(null)} style={{ background: 'none', border: '1px solid #3F3F46', color: '#A1A1AA', padding: '0.25rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                    <button onClick={() => { setActiveDocumentContext(null); setActiveDocumentId(null); setActiveDocumentName(null); }} style={{ background: 'none', border: '1px solid #3F3F46', color: '#A1A1AA', padding: '0.25rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: 'pointer' }}>
                       Exit Workspace
                     </button>
                   </div>
