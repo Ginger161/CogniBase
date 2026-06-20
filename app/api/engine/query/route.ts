@@ -57,8 +57,8 @@ You are elite at studying, research, and academia. If asked to generate images, 
     if (activeFileId) {
        const fileDoc = await getDoc(doc(db, 'vault_files', activeFileId));
        if (fileDoc.exists()) {
-          const fileData = fileDoc.data();
-          fileName = fileData.name;
+          const fileData = fileDoc.data() as { name?: string; fileName?: string; extractedText?: string };
+          fileName = fileData.name || fileData.fileName || '';
           extractedText = fileData.extractedText || '';
        }
     }
@@ -72,7 +72,7 @@ You are elite at studying, research, and academia. If asked to generate images, 
        
        // PASS 1: Extract lightweight metadata
        const metadataList = vaultSnap.docs.map(d => {
-          const data = d.data();
+          const data = d.data() as { name?: string; fileName?: string; extractedText?: string };
           return { id: d.id, name: data.name || data.fileName || '', hasText: !!data.extractedText };
        });
 
@@ -89,7 +89,7 @@ You are elite at studying, research, and academia. If asked to generate images, 
           for (const id of matchingIds) {
              const fileDoc = await getDoc(doc(db, 'vault_files', id));
              if (fileDoc.exists()) {
-                const data = fileDoc.data();
+                const data = fileDoc.data() as { name?: string; fileName?: string; extractedText?: string };
                 combinedCourseText += `\n--- Document: ${data.name || data.fileName} ---\n${data.extractedText || 'No text extracted'}\n`;
              }
           }
