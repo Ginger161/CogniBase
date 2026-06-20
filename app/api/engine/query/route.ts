@@ -65,7 +65,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
        }
     }
 
-    let fetchedVaultContext = "";
+    let fileUrls: string[] = [];
 
     if (activeCourseCode || activeFileName || activeFileId) {
        const vaultRef = collection(db, 'vault_files');
@@ -73,7 +73,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
        const querySnapshot = await getDocs(q);
 
        querySnapshot.forEach((docSnap) => {
-          const data = docSnap.data() as { name?: string; fileName?: string; extractedText?: string };
+          const data = docSnap.data() as { name?: string; fileName?: string; downloadURL?: string };
           const nameUpper = (data.name || data.fileName || '').toUpperCase();
           
           let isMatch = false;
@@ -81,30 +81,42 @@ You have access to the user's cloud Vault database. When they mention an uploade
           if (activeFileName && nameUpper.includes(activeFileName.toUpperCase())) isMatch = true;
           if (activeFileId && docSnap.id === activeFileId) isMatch = true;
 
-          if (isMatch && data.extractedText) {
-             fetchedVaultContext += `\n--- File: ${data.name || data.fileName} ---\n${data.extractedText}\n`;
+          if (isMatch && data.downloadURL) {
+             fileUrls.push(data.downloadURL);
           }
        });
     }
 
-    // 3. Token Exhaustion Mitigation (600,000 threshold)
-    let totalContextSize = JSON.stringify(dbHistory).length + fetchedVaultContext.length;
-    if (totalContextSize > 600000) {
-       // Prioritize truncating oldest chat history
-       if (dbHistory.length > 5) {
-          dbHistory = dbHistory.slice(-5);
-          totalContextSize = JSON.stringify(dbHistory).length + fetchedVaultContext.length;
-       }
-       // If still too large, slice activeFileContext from the end
-       if (totalContextSize > 600000) {
-          const maxFileLength = Math.max(0, 600000 - JSON.stringify(dbHistory).length - 500);
-          fetchedVaultContext = fetchedVaultContext.substring(0, maxFileLength) + '\n[Note: Content was truncated due to length]';
-       }
+    // Fetch Buffers
+    const fileParts: any[] = [];
+    if (fileUrls.length > 0) {
+      await Promise.all(fileUrls.map(async (url) => {
+        try {
+          const fileResponse = await fetch(url);
+          if (!fileResponse.ok) return;
+          const fileBuffer = await fileResponse.arrayBuffer();
+          const mimeType = fileResponse.headers.get('content-type') || 'application/pdf';
+          const base64Data = Buffer.from(fileBuffer).toString('base64');
+          
+          fileParts.push({
+            inlineData: {
+              data: base64Data,
+              mimeType: mimeType
+            }
+          });
+        } catch (e) {
+          console.error("Failed to fetch file buffer:", e);
+        }
+      }));
     }
 
-    const finalSystemInstruction = fetchedVaultContext 
-      ? `${systemInstruction}\n\n[CRITICAL VAULT CONTEXT FOR THIS SESSION]:\n${fetchedVaultContext}` 
-      : systemInstruction;
+    // 3. Token Exhaustion Mitigation (600,000 threshold for history)
+    let totalContextSize = JSON.stringify(dbHistory).length;
+    if (totalContextSize > 600000) {
+       if (dbHistory.length > 5) {
+          dbHistory = dbHistory.slice(-5);
+       }
+    }
 
     const isGenericQuery = /^(summarize|explain this|what is this course about\??|explain|help|summary|what is this\??)$/i.test(query.trim());
     const hasHistory = dbHistory.length > 0 || (messages && messages.length > 0);
@@ -177,7 +189,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
 
     const modelConfig: any = { 
       model: "gemini-2.5-flash",
-      systemInstruction: finalSystemInstruction,
+      systemInstruction: systemInstruction,
       tools: [{ functionDeclarations: [addCourseTool, deleteCourseTool, addToTimetableTool] }]
     };
     const chatModel = genAI.getGenerativeModel(modelConfig);
@@ -213,7 +225,9 @@ You have access to the user's cloud Vault database. When they mention an uploade
     
     Question: ${query}`;
 
-    const chatResult = await chatSession.sendMessageStream(prompt);
+    const promptParts: any[] = [...fileParts, { text: prompt }];
+
+    const chatResult = await chatSession.sendMessageStream(promptParts);
     const iterator = chatResult.stream[Symbol.asyncIterator]();
     const firstChunkResult = await iterator.next();
 
