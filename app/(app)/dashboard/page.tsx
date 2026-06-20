@@ -585,7 +585,7 @@ export default function DashboardPage() {
                 <div style={{ flex: 1, backgroundColor: '#111111', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                   <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#09090B' }}>
                     <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ color: '#EA580C' }}>&gt;_</span> The Tutor
+                      <span style={{ color: '#EA580C' }}>&gt;_</span> console
                     </h3>
                     <button onClick={() => { setActiveDocumentContext(null); setActiveDocumentId(null); setActiveDocumentName(null); }} style={{ background: 'none', border: '1px solid #3F3F46', color: '#A1A1AA', padding: '0.25rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: 'pointer' }}>
                       Exit Workspace
@@ -596,7 +596,7 @@ export default function DashboardPage() {
                     {messages.map((msg, i) => (
                       <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
                         <span style={{ color: msg.role === 'user' ? '#A1A1AA' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                          {msg.role === 'user' ? userData.name.split(' ')[0] : 'The Tutor'}
+                          {msg.role === 'user' ? userData.name.split(' ')[0] : '>_console'}
                         </span>
                         <div style={{
                           backgroundColor: msg.role === 'user' ? '#27272A' : '#18181B',
@@ -615,7 +615,7 @@ export default function DashboardPage() {
                     ))}
                     {isQuerying && (
                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
-                         <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>The Tutor</span>
+                         <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>&gt;_console</span>
                          <div style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', color: '#E4E4E7', fontSize: '0.9rem' }}>
                            Thinking...
                          </div>
