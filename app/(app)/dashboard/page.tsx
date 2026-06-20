@@ -293,10 +293,8 @@ export default function DashboardPage() {
     setMessages(updatedMessages);
     setIsQuerying(true);
 
-    if (isContextLoading) return; // Do not send request if context isn't ready
-    if (!context) {
-      console.error('System Error: User context not loaded.');
-      setMessages([...updatedMessages, { role: 'ai', content: 'System Error: User context not loaded.' }]);
+    if (isContextLoading || !context) {
+      setMessages([...updatedMessages, { role: 'ai', content: 'Syncing Academic Data... Please wait.' }]);
       setIsQuerying(false);
       return; 
     }
@@ -312,20 +310,49 @@ export default function DashboardPage() {
       const response = await fetch('/api/engine/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: userMessage, userId: context.uid, chatHistory: history, userProfile: userProfilePayload })
+        body: JSON.stringify({ 
+          query: userMessage, 
+          userId: context.uid, 
+          chatHistory: history, 
+          userProfile: userProfilePayload,
+          sessionId: currentChatId,
+          activeDocumentId: selectedFileIds.length > 0 ? selectedFileIds[0] : null
+        })
       });
-      const data = await response.json();
+      const contentType = response.headers.get('content-type');
+      let finalMessages: any[] = [];
 
-      if (data.error) {
-        setMessages([...updatedMessages, { role: 'ai', content: `System Error: ${data.error}` }]);
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+
+        if (data.error) {
+          setMessages([...updatedMessages, { role: 'ai', content: `System Error: ${data.error}` }]);
+          setIsQuerying(false);
+          return;
+        }
+
+        const newAiMsg = { role: 'ai' as const, content: data.answer || '' };
+        finalMessages = [...updatedMessages, newAiMsg];
+        setMessages(finalMessages);
+      } else if (response.body) {
+        // Stream text token by token
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let aiContent = '';
+        let newAiMsg = { role: 'ai' as const, content: '' };
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          aiContent += decoder.decode(value, { stream: true });
+          newAiMsg.content = aiContent;
+          setMessages([...updatedMessages, newAiMsg]);
+        }
+        finalMessages = [...updatedMessages, newAiMsg];
+      } else {
         setIsQuerying(false);
         return;
       }
-
-      const newAiMsg = { role: 'ai' as const, content: data.answer };
-      const finalMessages = [...updatedMessages, newAiMsg];
-      
-      setMessages(finalMessages);
 
       // Persist to Firestore
       if (currentChatId) {

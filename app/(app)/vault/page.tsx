@@ -959,10 +959,8 @@ export default function DashboardPage() {
     setMessages(updatedMessages);
     setIsQuerying(true);
 
-    if (isContextLoading) return; // Do not send request if context isn't ready
-    if (!context) {
-      console.error('System Error: User context not loaded.');
-      setMessages([...updatedMessages, { role: 'ai', content: 'System Error: User context not loaded.' }]);
+    if (isLoading || isContextLoading || !context) {
+      setMessages([...updatedMessages, { role: 'ai', content: 'Syncing Academic Data... Please wait.' }]);
       setIsQuerying(false);
       return;
     }
@@ -978,41 +976,70 @@ export default function DashboardPage() {
       const response = await fetch('/api/engine/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: userMessage, userId: context.uid, chatHistory: history, userProfile: userProfilePayload })
+        body: JSON.stringify({ 
+          query: userMessage, 
+          userId: context.uid, 
+          chatHistory: history, 
+          userProfile: userProfilePayload,
+          sessionId: currentChatId,
+          activeDocumentId: activeDocumentId
+        })
       });
-      const data = await response.json();
+      const contentType = response.headers.get('content-type');
+      let finalMessages: VaultChatMessage[] = [];
 
-      if (data.error) {
-        setMessages([...updatedMessages, { role: 'ai', content: `System Error: ${data.error}` }]);
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+
+        if (data.error) {
+          setMessages([...updatedMessages, { role: 'ai', content: `System Error: ${data.error}` }]);
+          setIsQuerying(false);
+          return;
+        }
+
+        let newAiMsg: VaultChatMessage;
+        if (data.type === 'action_required') {
+          let content = '';
+          if (data.action === 'add_course') {
+            content = `I can add ${data.payload.courseCode} - ${data.payload.courseTitle} to your ${data.payload.semester} semester.`;
+          } else if (data.action === 'delete_course') {
+            content = `I can remove ${data.payload.courseCode} from your active semester.`;
+          } else if (data.action === 'add_to_timetable') {
+            content = `I can add ${data.payload.courseCode} to your timetable on ${data.payload.day} from ${data.payload.startTime} to ${data.payload.endTime}.`;
+          }
+          newAiMsg = {
+            role: 'ai',
+            content,
+            type: 'action_required',
+            action: data.action,
+            payload: data.payload,
+            ...(data.error ? { error: data.error } : {})
+          } as any;
+        } else {
+          newAiMsg = { role: 'ai', content: data.answer };
+        }
+
+        finalMessages = [...updatedMessages, newAiMsg];
+        setMessages(finalMessages);
+      } else if (response.body) {
+        // Stream text token by token
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let aiContent = '';
+        let newAiMsg: VaultChatMessage = { role: 'ai', content: '' };
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          aiContent += decoder.decode(value, { stream: true });
+          newAiMsg.content = aiContent;
+          setMessages([...updatedMessages, newAiMsg]);
+        }
+        finalMessages = [...updatedMessages, newAiMsg];
+      } else {
         setIsQuerying(false);
         return;
       }
-
-      let newAiMsg: VaultChatMessage;
-      if (data.type === 'action_required') {
-        let content = '';
-        if (data.action === 'add_course') {
-          content = `I can add ${data.payload.courseCode} - ${data.payload.courseTitle} to your ${data.payload.semester} semester.`;
-        } else if (data.action === 'delete_course') {
-          content = `I can remove ${data.payload.courseCode} from your active semester.`;
-        } else if (data.action === 'add_to_timetable') {
-          content = `I can add ${data.payload.courseCode} to your timetable on ${data.payload.day} from ${data.payload.startTime} to ${data.payload.endTime}.`;
-        }
-        newAiMsg = {
-          role: 'ai',
-          content,
-          type: 'action_required',
-          action: data.action,
-          payload: data.payload,
-          ...(data.error ? { error: data.error } : {})
-        } as any;
-      } else {
-        newAiMsg = { role: 'ai', content: data.answer };
-      }
-
-      const finalMessages = [...updatedMessages, newAiMsg];
-
-      setMessages(finalMessages);
 
       // Persist to Firestore
       if (currentChatId) {
