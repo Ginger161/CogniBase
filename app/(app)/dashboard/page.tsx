@@ -601,12 +601,12 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col lg:flex-row w-full gap-6 h-[calc(100vh-200px)]">
+              <div className="grid grid-cols-1 lg:grid-cols-3 w-full gap-6 h-[calc(100vh-200px)]">
                 
 
 
                 {/* The Tutor */}
-                <div className="w-full lg:w-2/3 flex flex-col h-full bg-[#111111] rounded-xl border border-[#27272A] overflow-hidden">
+                <div className="w-full lg:col-span-2 flex flex-col h-full bg-[#111111] rounded-xl border border-[#27272A] overflow-hidden">
                   <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#09090B' }}>
                     <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ color: '#EA580C' }}>&gt;_</span> console
@@ -666,7 +666,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* The Studio */}
-                <div className="w-full lg:w-1/3 flex flex-col h-full overflow-y-auto">
+                <div className="w-full lg:col-span-1 flex flex-col h-full overflow-y-auto">
                   <div className="w-full bg-[#111111] rounded-xl border border-[#27272A] p-4 md:p-6 overflow-hidden box-border flex-1 flex flex-col">
                     <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       The Studio
