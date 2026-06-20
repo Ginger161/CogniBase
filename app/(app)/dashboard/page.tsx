@@ -537,17 +537,21 @@ export default function DashboardPage() {
                       </h1>
                     </div>
                   )}
-                  <p className="text-sm md:text-base text-[#A1A1AA] mt-2">Active Workspace loaded. Chat with your tutor or generate study tools.</p>
+                  <p className="text-sm md:text-base text-[#A1A1AA] mt-2 mb-4">Active Workspace loaded. Chat with your tutor or generate study tools.</p>
                   
-                  <div className="flex flex-wrap gap-2 mt-4 items-center">
+                  {/* Source Chips */}
+                  <div className="flex flex-wrap items-center gap-2">
                     {activeSources.map(source => (
-                      <div key={source.id} className="flex items-center gap-2 bg-[#18181B] border border-[#27272A] rounded-full px-3 py-1 text-sm text-gray-300">
-                        <span className="truncate max-w-[150px]" title={source.title}>{source.title}</span>
-                        <button onClick={() => setActiveSources(prev => prev.filter(s => s.id !== source.id))} className="text-gray-500 hover:text-white">&times;</button>
+                      <div key={source.id} className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-gray-200 text-sm rounded-full border border-gray-700">
+                        <span className="truncate max-w-[200px]" title={source.title}>{source.title}</span>
+                        <button onClick={() => setActiveSources(prev => prev.filter(s => s.id !== source.id))} className="text-gray-500 hover:text-white">✕</button>
                       </div>
                     ))}
-                    <button onClick={() => setIsAddSourceModalOpen(true)} className="flex items-center gap-1 border border-[#EA580C] text-[#EA580C] rounded-full px-3 py-1 text-sm hover:bg-[#EA580C] hover:text-white transition-colors">+ Add Source</button>
+                    <button onClick={() => setIsAddSourceModalOpen(true)} className="px-4 py-1.5 text-sm text-orange-500 border border-orange-500 rounded-full hover:bg-orange-500 hover:text-white transition-colors">
+                      + Add Source
+                    </button>
                   </div>
+
                 </>
               )}
             </div>
@@ -601,104 +605,91 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-12 w-full gap-6 h-auto lg:h-[calc(100vh-200px)]">
-                
+              <div className="flex flex-col lg:flex-row w-full gap-6 h-auto lg:h-[calc(100vh-200px)]">
 
-
-                {/* The Tutor */}
-                <div className="w-full lg:col-span-7 flex flex-col h-[60vh] lg:h-full bg-[#0a0a0a] border border-gray-800 rounded-xl overflow-hidden relative">
-                  <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#09090B' }}>
-                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ color: '#EA580C' }}>&gt;_</span> console
-                    </h3>
-                    <button onClick={() => { setActiveSources([]); setActiveWorkspaceName("Untitled Workspace"); }} style={{ background: 'none', border: '1px solid #3F3F46', color: '#A1A1AA', padding: '0.25rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                {/* Left Pane: Chat (65% width on desktop) */}
+                <div className="w-full lg:w-[65%] flex flex-col h-[60vh] lg:h-full bg-[#0a0a0a] border border-gray-800 rounded-xl overflow-hidden relative">
+                  <div className="flex justify-between items-center p-4 border-b border-gray-800 bg-black/50">
+                    <div className="font-mono text-sm text-orange-500 font-bold">
+                      &gt;_ console
+                    </div>
+                    <button onClick={() => { setActiveSources([]); setActiveWorkspaceName("Untitled Workspace"); }} className="text-xs text-gray-500 hover:text-gray-300 border border-gray-700 px-3 py-1 rounded-full transition-colors">
                       Exit Workspace
                     </button>
                   </div>
                   
-                  <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-6 hide-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  <div className="flex-1 overflow-y-auto p-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] flex flex-col gap-6">
                     {messages.map((msg, i) => (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                        <span style={{ color: msg.role === 'user' ? '#A1A1AA' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                      <div key={i} className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        <span className={`font-bold text-xs ${msg.role === 'user' ? 'text-gray-500' : 'text-orange-500'}`}>
                           {msg.role === 'user' ? userData.name.split(' ')[0] : '>_console'}
                         </span>
-                        <div style={{
-                          backgroundColor: msg.role === 'user' ? '#27272A' : '#18181B',
-                          padding: '1rem',
-                          borderRadius: '0.5rem',
-                          border: '1px solid #27272A',
-                          color: '#E4E4E7',
-                          fontSize: '0.9rem',
-                          lineHeight: '1.6',
-                          maxWidth: '90%',
-                          whiteSpace: 'pre-wrap'
-                        }}>
+                        <div className={`p-4 rounded-lg text-sm max-w-[90%] whitespace-pre-wrap ${msg.role === 'user' ? 'bg-gray-800/50 border border-gray-700 text-gray-300' : 'bg-gray-900/50 border border-gray-800 text-gray-300'}`}>
                           {msg.content}
                         </div>
                       </div>
                     ))}
                     {isQuerying && (
-                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
-                         <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>&gt;_console</span>
-                         <div style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', color: '#E4E4E7', fontSize: '0.9rem' }}>
-                           Thinking...
-                         </div>
-                       </div>
+                      <div className="flex flex-col gap-2 items-start">
+                        <span className="font-bold text-xs text-orange-500">&gt;_console</span>
+                        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 text-sm text-gray-300">
+                          Thinking...
+                        </div>
+                      </div>
                     )}
                   </div>
                   
-                  <div className="w-full p-3 bg-[#0a0a0a] border-t border-gray-800 shrink-0">
-                    <form className="flex items-center gap-2 w-full" onSubmit={(e) => {
-                       e.preventDefault();
-                       if (!consoleInput.trim()) return;
-                       handleQueryConsole(e);
+                  <div className="w-full p-4 bg-black border-t border-gray-800 shrink-0">
+                    <form className="flex gap-2 w-full" onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!consoleInput.trim()) return;
+                      handleQueryConsole(e);
                     }}>
-                      <input
+                      <input 
                         value={consoleInput}
                         onChange={(e) => setConsoleInput(e.target.value)}
-                        type="text"
-                        placeholder="Ask a question about your sources..."
-                        className="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500"
+                        type="text" 
+                        placeholder="Ask a question..." 
+                        className="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500" 
                       />
-                      <button type="submit" disabled={isQuerying} className="shrink-0 bg-orange-600 hover:bg-orange-500 text-white rounded-lg p-3 px-4 flex items-center justify-center font-bold disabled:opacity-50 disabled:cursor-not-allowed">
-                        →
-                      </button>
+                      <button type="submit" disabled={isQuerying} className="shrink-0 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white rounded-lg px-6 py-3 font-bold transition-colors">➔</button>
                     </form>
                   </div>
                 </div>
 
-                {/* The Studio */}
-                <div className="w-full lg:col-span-5 flex flex-col h-auto lg:h-full bg-[#0a0a0a] border border-gray-800 rounded-xl p-5 overflow-y-auto">
-                  <h2 className="text-xl font-bold mb-4 text-white">The Studio</h2>
+                {/* Right Pane: The Studio (35% width on desktop) */}
+                <div className="w-full lg:w-[35%] flex flex-col h-auto lg:h-full bg-[#0a0a0a] border border-gray-800 rounded-xl p-6 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  <h2 className="text-xl font-bold mb-6 text-white">The Studio</h2>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
-                      <span className="text-xl group-hover:scale-110 transition-transform">🎧</span>
-                      <span className="text-sm font-medium text-gray-200">Audio Overview</span>
+                  {/* Studio Buttons Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                    <button className="flex flex-col items-start gap-2 p-4 bg-gray-900 border border-gray-800 hover:border-orange-500 rounded-xl transition-all text-left group">
+                      <span className="text-2xl group-hover:scale-110 transition-transform">🎧</span>
+                      <span className="text-sm font-semibold text-gray-200">Audio Overview</span>
                     </button>
-                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
-                      <span className="text-xl group-hover:scale-110 transition-transform">🎥</span>
-                      <span className="text-sm font-medium text-gray-200">Video Overview</span>
+                    <button className="flex flex-col items-start gap-2 p-4 bg-gray-900 border border-gray-800 hover:border-orange-500 rounded-xl transition-all text-left group">
+                      <span className="text-2xl group-hover:scale-110 transition-transform">🎥</span>
+                      <span className="text-sm font-semibold text-gray-200">Video Overview</span>
                     </button>
-                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
-                      <span className="text-xl group-hover:scale-110 transition-transform">📇</span>
-                      <span className="text-sm font-medium text-gray-200">Flashcards</span>
+                    <button className="flex flex-col items-start gap-2 p-4 bg-gray-900 border border-gray-800 hover:border-orange-500 rounded-xl transition-all text-left group">
+                      <span className="text-2xl group-hover:scale-110 transition-transform">🗂️</span>
+                      <span className="text-sm font-semibold text-gray-200">Flashcards</span>
                     </button>
-                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
-                      <span className="text-xl group-hover:scale-110 transition-transform">🧠</span>
-                      <span className="text-sm font-medium text-gray-200">Mock Exam</span>
+                    <button className="flex flex-col items-start gap-2 p-4 bg-gray-900 border border-gray-800 hover:border-orange-500 rounded-xl transition-all text-left group">
+                      <span className="text-2xl group-hover:scale-110 transition-transform">🧠</span>
+                      <span className="text-sm font-semibold text-gray-200">Mock Exam</span>
                     </button>
-                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
-                      <span className="text-xl group-hover:scale-110 transition-transform">📊</span>
-                      <span className="text-sm font-medium text-gray-200">Slide Deck</span>
+                    <button className="flex flex-col items-start gap-2 p-4 bg-gray-900 border border-gray-800 hover:border-orange-500 rounded-xl transition-all text-left group">
+                      <span className="text-2xl group-hover:scale-110 transition-transform">📊</span>
+                      <span className="text-sm font-semibold text-gray-200">Slide Deck</span>
                     </button>
-                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
-                      <span className="text-xl group-hover:scale-110 transition-transform">🗺️</span>
-                      <span className="text-sm font-medium text-gray-200">Infographic</span>
+                    <button className="flex flex-col items-start gap-2 p-4 bg-gray-900 border border-gray-800 hover:border-orange-500 rounded-xl transition-all text-left group">
+                      <span className="text-2xl group-hover:scale-110 transition-transform">🗺️</span>
+                      <span className="text-sm font-semibold text-gray-200">Infographic</span>
                     </button>
-                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
-                      <span className="text-xl group-hover:scale-110 transition-transform">📝</span>
-                      <span className="text-sm font-medium text-gray-200">Reports</span>
+                    <button className="flex flex-col items-start gap-2 p-4 bg-gray-900 border border-gray-800 hover:border-orange-500 rounded-xl transition-all text-left group">
+                      <span className="text-2xl group-hover:scale-110 transition-transform">📝</span>
+                      <span className="text-sm font-semibold text-gray-200">Reports</span>
                     </button>
                   </div>
                 </div>
