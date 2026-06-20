@@ -65,85 +65,46 @@ You have access to the user's cloud Vault database. When they mention an uploade
        }
     }
 
-    let extractedText = "";
-    let fileName = "";
-    if (activeFileId) {
-       const fileDoc = await getDoc(doc(db, 'vault_files', activeFileId));
-       if (fileDoc.exists()) {
-          const fileData = fileDoc.data() as { name?: string; fileName?: string; extractedText?: string };
-          fileName = fileData.name || fileData.fileName || '';
-          extractedText = fileData.extractedText || '';
-       }
-    }
+    let fetchedVaultContext = "";
 
-    // Wait to calculate totalContextSize until all files are fetched.
+    if (activeCourseCode || activeFileName || activeFileId) {
+       const vaultRef = collection(db, 'vault_files');
+       const q = query(vaultRef, where('userId', '==', userId));
+       const querySnapshot = await getDocs(q);
 
-    if (activeCourseCode || activeFileName) {
-       // Two-Pass Database Query
-       const vq = query(collection(db, 'vault_files'), where('userId', '==', userId));
-       const vaultSnap = await getDocs(vq);
-       
-       // PASS 1: Extract lightweight metadata
-       const metadataList = vaultSnap.docs.map(d => {
-          const data = d.data() as { name?: string; fileName?: string; extractedText?: string };
-          return { id: d.id, name: data.name || data.fileName || '', hasText: !!data.extractedText };
+       querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data() as { name?: string; fileName?: string; extractedText?: string };
+          const nameUpper = (data.name || data.fileName || '').toUpperCase();
+          
+          let isMatch = false;
+          if (activeCourseCode && nameUpper.includes(activeCourseCode)) isMatch = true;
+          if (activeFileName && nameUpper.includes(activeFileName.toUpperCase())) isMatch = true;
+          if (activeFileId && docSnap.id === activeFileId) isMatch = true;
+
+          if (isMatch && data.extractedText) {
+             fetchedVaultContext += `\n--- File: ${data.name || data.fileName} ---\n${data.extractedText}\n`;
+          }
        });
-
-       // Filtering
-       const matchingIds = metadataList
-          .filter(m => {
-             const nameUpper = m.name.toUpperCase();
-             if (activeCourseCode && nameUpper.includes(activeCourseCode)) return true;
-             if (activeFileName && nameUpper.includes(activeFileName.toUpperCase())) return true;
-             return false;
-          })
-          .map(m => m.id);
-
-       let combinedCourseText = "";
-       
-       if (matchingIds.length > 0) {
-          // PASS 2: Fetch full payload for specific IDs
-          for (const id of matchingIds) {
-             const fileDoc = await getDoc(doc(db, 'vault_files', id));
-             if (fileDoc.exists()) {
-                const data = fileDoc.data() as { name?: string; fileName?: string; extractedText?: string };
-                combinedCourseText += `\n--- Document: ${data.name || data.fileName} ---\n${data.extractedText || 'No text extracted'}\n`;
-             }
-          }
-          const triggerReason = activeCourseCode ? `Course Material for ${activeCourseCode}` : `Requested File: ${activeFileName}`;
-          activeFileContext = `\n${triggerReason}:\n${combinedCourseText}\n`;
-          extractedText = combinedCourseText; // For token truncation calculation
-       } else {
-          // Fallback Handling
-          if (activeCourseCode) {
-              activeFileContext = `\nSYSTEM ALERT: The user asked about ${activeCourseCode}, but no uploaded materials were found for this course in the vault. You MUST inform the user that you cannot answer because they haven't uploaded notes for ${activeCourseCode} yet, and politely ask them to upload the relevant materials.\n`;
-          } else if (activeFileName) {
-              activeFileContext = `\nSYSTEM ALERT: The user asked to use the document '${activeFileName}', but no such document was found in their vault. Inform the user they need to upload this document first.\n`;
-          }
-       }
-    } else if (activeFileId) {
-       activeFileContext = `\nActive Document Context (Prioritize this if the user asks about the 'current' file):\nTitle: ${fileName}\nExtracted Text: ${extractedText || 'No text extracted'}\n`;
     }
 
     // 3. Token Exhaustion Mitigation (600,000 threshold)
-    let totalContextSize = JSON.stringify(dbHistory).length + extractedText.length;
+    let totalContextSize = JSON.stringify(dbHistory).length + fetchedVaultContext.length;
     if (totalContextSize > 600000) {
        // Prioritize truncating oldest chat history
        if (dbHistory.length > 5) {
           dbHistory = dbHistory.slice(-5);
-          totalContextSize = JSON.stringify(dbHistory).length + extractedText.length;
+          totalContextSize = JSON.stringify(dbHistory).length + fetchedVaultContext.length;
        }
        // If still too large, slice activeFileContext from the end
        if (totalContextSize > 600000) {
           const maxFileLength = Math.max(0, 600000 - JSON.stringify(dbHistory).length - 500);
-          extractedText = extractedText.substring(0, maxFileLength);
-          if (activeCourseCode) {
-             activeFileContext = `\nCourse Material for ${activeCourseCode}:\n${extractedText}\n[Note: Content was truncated due to length]`;
-          } else if (activeFileId) {
-             activeFileContext = `\nActive Document Context (Prioritize this if the user asks about the 'current' file):\nTitle: ${fileName}\nExtracted Text: ${extractedText || 'No text extracted'}\n[Note: Content was truncated due to length]\n`;
-          }
+          fetchedVaultContext = fetchedVaultContext.substring(0, maxFileLength) + '\n[Note: Content was truncated due to length]';
        }
     }
+
+    const finalSystemInstruction = fetchedVaultContext 
+      ? `${systemInstruction}\n\n[CRITICAL VAULT CONTEXT FOR THIS SESSION]:\n${fetchedVaultContext}` 
+      : systemInstruction;
 
     const isGenericQuery = /^(summarize|explain this|what is this course about\??|explain|help|summary|what is this\??)$/i.test(query.trim());
     const hasHistory = dbHistory.length > 0 || (messages && messages.length > 0);
@@ -216,7 +177,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
 
     const modelConfig: any = { 
       model: "gemini-2.5-flash",
-      systemInstruction: systemInstruction,
+      systemInstruction: finalSystemInstruction,
       tools: [{ functionDeclarations: [addCourseTool, deleteCourseTool, addToTimetableTool] }]
     };
     const chatModel = genAI.getGenerativeModel(modelConfig);
@@ -246,7 +207,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
     
     User Profile Context (Name, School, Department, Courses):
     ${JSON.stringify(userProfile)}
-    ${activeFileContext}
+    
     Vault Document Context:
     ${context ? context : "No specific file context provided."}
     
