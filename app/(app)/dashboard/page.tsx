@@ -12,9 +12,9 @@ export default function DashboardPage() {
   const pathname = usePathname();
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [activeDocumentContext, setActiveDocumentContext] = useState<string | null>(null);
+  const [isLoadingVault, setIsLoadingVault] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [chatList, setChatList] = useState<Array<{ id: string, title: string, updatedAt: any }>>([]);
+
 
   // Console state
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai', content: string, feedback?: 'up' | 'down', type?: string }>>([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
@@ -72,30 +72,24 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!context?.uid) {
-      setChatList([]);
-      setCurrentChatId(null);
       setVaultFiles([]);
+      setIsLoadingVault(false);
       return;
     }
-    const fetchVaultAndChats = async () => {
+    const fetchVault = async () => {
+      setIsLoadingVault(true);
       try {
-        const vq = query(collection(db, 'vault_files'), where('userId', '==', context.uid), where('status', '==', 'analyzed'));
+        const vq = query(collection(db, 'vault_files'), where('userId', '==', context.uid));
         const vaultSnap = await getDocs(vq);
         const vFiles = vaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         setVaultFiles(vFiles);
-      } catch (e) { console.error(e) }
-
-      try {
-        const q = query(collection(db, 'chats'), where('userId', '==', context.uid));
-        const chatSnap = await getDocs(q);
-        const chats = chatSnap.docs.map(d => ({ id: d.id, title: d.data().title, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
-        chats.sort((a, b) => b.updatedAt - a.updatedAt);
-        setChatList(chats);
-      } catch (error) {
-        console.error("Error fetching chats:", error);
+      } catch (e) { 
+        console.error(e) 
+      } finally {
+        setIsLoadingVault(false);
       }
     };
-    fetchVaultAndChats();
+    fetchVault();
   }, [context?.uid]);
 
   const processFiles = (files: File[]) => {
@@ -279,23 +273,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLoadChat = async (chatId: string) => {
-    setCurrentChatId(chatId);
-    setIsConsoleOpen(true);
-    try {
-      const chatDoc = await getDoc(doc(db, 'chats', chatId));
-      if (chatDoc.exists()) {
-        const data = chatDoc.data();
-        if (data.messages && data.messages.length > 0) {
-          setMessages(data.messages);
-        } else {
-          setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load chat", error);
-    }
-  };
 
   // --- NEW: Console Query Logic ---
   const submitQuery = async (userMessage: string, historyPrefix?: Array<{ role: 'user' | 'ai', content: string, feedback?: 'up' | 'down' }>) => {
@@ -330,7 +307,7 @@ export default function DashboardPage() {
         body: JSON.stringify({
           messages: updatedMessages.filter(m => (m as any).type !== 'action_required').slice(-10),
           activeFileId: selectedFileIds.length > 0 ? selectedFileIds[0] : null,
-          sessionId: currentChatId,
+          sessionId: "command-center-session",
           userProfile: userProfilePayload
         })
       });
@@ -369,43 +346,7 @@ export default function DashboardPage() {
         return;
       }
 
-      // Persist to Firestore
-      if (currentChatId) {
-        const chatRef = doc(db, 'chats', currentChatId);
-        await updateDoc(chatRef, {
-          messages: finalMessages,
-          updatedAt: serverTimestamp()
-        });
-        setChatList(prev => prev.map(c => c.id === currentChatId ? { ...c, updatedAt: Date.now() } : c).sort((a, b) => b.updatedAt - a.updatedAt));
-      } else {
-        let title = userMessage.split(' ').slice(0, 4).join(' ') + '...';
-
-        const newChatDoc = await addDoc(collection(db, 'chats'), {
-          userId: userData.uid,
-          title: title,
-          messages: finalMessages,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-
-        setCurrentChatId(newChatDoc.id);
-        setChatList(prev => [{ id: newChatDoc.id, title, updatedAt: Date.now() }, ...prev]);
-
-        // Generate title asynchronously
-        fetch('/api/engine/title', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: userMessage })
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.title) {
-              updateDoc(doc(db, 'chats', newChatDoc.id), { title: data.title });
-              setChatList(prev => prev.map(c => c.id === newChatDoc.id ? { ...c, title: data.title } : c));
-            }
-          })
-          .catch(e => console.error("Async title generation failed", e));
-      }
+      // Chat history is now scoped strictly to the active document and not persisted globally.
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', content: "Error: Could not reach the brain." }]);
     } finally {
@@ -433,14 +374,6 @@ export default function DashboardPage() {
     const newMessages = [...messages];
     newMessages[index] = { ...newMessages[index], feedback: type };
     setMessages(newMessages);
-
-    if (currentChatId) {
-      try {
-        await updateDoc(doc(db, 'chats', currentChatId), {
-          messages: newMessages
-        });
-      } catch (e) { console.error("Failed to save feedback", e); }
-    }
   };
 
   const handleQueryConsole = async (e: React.FormEvent) => {
@@ -503,35 +436,7 @@ export default function DashboardPage() {
             <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Active Engines</a>
             <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Settings</a>
 
-            <div style={{ marginTop: '1.5rem', borderTop: '1px solid #27272A', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden', flex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#71717A', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recent Chats</span>
-                <button
-                  onClick={() => {
-                    setCurrentChatId(null);
-                    setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
-                    setIsConsoleOpen(true);
-                  }}
-                  style={{ background: 'none', border: 'none', color: '#EA580C', cursor: 'pointer', fontSize: '1.25rem', lineHeight: '1' }}
-                  title="New Chat"
-                >
-                  +
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, paddingRight: '0.5rem' }} className="file-list-container">
-                {chatList.map(chat => (
-                  <button
-                    key={chat.id}
-                    onClick={() => handleLoadChat(chat.id)}
-                    style={{ background: currentChatId === chat.id ? '#18181B' : 'none', border: 'none', color: currentChatId === chat.id ? 'white' : '#A1A1AA', textAlign: 'left', padding: '0.5rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', transition: 'all 0.2s' }}
-                  >
-                    {chat.title}
-                  </button>
-                ))}
-                {chatList.length === 0 && <span style={{ color: '#71717A', fontSize: '0.8rem' }}>No recent chats.</span>}
-              </div>
-            </div>
-          </nav>
+            </nav>
           <div style={{ borderTop: '1px solid #27272A', paddingTop: '1.5rem', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
               <span style={{ color: 'white', fontWeight: 'bold', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userData.name}</span>
@@ -581,19 +486,28 @@ export default function DashboardPage() {
 
                   <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Select from Vault</h3>
-                    <div className="file-list-container" style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {vaultFiles.map(file => (
-                        <button
-                          key={file.id}
-                          onClick={() => {
-                             setActiveDocumentContext(file.extractedText || "Mock extracted text from vault file: " + file.fileName);
-                          }}
-                          style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                        >
-                          📄 {file.fileName}
-                        </button>
-                      ))}
-                      {vaultFiles.length === 0 && <span style={{ color: '#71717A', fontSize: '0.9rem' }}>No analyzed files in vault yet.</span>}
+                                        <div className="file-list-container" style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {isLoadingVault ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+                          <div style={{ display: 'inline-block', width: '24px', height: '24px', border: '3px solid #EA580C', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                        </div>
+                      ) : vaultFiles.length > 0 ? (
+                        vaultFiles.map(file => (
+                          <button
+                            key={file.id}
+                            onClick={() => {
+                               setActiveDocumentContext(file.extractedText || "Mock extracted text from vault file: " + file.fileName);
+                            }}
+                            style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'border-color 0.2s' }}
+                            onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'}
+                            onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}
+                          >
+                            📄 {file.fileName || file.name || "Untitled Document"}
+                          </button>
+                        ))
+                      ) : (
+                        <span style={{ color: '#71717A', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>No files found in Vault. Upload a new document to the left to get started.</span>
+                      )}
                     </div>
                   </div>
                 </div>
