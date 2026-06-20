@@ -495,7 +495,7 @@ export default function DashboardPage() {
           </div>
         </aside>
 
-                <main className="main-content" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', overflowX: 'hidden' }}>
+                <main className="main-content max-w-[100vw]" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', overflowX: 'hidden' }}>
           <div className="mobile-header">
             <button className="menu-btn" onClick={() => setIsSidebarOpen(true)}>☰</button>
           </div>
@@ -601,12 +601,12 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-3 w-full gap-6 h-[calc(100vh-200px)]">
+              <div className="grid grid-cols-1 lg:grid-cols-12 w-full gap-6 h-auto lg:h-[calc(100vh-200px)]">
                 
 
 
                 {/* The Tutor */}
-                <div className="w-full lg:col-span-2 flex flex-col h-full bg-[#111111] rounded-xl border border-[#27272A] overflow-hidden">
+                <div className="w-full lg:col-span-7 flex flex-col h-[60vh] lg:h-full bg-[#0a0a0a] border border-gray-800 rounded-xl overflow-hidden relative">
                   <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#09090B' }}>
                     <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ color: '#EA580C' }}>&gt;_</span> console
@@ -647,8 +647,8 @@ export default function DashboardPage() {
                     )}
                   </div>
                   
-                  <div style={{ padding: '1rem', borderTop: '1px solid #27272A', backgroundColor: '#09090B' }}>
-                    <form style={{ display: 'flex', gap: '0.5rem' }} onSubmit={(e) => {
+                  <div className="w-full p-3 bg-[#0a0a0a] border-t border-gray-800 shrink-0">
+                    <form className="flex items-center gap-2 w-full" onSubmit={(e) => {
                        e.preventDefault();
                        if (!consoleInput.trim()) return;
                        handleQueryConsole(e);
@@ -658,50 +658,48 @@ export default function DashboardPage() {
                         onChange={(e) => setConsoleInput(e.target.value)}
                         type="text"
                         placeholder="Ask a question about your sources..."
-                        style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.95rem', outline: 'none' }}
+                        className="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500"
                       />
-                      <button type="submit" disabled={isQuerying} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0 1rem', borderRadius: '0.5rem', cursor: isQuerying ? 'not-allowed' : 'pointer', fontWeight: 'bold', opacity: isQuerying ? 0.5 : 1 }}>→</button>
+                      <button type="submit" disabled={isQuerying} className="shrink-0 bg-orange-600 hover:bg-orange-500 text-white rounded-lg p-3 px-4 flex items-center justify-center font-bold disabled:opacity-50 disabled:cursor-not-allowed">
+                        →
+                      </button>
                     </form>
                   </div>
                 </div>
 
                 {/* The Studio */}
-                <div className="w-full lg:col-span-1 flex flex-col h-full overflow-y-auto">
-                  <div className="w-full bg-[#111111] rounded-xl border border-[#27272A] p-4 md:p-6 overflow-hidden box-border flex-1 flex flex-col">
-                    <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      The Studio
-                    </h3>
-                    
-                    <div className="grid grid-cols-2 gap-3 md:gap-4 flex-1 overflow-y-auto w-full">
-                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
-                        <span style={{ fontSize: '1.5rem' }}>🎧</span>
-                        <span style={{ fontWeight: 'bold' }}>Audio Overview</span>
-                      </button>
-                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
-                        <span style={{ fontSize: '1.5rem' }}>🎥</span>
-                        <span style={{ fontWeight: 'bold' }}>Video Overview</span>
-                      </button>
-                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
-                        <span style={{ fontSize: '1.5rem' }}>📇</span>
-                        <span style={{ fontWeight: 'bold' }}>Flashcards</span>
-                      </button>
-                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
-                        <span style={{ fontSize: '1.5rem' }}>🧠</span>
-                        <span style={{ fontWeight: 'bold' }}>Quiz</span>
-                      </button>
-                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
-                        <span style={{ fontSize: '1.5rem' }}>📊</span>
-                        <span style={{ fontWeight: 'bold' }}>Slide Deck</span>
-                      </button>
-                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
-                        <span style={{ fontSize: '1.5rem' }}>🗺️</span>
-                        <span style={{ fontWeight: 'bold' }}>Infographic</span>
-                      </button>
-                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
-                        <span style={{ fontSize: '1.5rem' }}>📝</span>
-                        <span style={{ fontWeight: 'bold' }}>Reports</span>
-                      </button>
-                    </div>
+                <div className="w-full lg:col-span-5 flex flex-col h-auto lg:h-full bg-[#0a0a0a] border border-gray-800 rounded-xl p-5 overflow-y-auto">
+                  <h2 className="text-xl font-bold mb-4 text-white">The Studio</h2>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
+                      <span className="text-xl group-hover:scale-110 transition-transform">🎧</span>
+                      <span className="text-sm font-medium text-gray-200">Audio Overview</span>
+                    </button>
+                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
+                      <span className="text-xl group-hover:scale-110 transition-transform">🎥</span>
+                      <span className="text-sm font-medium text-gray-200">Video Overview</span>
+                    </button>
+                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
+                      <span className="text-xl group-hover:scale-110 transition-transform">📇</span>
+                      <span className="text-sm font-medium text-gray-200">Flashcards</span>
+                    </button>
+                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
+                      <span className="text-xl group-hover:scale-110 transition-transform">🧠</span>
+                      <span className="text-sm font-medium text-gray-200">Mock Exam</span>
+                    </button>
+                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
+                      <span className="text-xl group-hover:scale-110 transition-transform">📊</span>
+                      <span className="text-sm font-medium text-gray-200">Slide Deck</span>
+                    </button>
+                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
+                      <span className="text-xl group-hover:scale-110 transition-transform">🗺️</span>
+                      <span className="text-sm font-medium text-gray-200">Infographic</span>
+                    </button>
+                    <button className="w-full flex items-center gap-3 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800 rounded-xl transition-all text-left group">
+                      <span className="text-xl group-hover:scale-110 transition-transform">📝</span>
+                      <span className="text-sm font-medium text-gray-200">Reports</span>
+                    </button>
                   </div>
                 </div>
 
