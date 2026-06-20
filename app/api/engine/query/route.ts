@@ -67,12 +67,12 @@ You are elite at studying, research, and academia. If asked to generate images, 
        }
     }
 
-    if (activeDocumentId) {
+    if (activeFileId) {
        activeFileContext = `\nActive Document Context (Prioritize this if the user asks about the 'current' file):\nTitle: ${fileName}\nExtracted Text: ${extractedText || 'No text extracted'}\n`;
     }
 
     const isGenericQuery = /^(summarize|explain this|what is this course about\??|explain|help|summary|what is this\??)$/i.test(query.trim());
-    const hasHistory = dbHistory.length > 0 || (chatHistory && chatHistory.length > 0);
+    const hasHistory = dbHistory.length > 0 || (messages && messages.length > 0);
 
     let context = "";
 
