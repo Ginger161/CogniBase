@@ -16,7 +16,7 @@ export default function DashboardPage() {
   const [chatList, setChatList] = useState<Array<{id: string, title: string, updatedAt: any}>>([]);
 
   // Console state
-  const [messages, setMessages] = useState<Array<{role: 'user' | 'ai', content: string, feedback?: 'up'|'down'}>>([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
+  const [messages, setMessages] = useState<Array<{role: 'user' | 'ai', content: string, feedback?: 'up'|'down', type?: string}>>([{role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.'}]);
   const [consoleInput, setConsoleInput] = useState('');
   const [isQuerying, setIsQuerying] = useState(false);
 
