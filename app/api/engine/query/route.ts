@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { GoogleGenerativeAI, FunctionDeclaration, SchemaType } from "@google/generative-ai";
 import { db } from "../../../../lib/firebase";
-import { getDoc, doc } from "firebase/firestore";
+import { getDoc, doc, collection, query, where, getDocs } from "firebase/firestore";
 import { checkClash } from "../../../../lib/utils/timetable";
 const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY as string });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
@@ -39,8 +39,19 @@ You are elite at studying, research, and academia. If asked to generate images, 
     let dbHistory = messages.slice(0, -1);
     const userId = userProfile.userId || (messages[0]?.userId) || "unknown"; // Or fetch from context if passed
 
-    // 2. Fetch original file metadata if activeFileId exists
+    // 2. Fetch original file metadata if activeFileId exists, OR Auto-Fetch based on course code
     let activeFileContext = "";
+    
+    // Auto-Fetch Trigger: Detect active course code from user's profile
+    let activeCourseCode = null;
+    const userCourses = userProfile.courses || [];
+    for (const c of userCourses) {
+      if (query.toUpperCase().includes(c.courseCode.toUpperCase())) {
+         activeCourseCode = c.courseCode.toUpperCase();
+         break;
+      }
+    }
+
     let extractedText = "";
     let fileName = "";
     if (activeFileId) {
@@ -50,6 +61,46 @@ You are elite at studying, research, and academia. If asked to generate images, 
           fileName = fileData.name;
           extractedText = fileData.extractedText || '';
        }
+    }
+
+    // Wait to calculate totalContextSize until all files are fetched.
+
+    if (activeCourseCode) {
+       // Two-Pass Database Query
+       const vq = query(collection(db, 'vault_files'), where('userId', '==', userId));
+       const vaultSnap = await getDocs(vq);
+       
+       // PASS 1: Extract lightweight metadata
+       const metadataList = vaultSnap.docs.map(d => {
+          const data = d.data();
+          return { id: d.id, name: data.name || data.fileName || '', hasText: !!data.extractedText };
+       });
+
+       // Filtering
+       const matchingIds = metadataList
+          .filter(m => m.name.toUpperCase().includes(activeCourseCode!.toUpperCase()) || m.hasText) // If we can't search inside text yet, we rely on filename or just fetch if we must. Actually, filtering by filename:
+          .filter(m => m.name.toUpperCase().includes(activeCourseCode!.toUpperCase()))
+          .map(m => m.id);
+
+       let combinedCourseText = "";
+       
+       if (matchingIds.length > 0) {
+          // PASS 2: Fetch full payload for specific IDs
+          for (const id of matchingIds) {
+             const fileDoc = await getDoc(doc(db, 'vault_files', id));
+             if (fileDoc.exists()) {
+                const data = fileDoc.data();
+                combinedCourseText += `\n--- Document: ${data.name || data.fileName} ---\n${data.extractedText || 'No text extracted'}\n`;
+             }
+          }
+          activeFileContext = `\nCourse Material for ${activeCourseCode}:\n${combinedCourseText}\n`;
+          extractedText = combinedCourseText; // For token truncation calculation
+       } else {
+          // Fallback Handling
+          activeFileContext = `\nSYSTEM ALERT: The user asked about ${activeCourseCode}, but no uploaded materials were found for this course in the vault. You MUST inform the user that you cannot answer because they haven't uploaded notes for ${activeCourseCode} yet, and politely ask them to upload the relevant materials.\n`;
+       }
+    } else if (activeFileId) {
+       activeFileContext = `\nActive Document Context (Prioritize this if the user asks about the 'current' file):\nTitle: ${fileName}\nExtracted Text: ${extractedText || 'No text extracted'}\n`;
     }
 
     // 3. Token Exhaustion Mitigation (600,000 threshold)
@@ -64,11 +115,12 @@ You are elite at studying, research, and academia. If asked to generate images, 
        if (totalContextSize > 600000) {
           const maxFileLength = Math.max(0, 600000 - JSON.stringify(dbHistory).length - 500);
           extractedText = extractedText.substring(0, maxFileLength);
+          if (activeCourseCode) {
+             activeFileContext = `\nCourse Material for ${activeCourseCode}:\n${extractedText}\n[Note: Content was truncated due to length]`;
+          } else if (activeFileId) {
+             activeFileContext = `\nActive Document Context (Prioritize this if the user asks about the 'current' file):\nTitle: ${fileName}\nExtracted Text: ${extractedText || 'No text extracted'}\n[Note: Content was truncated due to length]\n`;
+          }
        }
-    }
-
-    if (activeFileId) {
-       activeFileContext = `\nActive Document Context (Prioritize this if the user asks about the 'current' file):\nTitle: ${fileName}\nExtracted Text: ${extractedText || 'No text extracted'}\n`;
     }
 
     const isGenericQuery = /^(summarize|explain this|what is this course about\??|explain|help|summary|what is this\??)$/i.test(query.trim());

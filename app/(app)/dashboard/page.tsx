@@ -19,6 +19,22 @@ export default function DashboardPage() {
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai', content: string, feedback?: 'up' | 'down', type?: string }>>([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
   const [consoleInput, setConsoleInput] = useState('');
   const [isQuerying, setIsQuerying] = useState(false);
+  const [thinkingStatus, setThinkingStatus] = useState('Locating course notes in Vault...');
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isQuerying) {
+      setThinkingStatus('Locating course notes in Vault...');
+      interval = setInterval(() => {
+        setThinkingStatus(prev => 
+          prev === 'Locating course notes in Vault...' 
+          ? 'Parsing context & removing academic jargon...' 
+          : 'Locating course notes in Vault...'
+        );
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [isQuerying]);
 
   const [vaultFiles, setVaultFiles] = useState<any[]>([]);
   const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
@@ -789,7 +805,7 @@ export default function DashboardPage() {
                 <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>&gt;_console</span>
                 <div style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', color: '#E4E4E7', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <div style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid #EA580C', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                  Processing...
+                  {thinkingStatus}
                 </div>
               </div>
             )}
