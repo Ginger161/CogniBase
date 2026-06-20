@@ -493,7 +493,7 @@ export default function DashboardPage() {
           </div>
         </aside>
 
-                <main className="main-content" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+                <main className="main-content" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', overflowX: 'hidden' }}>
           <div className="mobile-header">
             <button className="menu-btn" onClick={() => setIsSidebarOpen(true)}>☰</button>
           </div>
@@ -516,12 +516,12 @@ export default function DashboardPage() {
                         onBlur={handleRenameDocument}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleRenameDocument(); }}
                         autoFocus
-                        style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em', fontWeight: 'bold', backgroundColor: 'transparent', color: 'white', border: '1px solid #EA580C', outline: 'none', borderRadius: '0.5rem', padding: '0 0.5rem', width: '100%', maxWidth: '600px' }}
+                        className="text-2xl md:text-4xl font-bold break-words w-full max-w-[600px]" style={{ margin: 0, letterSpacing: '-0.05em', backgroundColor: 'transparent', color: 'white', border: '1px solid #EA580C', outline: 'none', borderRadius: '0.5rem', padding: '0 0.5rem' }}
                       />
                     </div>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }} className="group">
-                      <h1 style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em', display: 'flex', alignItems: 'center' }}>
+                      <h1 className="text-2xl md:text-4xl font-bold break-words flex items-center" style={{ margin: 0, letterSpacing: '-0.05em' }}>
                         {activeWorkspaceName}
                         <button
                           onClick={() => setIsEditingTitle(true)}
@@ -535,7 +535,7 @@ export default function DashboardPage() {
                       </h1>
                     </div>
                   )}
-                  <p style={{ color: '#A1A1AA', margin: '0.5rem 0 0 0', fontSize: '1rem' }}>Active Workspace loaded. Chat with your tutor or generate study tools.</p>
+                  <p className="text-sm md:text-base text-[#A1A1AA] mt-2">Active Workspace loaded. Chat with your tutor or generate study tools.</p>
                 </>
               )}
             </div>
@@ -589,10 +589,10 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: '1.5rem', height: '100%', flexDirection: 'row' }}>
+              <div className="w-full flex flex-col lg:flex-row gap-6 md:gap-8 h-full">
                 
                 {/* Source Sidebar */}
-                <div style={{ width: '250px', backgroundColor: '#111111', borderRadius: '1rem', border: '1px solid #27272A', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="w-full lg:w-[250px] bg-[#111111] rounded-xl border border-[#27272A] p-4 flex flex-col gap-4 flex-shrink-0">
                   <h3 style={{ margin: 0, fontSize: '1rem', color: '#EA580C', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sources</h3>
                   <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {activeSources.map(source => (
@@ -606,7 +606,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* The Tutor */}
-                <div style={{ flex: 1, backgroundColor: '#111111', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div className="w-full lg:flex-1 bg-[#111111] rounded-xl border border-[#27272A] flex flex-col overflow-hidden min-h-[500px]">
                   <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#09090B' }}>
                     <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ color: '#EA580C' }}>&gt;_</span> console
@@ -666,38 +666,38 @@ export default function DashboardPage() {
                 </div>
 
                 {/* The Studio */}
-                <div style={{ width: '350px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <div style={{ backgroundColor: '#111111', borderRadius: '1rem', border: '1px solid #27272A', padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div className="w-full lg:w-[350px] flex flex-col gap-6 overflow-hidden box-border flex-shrink-0">
+                  <div className="w-full bg-[#111111] rounded-xl border border-[#27272A] p-4 md:p-6 overflow-hidden box-border flex-1 flex flex-col">
                     <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       The Studio
                     </h3>
                     
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, overflowY: 'auto' }}>
-                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s', outline: 'none' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                    <div className="grid grid-cols-2 gap-3 md:gap-4 flex-1 overflow-y-auto w-full">
+                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
                         <span style={{ fontSize: '1.5rem' }}>🎧</span>
                         <span style={{ fontWeight: 'bold' }}>Audio Overview</span>
                       </button>
-                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s', outline: 'none' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
                         <span style={{ fontSize: '1.5rem' }}>🎥</span>
                         <span style={{ fontWeight: 'bold' }}>Video Overview</span>
                       </button>
-                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s', outline: 'none' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
                         <span style={{ fontSize: '1.5rem' }}>📇</span>
                         <span style={{ fontWeight: 'bold' }}>Flashcards</span>
                       </button>
-                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s', outline: 'none' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
                         <span style={{ fontSize: '1.5rem' }}>🧠</span>
                         <span style={{ fontWeight: 'bold' }}>Quiz</span>
                       </button>
-                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s', outline: 'none' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
                         <span style={{ fontSize: '1.5rem' }}>📊</span>
                         <span style={{ fontWeight: 'bold' }}>Slide Deck</span>
                       </button>
-                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s', outline: 'none' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
                         <span style={{ fontSize: '1.5rem' }}>🗺️</span>
                         <span style={{ fontWeight: 'bold' }}>Infographic</span>
                       </button>
-                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s', outline: 'none' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                      <button className="w-full flex items-center gap-2 bg-[#18181B] text-white border border-[#27272A] p-3 md:p-4 rounded-lg cursor-pointer text-left transition-all duration-200 outline-none hover:border-[#EA580C]" >
                         <span style={{ fontSize: '1.5rem' }}>📝</span>
                         <span style={{ fontWeight: 'bold' }}>Reports</span>
                       </button>
@@ -724,7 +724,7 @@ export default function DashboardPage() {
                  </div>
               ) : sourceModalView === 'options' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
-                  <label style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                  <label style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} >
                     <span style={{ fontSize: '1.5rem' }}>📄</span>
                     <span style={{ fontWeight: 'bold' }}>PDF / Doc</span>
                     <input type="file" accept=".pdf,.doc,.docx,.txt" style={{ display: 'none' }} onChange={(e) => {
@@ -732,7 +732,7 @@ export default function DashboardPage() {
                       if(file) handleExtractSource('pdf', file.name);
                     }} />
                   </label>
-                  <label style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                  <label style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} >
                     <span style={{ fontSize: '1.5rem' }}>📸</span>
                     <span style={{ fontWeight: 'bold' }}>Image / Camera</span>
                     <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => {
@@ -740,15 +740,15 @@ export default function DashboardPage() {
                       if(file) handleExtractSource('image', file.name || 'Captured Image');
                     }} />
                   </label>
-                  <button onClick={() => setSourceModalView('website')} style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                  <button onClick={() => setSourceModalView('website')} style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} >
                     <span style={{ fontSize: '1.5rem' }}>🌐</span>
                     <span style={{ fontWeight: 'bold' }}>Website</span>
                   </button>
-                  <button onClick={() => setSourceModalView('youtube')} style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                  <button onClick={() => setSourceModalView('youtube')} style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} >
                     <span style={{ fontSize: '1.5rem' }}>▶️</span>
                     <span style={{ fontWeight: 'bold' }}>YouTube</span>
                   </button>
-                  <button onClick={() => setSourceModalView('text')} style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'} onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}>
+                  <button onClick={() => setSourceModalView('text')} style={{ backgroundColor: '#18181B', border: '1px solid #27272A', padding: '1rem', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', color: 'white', transition: 'border-color 0.2s' }} >
                     <span style={{ fontSize: '1.5rem' }}>📋</span>
                     <span style={{ fontWeight: 'bold' }}>Copied Text</span>
                   </button>
