@@ -9,7 +9,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 export async function POST(req: Request) {
   try {
-    const { messages, activeFileId, sessionId, userProfile } = await req.json();
+    const { messages, activeFileId, sessionId, userProfile, activeDocumentContext } = await req.json();
 
     if (!messages || messages.length === 0 || !userProfile) {
       return NextResponse.json({ error: "Missing messages or user context." }, { status: 400 });
@@ -40,58 +40,6 @@ You have access to the user's cloud Vault database. When they mention an uploade
     let dbHistory = messages.slice(0, -1);
     const userId = userProfile.userId || (messages[0]?.userId) || "unknown"; // Or fetch from context if passed
 
-    // 2. Fetch original file metadata if activeFileId exists, OR Auto-Fetch based on course code
-    let activeFileContext = "";
-    
-    // Auto-Fetch Trigger: Detect active course code from user's profile
-    let activeCourseCode = null;
-    const userCourses = userProfile.courses || [];
-    for (const c of userCourses) {
-      if (c.courseCode && userQueryText.toUpperCase().includes(c.courseCode.toUpperCase())) {
-         activeCourseCode = c.courseCode.toUpperCase();
-         break;
-      }
-    }
-
-    // Vault Interceptor Trigger: Detect filename mentions
-    let activeFileName = null;
-    const filenameMatch = userQueryText.match(/[\w\s-]+\.(pdf|docx|txt|pptx|xlsx|csv)/i);
-    if (filenameMatch) {
-       activeFileName = filenameMatch[0].trim();
-    } else {
-       const docMatch = userQueryText.match(/document:?\s+([^\s,.]+)/i);
-       if (docMatch && docMatch[1] && docMatch[1].length > 3) {
-          activeFileName = docMatch[1].replace(/['"]/g, '').trim();
-       }
-    }
-
-    let fileUrls: string[] = [];
-
-    try {
-      if (activeCourseCode || activeFileName || activeFileId) {
-         const vaultRef = collection(db, 'vault_files');
-         const q = query(vaultRef, where('userId', '==', userId));
-         const querySnapshot = await getDocs(q);
-
-         querySnapshot.forEach((docSnap) => {
-            const data = docSnap.data() as { name?: string; fileName?: string; downloadURL?: string };
-            const nameUpper = (data.name || data.fileName || '').toUpperCase();
-            
-            let isMatch = false;
-            if (activeCourseCode && nameUpper.includes(activeCourseCode)) isMatch = true;
-            if (activeFileName && nameUpper.includes(activeFileName.toUpperCase())) isMatch = true;
-            if (activeFileId && docSnap.id === activeFileId) isMatch = true;
-
-            if (isMatch && data.downloadURL) {
-               fileUrls.push(data.downloadURL);
-            }
-         });
-      }
-
-
-    } catch (error) {
-      console.error("Vault Interceptor Database Fetch Error:", error);
-    }
 
     // 3. Token Exhaustion Mitigation (600,000 threshold for history)
     let totalContextSize = JSON.stringify(dbHistory).length;
@@ -203,7 +151,10 @@ You have access to the user's cloud Vault database. When they mention an uploade
     User Profile Context (Name, School, Department, Courses):
     ${JSON.stringify(userProfile)}
     
-    Vault Document Context:
+    Active Document Context (Prioritize this if provided):
+    ${activeDocumentContext || "No active document context provided."}
+    
+    Vault Document Context (Pinecone):
     ${context ? context : "No specific file context provided."}
     
     Question: ${userQueryText}`;

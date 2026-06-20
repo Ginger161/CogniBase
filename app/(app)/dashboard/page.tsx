@@ -11,6 +11,7 @@ import { useUserContext } from '../../../lib/hooks/useUserContext';
 export default function DashboardPage() {
   const pathname = usePathname();
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
+  const [activeDocumentContext, setActiveDocumentContext] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [chatList, setChatList] = useState<Array<{ id: string, title: string, updatedAt: any }>>([]);
@@ -543,286 +544,154 @@ export default function DashboardPage() {
           </div>
         </aside>
 
-        <main className="main-content">
+                <main className="main-content" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
           <div className="mobile-header">
             <button className="menu-btn" onClick={() => setIsSidebarOpen(true)}>☰</button>
-            <button onClick={() => setIsConsoleOpen(true)} style={{ backgroundColor: '#18181B', color: '#EA580C', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              &gt;_ Console
-            </button>
           </div>
 
-          <header style={{ borderBottom: '1px solid #27272A', paddingBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+          <header style={{ borderBottom: '1px solid #27272A', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
               <h1 style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em' }}>Command Center</h1>
               <p style={{ color: '#A1A1AA', margin: '0.5rem 0 0 0', fontSize: '1rem' }}>Initialize and monitor your study engines.</p>
             </div>
-            <button onClick={() => setIsConsoleOpen(!isConsoleOpen)} className="desktop-toggle-btn" style={{ color: isConsoleOpen ? '#A1A1AA' : '#EA580C' }}>
-              <span style={{ color: '#EA580C' }}>&gt;_</span> {isConsoleOpen ? 'Close Console' : 'Open Console'}
-            </button>
           </header>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-
-            <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>1. Add Course Materials</h3>
-              <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0 }}>Upload Educational Management lecture slides or PDFs to build your knowledge base.</p>
-
-              <input type="file" multiple accept=".pdf,.pptx,.docx,.txt" ref={fileInputRef} onChange={handleFileInput} style={{ display: 'none' }} />
-
-              <div
-                onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
-                style={{ backgroundColor: isDragging ? '#27272A' : '#18181B', padding: '1.5rem', borderRadius: '0.5rem', border: isDragging ? '1px dashed #EA580C' : '1px dashed #3F3F46', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginTop: 'auto', opacity: isUploading ? 0.5 : 1, pointerEvents: isUploading ? 'none' : 'auto' }}
-              >
-                <span className="mobile-text" style={{ color: isDragging ? '#EA580C' : 'white', fontWeight: '500' }}>+ Tap to Upload Files</span>
-                <span className="desktop-text" style={{ color: isDragging ? '#EA580C' : 'white', fontWeight: '500' }}>{isDragging ? 'Drop files now...' : '+ Click or Drag Files Here'}</span>
-                <span style={{ color: '#71717A', fontSize: '0.75rem' }}>PDF, PPTX, DOCX, TXT (Max 20)</span>
-              </div>
-
-              {(pendingFiles.length > 0 || uploadStatus) && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  <div className="file-list-container" style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingRight: '0.25rem' }}>
-                    {pendingFiles.map((file, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#18181B', padding: '0.5rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', border: '1px solid #27272A' }}>
-                        <span style={{ color: '#D4D4D8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }}>{file.name}</span>
-                        <span style={{ color: '#71717A' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {isUploading && (
-                    <div style={{ width: '100%', backgroundColor: '#27272A', borderRadius: '0.25rem', height: '6px', overflow: 'hidden', marginTop: '0.25rem' }}>
-                      <div style={{ width: `${uploadProgress}%`, backgroundColor: '#EA580C', height: '100%', transition: 'width 0.2s ease' }}></div>
-                    </div>
-                  )}
-
-                  {uploadStatus ? (
-                    <div style={{ backgroundColor: uploadStatus.includes('Error') || uploadStatus.includes('Warning') || uploadStatus.includes('Limit') ? '#7F1D1D' : '#27272A', color: uploadStatus.includes('Error') || uploadStatus.includes('Warning') || uploadStatus.includes('Limit') ? '#FECACA' : '#A1A1AA', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'center', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                      {uploadStatus}
-                    </div>
-                  ) : null}
-
-                  {pendingFiles.length > 0 && !isUploading && (
-                    <button
-                      onClick={handleUploadToVault} disabled={isUploading}
-                      style={{ backgroundColor: '#EA580C', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginTop: '0.25rem', transition: 'all 0.2s' }}
-                    >
-                      Upload to Vault
-                    </button>
-                  )}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
+            {!activeDocumentContext ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '2rem' }}>
+                <div style={{ textAlign: 'center', maxWidth: '600px' }}>
+                  <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem' }}>Unlock the Command Center</h2>
+                  <p style={{ color: '#A1A1AA', fontSize: '1.1rem', lineHeight: '1.6' }}>Upload a document or select notes from your Vault to unlock the Command Center.</p>
                 </div>
-              )}
-            </div>
 
-            <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>2. Smart Analysis</h3>
-
-              {!isSelectionMode && !isAnalyzing && (
-                <>
-                  <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0, flex: 1 }}>Select unprocessed files from your Vault to extract key concepts and formulas.</p>
-                  {analysisStatus && (
-                    <div style={{ backgroundColor: analysisStatus.includes('Debug Error') ? '#7F1D1D' : '#27272A', color: analysisStatus.includes('Debug Error') ? '#FECACA' : '#A1A1AA', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'center', fontSize: '0.85rem' }}>
-                      {analysisStatus}
-                    </div>
-                  )}
-                  <button
-                    onClick={handleInitiateAnalysis}
-                    style={{ backgroundColor: '#27272A', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #3F3F46', cursor: 'pointer', fontWeight: 'bold', width: '100%', transition: 'all 0.2s' }}
-                  >
-                    Select Files to Analyze
-                  </button>
-                </>
-              )}
-
-              {isSelectionMode && (
-                <>
-                  <p style={{ color: '#EA580C', fontSize: '0.9rem', margin: 0, fontWeight: 'bold' }}>Select files for this session:</p>
-
-                  <div className="file-list-container" style={{ flex: 1, maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingRight: '0.25rem', marginTop: '0.5rem' }}>
-                    {rawFiles.map((file) => (
-                      <label key={file.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#18181B', padding: '0.75rem', borderRadius: '0.5rem', border: selectedFileIds.includes(file.id) ? '1px solid #EA580C' : '1px solid #27272A', cursor: 'pointer', transition: 'all 0.2s' }}>
-                        <input
-                          type="checkbox"
-                          className="custom-checkbox"
-                          checked={selectedFileIds.includes(file.id)}
-                          onChange={() => toggleFileSelection(file.id)}
-                        />
-                        <span style={{ color: selectedFileIds.includes(file.id) ? 'white' : '#A1A1AA', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {file.fileName}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '1rem' }}>
-                    <button onClick={() => setIsSelectionMode(false)} style={{ flex: 1, backgroundColor: 'transparent', color: '#A1A1AA', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #3F3F46', cursor: 'pointer', fontSize: '0.85rem' }}>
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleProcessSelected}
-                      disabled={selectedFileIds.length === 0}
-                      style={{ flex: 2, backgroundColor: selectedFileIds.length === 0 ? '#3F3F46' : '#EA580C', color: selectedFileIds.length === 0 ? '#A1A1AA' : 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: selectedFileIds.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', transition: 'all 0.2s' }}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', width: '100%', maxWidth: '800px' }}>
+                  <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Upload New Document</h3>
+                    <input type="file" accept=".pdf,.pptx,.docx,.txt" ref={fileInputRef} onChange={(e) => {
+                       handleFileInput(e);
+                       setTimeout(() => setActiveDocumentContext("Extracted text from newly uploaded file..."), 1000);
+                    }} style={{ display: 'none' }} />
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{ backgroundColor: '#18181B', padding: '2rem', borderRadius: '0.5rem', border: '1px dashed #3F3F46', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s', marginTop: 'auto' }}
                     >
-                      Ignite Engine ({selectedFileIds.length})
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {isAnalyzing && (
-                <>
-                  <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0, flex: 1 }}>Processing selected files through the AI engine...</p>
-                  <div style={{ backgroundColor: '#27272A', color: '#E4E4E7', padding: '1rem', borderRadius: '0.5rem', textAlign: 'center', fontSize: '0.85rem', border: '1px solid #3F3F46' }}>
-                    <div style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #EA580C', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '0.5rem' }}></div>
-                    <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
-                    <div>{analysisStatus}</div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>3. Create Study Tools</h3>
-              <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0, flex: 1 }}>Convert your processed notes into actionable review formats.</p>
-              <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
-                <button style={{ flex: 1, backgroundColor: '#27272A', color: 'white', padding: '0.5rem', borderRadius: '0.25rem', border: 'none', fontSize: '0.8rem', cursor: 'pointer' }}>Flashcards</button>
-                <button style={{ flex: 1, backgroundColor: '#27272A', color: 'white', padding: '0.5rem', borderRadius: '0.25rem', border: 'none', fontSize: '0.8rem', cursor: 'pointer' }}>Study Guide</button>
-              </div>
-            </div>
-
-          </div>
-        </main>
-
-        <aside className={`console-panel ${isConsoleOpen ? 'open' : ''}`}>
-          <div style={{ padding: '1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ color: '#EA580C', fontWeight: 'bold' }}>&gt;_</span>
-              <span style={{ fontWeight: 'bold', letterSpacing: '0.05em' }}>console</span>
-            </div>
-            <button className="menu-btn lg:hidden" onClick={() => setIsConsoleOpen(false)}>✕</button>
-          </div>
-          <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ color: '#A1A1AA', fontSize: '0.75rem', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px dashed #27272A', paddingBottom: '0.5rem' }}>Secure Session Established</div>
-
-            {messages.map((msg, i) => {
-              const isError = msg.content.startsWith("Error:") || msg.content.includes("Failed to query the AI brain.");
-
-              const lowerMsg = msg.content.toLowerCase();
-              const needsDisambiguation = lowerMsg.includes("which specific") || lowerMsg.includes("which document") || lowerMsg.includes("tell me which");
-
-              return (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: msg.role === 'user' ? '#A1A1AA' : isError ? '#EF4444' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                      {msg.role === 'user' ? userData.name.split(' ')[0] : '>_console'}
-                    </span>
-                    {msg.role === 'user' && (
-                      <button onClick={() => { setEditingMessageIndex(i); setEditInput(msg.content); }} className="text-gray-400 hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none' }} title="Edit">
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  {editingMessageIndex === i ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '90%', alignItems: 'flex-end' }}>
-                      <textarea
-                        value={editInput}
-                        onChange={e => setEditInput(e.target.value)}
-                        style={{ width: '100%', backgroundColor: '#27272A', color: 'white', border: '1px solid #EA580C', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', outline: 'none', resize: 'vertical', minHeight: '80px' }}
-                      />
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => setEditingMessageIndex(null)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
-                        <button onClick={() => handleEditSubmit(i)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>Save & Resubmit</button>
-                      </div>
+                      <span style={{ color: 'white', fontWeight: '500' }}>+ Click or Drag Files Here</span>
                     </div>
-                  ) : (
-                    <div style={{
-                      backgroundColor: msg.role === 'user' ? '#27272A' : isError ? '#450a0a' : '#18181B',
-                      padding: '1rem',
-                      borderRadius: '0.5rem',
-                      border: isError ? '1px solid #7f1d1d' : '1px solid #27272A',
-                      color: isError ? '#fca5a5' : '#E4E4E7',
-                      fontSize: '0.9rem',
-                      lineHeight: '1.6',
-                      maxWidth: '90%',
-                      whiteSpace: 'pre-wrap'
-                    }}>
-                      {msg.content}
-                    </div>
-                  )}
+                  </div>
 
-                  {/* Smart Vault Selector for Disambiguation */}
-                  {msg.role === 'ai' && needsDisambiguation && !isError && i === messages.length - 1 && vaultFiles.length > 0 && (
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem', maxWidth: '90%' }}>
+                  <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Select from Vault</h3>
+                    <div className="file-list-container" style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {vaultFiles.map(file => (
                         <button
                           key={file.id}
-                          disabled={isQuerying}
-                          onClick={() => submitQuery(`Please use the document: ${file.fileName} as the context.`)}
-                          style={{ backgroundColor: '#18181B', color: '#A1A1AA', border: '1px solid #EA580C', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}
+                          onClick={() => {
+                             setActiveDocumentContext(file.extractedText || "Mock extracted text from vault file: " + file.fileName);
+                          }}
+                          style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                         >
                           📄 {file.fileName}
                         </button>
                       ))}
+                      {vaultFiles.length === 0 && <span style={{ color: '#71717A', fontSize: '0.9rem' }}>No analyzed files in vault yet.</span>}
                     </div>
-                  )}
-
-                  {/* AI Action Buttons & Controls */}
-                  {msg.role === 'ai' && !isError && i > 0 && (
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem', alignItems: 'center' }}>
-                      {!needsDisambiguation && (
-                        <>
-                          <button disabled={isQuerying} onClick={() => submitQuery("Based on the response above, please create a set of interactive flashcards for me.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                            ✨ Create Flashcards
-                          </button>
-                          <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                            📝 Summarize Key Terms
-                          </button>
-                          <button disabled={isQuerying} onClick={() => submitQuery("Please generate a quick 3-question multiple-choice quiz based on the information above to test my understanding.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                            🧠 Generate Practice Quiz
-                          </button>
-                        </>
-                      )}
-                      <div style={{ flex: 1 }}></div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button disabled={isQuerying} onClick={() => handleRegenerate(i)} className="text-gray-400 hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', opacity: isQuerying ? 0.5 : 1 }} title="Regenerate">
-                          <RefreshCcw className="w-4 h-4" />
-                        </button>
-                        <button disabled={isQuerying} onClick={() => handleFeedback(i, 'up')} className="hover:text-green-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'up' ? '#22C55E' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1 }} title="Good response">
-                          <ThumbsUp className="w-4 h-4" />
-                        </button>
-                        <button disabled={isQuerying} onClick={() => handleFeedback(i, 'down')} className="hover:text-red-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'down' ? '#EF4444' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1 }} title="Bad response">
-                          <ThumbsDown className="w-4 h-4" />
-                        </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '1.5rem', height: '100%' }}>
+                
+                <div style={{ flex: 1, backgroundColor: '#111111', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#09090B' }}>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ color: '#EA580C' }}>&gt;_</span> The Tutor
+                    </h3>
+                    <button onClick={() => setActiveDocumentContext(null)} style={{ background: 'none', border: '1px solid #3F3F46', color: '#A1A1AA', padding: '0.25rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                      Exit Workspace
+                    </button>
+                  </div>
+                  
+                  <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {messages.map((msg, i) => (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                        <span style={{ color: msg.role === 'user' ? '#A1A1AA' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          {msg.role === 'user' ? userData.name.split(' ')[0] : 'The Tutor'}
+                        </span>
+                        <div style={{
+                          backgroundColor: msg.role === 'user' ? '#27272A' : '#18181B',
+                          padding: '1rem',
+                          borderRadius: '0.5rem',
+                          border: '1px solid #27272A',
+                          color: '#E4E4E7',
+                          fontSize: '0.9rem',
+                          lineHeight: '1.6',
+                          maxWidth: '90%',
+                          whiteSpace: 'pre-wrap'
+                        }}>
+                          {msg.content}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    ))}
+                    {isQuerying && (
+                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
+                         <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>The Tutor</span>
+                         <div style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', color: '#E4E4E7', fontSize: '0.9rem' }}>
+                           Thinking...
+                         </div>
+                       </div>
+                    )}
+                  </div>
+                  
+                  <div style={{ padding: '1rem', borderTop: '1px solid #27272A', backgroundColor: '#09090B' }}>
+                    <form style={{ display: 'flex', gap: '0.5rem' }} onSubmit={(e) => {
+                       e.preventDefault();
+                       if (!consoleInput.trim()) return;
+                       handleQueryConsole(e);
+                    }}>
+                      <input
+                        value={consoleInput}
+                        onChange={(e) => setConsoleInput(e.target.value)}
+                        type="text"
+                        placeholder="Ask a question about the active document..."
+                        style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.95rem', outline: 'none' }}
+                      />
+                      <button type="submit" disabled={isQuerying} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0 1rem', borderRadius: '0.5rem', cursor: isQuerying ? 'not-allowed' : 'pointer', fontWeight: 'bold', opacity: isQuerying ? 0.5 : 1 }}>→</button>
+                    </form>
+                  </div>
                 </div>
-              )
-            })}
 
-            {isQuerying && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
-                <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>&gt;_console</span>
-                <div style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', color: '#E4E4E7', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <div style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid #EA580C', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                  {thinkingStatus}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div style={{ backgroundColor: '#111111', borderRadius: '1rem', border: '1px solid #27272A', padding: '1.5rem', flex: 1 }}>
+                    <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      The Studio
+                    </h3>
+                    <p style={{ color: '#A1A1AA', marginBottom: '2rem' }}>Generate advanced study materials from your active document.</p>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1.5rem', borderRadius: '0.75rem', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '0.5rem', transition: 'all 0.2s', outline: 'none' }}>
+                        <span style={{ fontSize: '1.25rem' }}>✨</span>
+                        <span style={{ fontWeight: 'bold' }}>Generate Flashcards</span>
+                      </button>
+                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1.5rem', borderRadius: '0.75rem', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '0.5rem', transition: 'all 0.2s', outline: 'none' }}>
+                        <span style={{ fontSize: '1.25rem' }}>🧠</span>
+                        <span style={{ fontWeight: 'bold' }}>Build Mock Exam</span>
+                      </button>
+                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1.5rem', borderRadius: '0.75rem', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '0.5rem', transition: 'all 0.2s', outline: 'none' }}>
+                        <span style={{ fontSize: '1.25rem' }}>🎧</span>
+                        <span style={{ fontWeight: 'bold' }}>Audio Overview</span>
+                      </button>
+                      <button style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '1.5rem', borderRadius: '0.75rem', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '0.5rem', transition: 'all 0.2s', outline: 'none' }}>
+                        <span style={{ fontSize: '1.25rem' }}>📊</span>
+                        <span style={{ fontWeight: 'bold' }}>Generate Mind Map</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
+
               </div>
             )}
           </div>
-          <div style={{ padding: '1.5rem', borderTop: '1px solid #27272A', backgroundColor: '#000000' }}>
-            <form style={{ display: 'flex', gap: '0.5rem' }} onSubmit={handleQueryConsole}>
-              <input
-                value={consoleInput}
-                onChange={(e) => setConsoleInput(e.target.value)}
-                type="text"
-                placeholder="Enter command or query..."
-                style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '16px', outline: 'none', minWidth: '0' }}
-              />
-              <button type="submit" disabled={isQuerying} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0 1rem', borderRadius: '0.5rem', cursor: isQuerying ? 'not-allowed' : 'pointer', fontWeight: 'bold', flexShrink: 0, opacity: isQuerying ? 0.5 : 1 }}>→</button>
-            </form>
-          </div>
-        </aside>
+        </main>
       </div>
     </>
   );
