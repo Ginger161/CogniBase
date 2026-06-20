@@ -88,28 +88,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
          });
       }
 
-      // Fetch Buffers
-      const fileParts: any[] = [];
-      if (fileUrls.length > 0) {
-        await Promise.all(fileUrls.map(async (url) => {
-          try {
-            const fileResponse = await fetch(url);
-            if (!fileResponse.ok) return;
-            const fileBuffer = await fileResponse.arrayBuffer();
-            const mimeType = fileResponse.headers.get('content-type') || 'application/pdf';
-            const base64Data = Buffer.from(fileBuffer).toString('base64');
-            
-            fileParts.push({
-              inlineData: {
-                data: base64Data,
-                mimeType: mimeType
-              }
-            });
-          } catch (e) {
-            console.error("Failed to fetch file buffer:", e);
-          }
-        }));
-      }
+
     } catch (error) {
       console.error("Vault Interceptor Database Fetch Error:", error);
     }
@@ -229,9 +208,7 @@ You have access to the user's cloud Vault database. When they mention an uploade
     
     Question: ${userQueryText}`;
 
-    const promptParts: any[] = [...fileParts, { text: prompt }];
-
-    const chatResult = await chatSession.sendMessageStream(promptParts);
+    const chatResult = await chatSession.sendMessageStream(prompt);
     const iterator = chatResult.stream[Symbol.asyncIterator]();
     const firstChunkResult = await iterator.next();
 
