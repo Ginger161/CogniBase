@@ -977,12 +977,10 @@ export default function DashboardPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          query: userMessage, 
-          userId: context.uid, 
-          chatHistory: history, 
-          userProfile: userProfilePayload,
+          messages: updatedMessages.filter(m => m.type !== 'action_required').slice(-10),
+          activeFileId: activeDocumentId,
           sessionId: currentChatId,
-          activeDocumentId: activeDocumentId
+          userProfile: userProfilePayload
         })
       });
       const contentType = response.headers.get('content-type');

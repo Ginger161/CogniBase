@@ -9,11 +9,13 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 export async function POST(req: Request) {
   try {
-    const { query, userId, chatHistory, userProfile, sessionId, activeDocumentId } = await req.json();
+    const { messages, activeFileId, sessionId, userProfile } = await req.json();
 
-    if (!query || !userId || !userProfile) {
-      return NextResponse.json({ error: "Missing query or user context." }, { status: 400 });
+    if (!messages || messages.length === 0 || !userProfile) {
+      return NextResponse.json({ error: "Missing messages or user context." }, { status: 400 });
     }
+
+    const query = messages[messages.length - 1].content;
 
     let systemInstruction = `YOU ARE AN ELITE ACADEMIC TUTOR AND EXAM STRATEGIST. Your sole purpose is to help university students master their course materials, synthesize complex information, and ace their exams. You are empathetic, proactive, and highly structured.
 
@@ -33,21 +35,16 @@ If asked for a test, generate a structured exam based strictly on the uploaded m
 BOUNDARIES:
 You are elite at studying, research, and academia. If asked to generate images, write code (unless for a CS class), or do business strategy outside of an academic context, politely decline and steer the conversation back to their studies.`;
 
-    // 1. Fetch recent conversation history from DB if sessionId exists
-    let dbHistory: any[] = [];
-    if (sessionId) {
-      const chatDoc = await getDoc(doc(db, 'chats', sessionId));
-      if (chatDoc.exists() && chatDoc.data().messages) {
-        dbHistory = chatDoc.data().messages;
-      }
-    }
+    // 1. Use conversation history injected directly from the frontend
+    let dbHistory = messages.slice(0, -1);
+    const userId = userProfile.userId || (messages[0]?.userId) || "unknown"; // Or fetch from context if passed
 
-    // 2. Fetch original file metadata if activeDocumentId exists
+    // 2. Fetch original file metadata if activeFileId exists
     let activeFileContext = "";
     let extractedText = "";
     let fileName = "";
-    if (activeDocumentId) {
-       const fileDoc = await getDoc(doc(db, 'vault_files', activeDocumentId));
+    if (activeFileId) {
+       const fileDoc = await getDoc(doc(db, 'vault_files', activeFileId));
        if (fileDoc.exists()) {
           const fileData = fileDoc.data();
           fileName = fileData.name;
@@ -150,17 +147,26 @@ You are elite at studying, research, and academia. If asked to generate images, 
     };
     const chatModel = genAI.getGenerativeModel(modelConfig);
     
-    // Format history for Gemini (keep only last 10 interactions)
-    const historyToUse = dbHistory.length > 0 ? dbHistory : (chatHistory || []);
-    const formattedHistory = historyToUse
-      .filter((msg: any) => msg.type !== 'action_required')
-      .slice(-10)
+    // Format history for Gemini
+    const formattedHistory = dbHistory
+      .filter((msg: any) => msg.type !== 'action_required' && msg.role !== 'system')
       .map((msg: any) => ({
         role: msg.role === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content || '' }]
       }));
 
-    const chatSession = chatModel.startChat({ history: formattedHistory });
+    // Prevent 'user' role mismatches by ensuring history alternates correctly 
+    // Gemini strictly requires roles to alternate and begin with 'user'
+    let validHistory = [];
+    let expectedRole = 'user';
+    for (const msg of formattedHistory) {
+      if (msg.role === expectedRole) {
+        validHistory.push(msg);
+        expectedRole = expectedRole === 'user' ? 'model' : 'user';
+      }
+    }
+
+    const chatSession = chatModel.startChat({ history: validHistory });
     
     const prompt = `Use the following context to answer the user's question.
     
@@ -236,7 +242,6 @@ You are elite at studying, research, and academia. If asked to generate images, 
 
   } catch (error: any) {
     console.error("Query Error:", error);
-    const fallbackAnswer = "Information not found in vault";
-    return NextResponse.json({ answer: fallbackAnswer }, { status: 200 });
+    return NextResponse.json({ error: error.message || "Failed to generate response" }, { status: 500 });
   }
 }

@@ -311,12 +311,10 @@ export default function DashboardPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          query: userMessage, 
-          userId: context.uid, 
-          chatHistory: history, 
-          userProfile: userProfilePayload,
+          messages: updatedMessages.filter(m => m.type !== 'action_required').slice(-10),
+          activeFileId: selectedFileIds.length > 0 ? selectedFileIds[0] : null,
           sessionId: currentChatId,
-          activeDocumentId: selectedFileIds.length > 0 ? selectedFileIds[0] : null
+          userProfile: userProfilePayload
         })
       });
       const contentType = response.headers.get('content-type');
