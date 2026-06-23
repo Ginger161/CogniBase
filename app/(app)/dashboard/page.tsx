@@ -559,22 +559,19 @@ export default function DashboardPage() {
               </div>
             ) : (
               <CommandCenterUI
-                activeWorkspaceName={activeWorkspaceName || "Untitled Workspace"}
-                setActiveWorkspaceName={setActiveWorkspaceName}
+                title={activeWorkspaceName || "Untitled Workspace"}
                 activeSources={activeSources}
-                setActiveSources={setActiveSources}
-                setIsAddSourceModalOpen={setIsAddSourceModalOpen}
-                messages={messages}
-                userData={userData}
-                isQuerying={isQuerying}
-                consoleInput={consoleInput}
-                setConsoleInput={setConsoleInput}
-                handleQueryConsole={handleQueryConsole}
-                isEditingTitle={isEditingTitle}
-                setIsEditingTitle={setIsEditingTitle}
-                newTitle={newTitle}
-                setNewTitle={setNewTitle}
-                handleRenameDocument={handleRenameDocument}
+                onRemoveSource={(id) => setActiveSources(prev => prev.filter(s => s.id !== id))}
+                onAddSource={() => setIsAddSourceModalOpen(true)}
+                onExit={() => { setActiveSources([]); setActiveWorkspaceName("Untitled Workspace"); }}
+                chatMessages={messages.map(m => ({ role: m.role, text: m.content }))}
+                chatInput={consoleInput}
+                setChatInput={setConsoleInput}
+                onSendMessage={() => {
+                  if (!consoleInput.trim()) return;
+                  const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                  handleQueryConsole(fakeEvent);
+                }}
               />
             )}
           </div>
