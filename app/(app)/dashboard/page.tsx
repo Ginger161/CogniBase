@@ -73,7 +73,8 @@ export default function DashboardPage() {
   const handleRetryMessage = () => {
     const lastUserMsg = messages.filter(m => m.role === 'user').pop();
     if (lastUserMsg) {
-      sendMessage({ content: lastUserMsg.content });
+      const msgText = lastUserMsg.parts ? lastUserMsg.parts.filter(p => p.type === 'text').map(p => (p as any).text).join('\n') : (lastUserMsg as any).text || (lastUserMsg as any).content || '';
+      sendMessage({ role: 'user', parts: [{ type: 'text', text: msgText }] } as any);
     }
   };
 
@@ -83,10 +84,10 @@ export default function DashboardPage() {
 
   // Console state
   const [input, setInput] = useState('');
-  const { messages, setMessages, append: sendMessage, status, error, handleSubmit } = useChat({
+  const { messages, setMessages, sendMessage, status, error } = useChat({
     id: activeWorkspaceId || 'default',
     api: '/api/engine/query',
-    initialMessages: [{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any],
+    initialMessages: [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }] } as any],
     body: {
       activeSources: activeSources,
       workspaceId: activeWorkspaceId,
@@ -97,7 +98,7 @@ export default function DashboardPage() {
         courses: context?.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
       }
     }
-  });
+  } as any);
   const isLoading = status === 'streaming' || status === 'submitted';
 
   const [thinkingStatus, setThinkingStatus] = useState('Locating course notes in Vault...');
@@ -575,11 +576,12 @@ export default function DashboardPage() {
     if (!input.trim() || isLoading) return;
     
     if (isContextLoading) {
-      setMessages([...messages, { id: Date.now().toString(), role: 'assistant', content: 'Syncing Academic Data... Please wait.' }]);
+      setMessages([...messages, { id: Date.now().toString(), role: 'assistant', parts: [{ type: 'text', text: 'Syncing Academic Data... Please wait.' }] } as any]);
       return;
     }
 
-    handleSubmit(e);
+    sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any);
+    setInput('');
   };
 
   const handleRefresh = async () => {
@@ -792,7 +794,7 @@ export default function DashboardPage() {
                 setChatInput={setInput}
                 onSendMessage={() => {
                   if (!input.trim() || isLoading) return;
-                  sendMessage({ content: input, role: 'user' });
+                  sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any);
                   setInput('');
                 }}
                 isChatLoading={isLoading}
