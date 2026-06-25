@@ -1,10 +1,8 @@
 "use client";
 import React, { useState } from 'react';
-import { auth, db, googleProvider } from '../../../lib/firebase';
-import { createUserWithEmailAndPassword, updateProfile, signInWithPopup } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { supabase } from '@/utils/supabase/client';
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -37,13 +35,21 @@ export default function SignUpPage() {
     setIsLoading(true);
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(userCredential.user, { displayName: name });
+      // 1. Supabase Auth
+      const { data, error: supaError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: name }
+        }
+      });
+
+      if (supaError) throw supaError;
       
       setStep(2);
       setIsLoading(false);
     } catch (err: any) {
-      if (err.code === 'auth/email-already-in-use') {
+      if (err.message && err.message.includes('already registered')) {
         setError('This email is already registered. Try logging in!');
       } else {
         setError(err.message || 'Failed to create account.');
@@ -58,19 +64,22 @@ export default function SignUpPage() {
     setIsLoading(true);
 
     try {
-      const user = auth.currentUser;
-      if (user) {
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          email: user.email,
-          name: name,
-          username: skipped ? '' : username,
-          school: skipped ? '' : school,
-          department: skipped ? '' : department,
-          source: skipped ? '' : source,
-          createdAt: serverTimestamp()
-        });
+      // Create Prisma Profile via Supabase session
+      const { data: { user: supaUser } } = await supabase.auth.getUser();
+      if (supaUser) {
+         await fetch('/api/users', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+             id: supaUser.id,
+             email: supaUser.email,
+             username: skipped ? '' : username,
+             school: skipped ? '' : school,
+             department: skipped ? '' : department,
+           })
+         });
       }
+
       router.push('/dashboard');
     } catch (err: any) {
       setError('Failed to save details, but account was created. Redirecting...');
@@ -81,14 +90,12 @@ export default function SignUpPage() {
   const handleGoogleSignup = async () => {
     try {
       setError('');
-      const cred = await signInWithPopup(auth, googleProvider);
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        uid: cred.user.uid,
-        email: cred.user.email,
-        name: cred.user.displayName,
-        createdAt: serverTimestamp()
-      }, { merge: true });
-      router.push('/dashboard');
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`
+        }
+      });
     } catch (err: any) {
       setError('Google Sign-In failed.');
     }

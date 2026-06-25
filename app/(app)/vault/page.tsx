@@ -1,9 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { auth, db } from '../../../lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc, getDoc, arrayUnion, deleteDoc } from 'firebase/firestore';
-import { useUploadThing } from '../../../utils/uploadthing';
+import { db, collection, addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc, getDoc, arrayUnion, deleteDoc } from '../../../lib/firebase';
+import { supabase } from '../../../utils/supabase/client';
 import { Pencil, Plus, RefreshCcw, ThumbsUp, ThumbsDown, LayoutGrid, List, Trash2, Calendar, MoreVertical, ChevronLeft, ChevronRight, Save } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useThrottle } from '../../hooks/useThrottle';
@@ -105,19 +103,7 @@ export default function DashboardPage() {
   const [pendingTimetableFile, setPendingTimetableFile] = useState<File | null>(null);
   const timetableInputRef = useRef<HTMLInputElement>(null);
 
-  const { startUpload: startTimetableUpload } = useUploadThing("vaultUploader", {
-    onUploadError: (error) => {
-      setToastMessage(`Error: ${error.message}`);
-      setIsTimetableUploading(false);
-    }
-  });
 
-  const { startUpload: startCourseUpload } = useUploadThing("vaultUploader", {
-    onUploadError: (error) => {
-      setToastMessage(`Upload Error: ${error.message}`);
-      setIsExtracting(false);
-    }
-  });
 
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -131,22 +117,6 @@ export default function DashboardPage() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [rawFiles, setRawFiles] = useState<any[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
-
-  const { startUpload } = useUploadThing("vaultUploader", {
-    onClientUploadComplete: () => {
-      router.refresh();
-    },
-    onUploadProgress: (p) => {
-      setUploadProgress(p);
-      if (p === 100) setUploadStatus('Finalizing secure links from server...');
-      else setUploadStatus(`Transmitting... ${p}%`);
-    },
-    onUploadError: (error) => {
-      setUploadStatus(`Error: ${error.message}`);
-      setIsUploading(false);
-      setUploadProgress(0);
-    }
-  });
   const [userData, setUserData] = useState<any>({ name: 'Loading...', email: '', uid: '', profile: null });
   const { context, isLoading: isContextLoading } = useUserContext();
 
@@ -184,11 +154,19 @@ export default function DashboardPage() {
 
       // Fetch Vault Files
       try {
-        const vq = query(collection(db, 'vault_files'), where('userId', '==', context.uid));
-        const vaultSnap = await getDocs(vq);
-        const vFiles = vaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setVaultFiles(vFiles);
-      } catch (e) { console.error(e) }
+        const docsRes = await fetch(`/api/documents?workspaceId=global-vault-001`);
+        if (docsRes.ok) {
+          const docs = await docsRes.json();
+          console.log("📋 Data received by UI on load:", docs);
+          setVaultFiles(docs.map((d: any) => ({
+            id: d.id,
+            fileName: d.name,
+            downloadURL: d.url,
+            uploadedAt: d.createdAt,
+            category: 'Note' // Prisma schema doesn't store category yet
+          })));
+        }
+      } catch (e) { console.error("Failed to fetch documents:", e) }
 
       // Fetch Chat List
       try {
@@ -203,9 +181,8 @@ export default function DashboardPage() {
 
       // Fetch Study Guides
       try {
-        const sq = query(collection(db, 'study_guides'), where('userId', '==', context.uid));
-        const studyGuideSnap = await getDocs(sq);
-        const sGuides = studyGuideSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const resSq = await fetch('/api/study-guides?userId=' + context.uid);
+        const sGuides = await resSq.json();
         sGuides.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setStudyGuides(sGuides);
       } catch (e) { console.error(e) }
@@ -327,13 +304,28 @@ export default function DashboardPage() {
 
     setIsExtracting(true);
     try {
-      // Step 1: Upload the file to UploadThing first
-      const res = await startCourseUpload([file]);
-      if (!res || res.length === 0) {
-        throw new Error("File upload to secure server failed.");
+      // Step 1: Upload the file to Supabase directly
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}-${Date.now()}.${fileExt}`;
+      const filePath = `uploads/${fileName}`;
+
+      const { data, error } = await supabase.storage
+        .from('workspace-files')
+        .upload(filePath, file);
+
+      if (error) {
+        setToastMessage(`Upload Error: ${error.message}`);
+        setIsExtracting(false);
+        throw error;
       }
+
       // Step 2: Wait for response to get the secure file url
-      const fileUrl = res[0].url;
+      const { data: publicUrlData } = supabase.storage
+        .from('workspace-files')
+        .getPublicUrl(filePath);
+
+      const fileUrl = publicUrlData.publicUrl;
+      console.log("Vault file successfully uploaded to Supabase:", fileUrl);
 
       const semesters = [...(userData.profile?.semesters || [])];
       const activeSemIdx = semesters.findIndex((s: any) => s.isActive);
@@ -350,20 +342,20 @@ export default function DashboardPage() {
         })
       });
 
-      let data;
+      let extractedData: any;
       try {
-        data = await extractRes.json();
+        extractedData = await extractRes.json();
       } catch (e) {
         // Ignore JSON parse error if HTML is returned
       }
 
       if (!extractRes.ok) {
-        throw new Error(data?.error || `API Error: ${extractRes.status} ${extractRes.statusText}`);
+        throw new Error(extractedData?.error || `API Error: ${extractRes.status} ${extractRes.statusText}`);
       }
 
-      if (data.courses && Array.isArray(data.courses)) {
+      if (extractedData?.courses && Array.isArray(extractedData.courses)) {
         const activeSem = semesters[activeSemIdx];
-        const newCourses = data.courses.filter((c: any) => !activeSem.courses.some((ext: any) => ext.courseCode === c.courseCode));
+        const newCourses = extractedData.courses.filter((c: any) => !activeSem.courses.some((ext: any) => ext.courseCode === c.courseCode));
         if (newCourses.length > 0) {
           activeSem.courses = [...activeSem.courses, ...newCourses];
           const userRef = doc(db, 'users', userData.uid);
@@ -459,13 +451,29 @@ export default function DashboardPage() {
       });
 
       // Since extraction succeeded, we safely upload the file
-      const uploadRes = await startTimetableUpload([file]);
-
       let finalTimetableUrl = '';
-      if (uploadRes && uploadRes.length > 0) {
-        finalTimetableUrl = uploadRes[0].url;
-      } else {
-        setToastMessage("Timetable image upload failed.");
+      try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random()}-${Date.now()}.${fileExt}`;
+        const filePath = `uploads/${fileName}`;
+
+        const { data, error } = await supabase.storage
+          .from('workspace-files')
+          .upload(filePath, file);
+
+        if (error) throw error;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('workspace-files')
+          .getPublicUrl(filePath);
+
+        finalTimetableUrl = publicUrlData.publicUrl;
+        console.log("Timetable successfully uploaded to Supabase:", finalTimetableUrl);
+      } catch (err: any) {
+        console.error("Supabase Upload Error:", err);
+        setToastMessage(`Timetable image upload failed: ${err.message}`);
+        setIsTimetableUploading(false);
+        return;
       }
 
       const semesters = [...(userData.profile?.semesters || [])];
@@ -511,7 +519,7 @@ export default function DashboardPage() {
           if (ttSnap.exists()) {
             await updateDoc(ttRef, { scheduled_classes: currentTimetables });
           } else {
-            const { setDoc } = await import('firebase/firestore');
+            const { setDoc } = await import('../../../lib/firebase');
             await setDoc(ttRef, { scheduled_classes: currentTimetables });
           }
           setTimetables(currentTimetables);
@@ -590,7 +598,7 @@ export default function DashboardPage() {
       if (ttSnap.exists()) {
         await updateDoc(ttRef, { scheduled_classes: newScheduledClasses });
       } else {
-        const { setDoc } = await import('firebase/firestore');
+        const { setDoc } = await import('../../../lib/firebase');
         await setDoc(ttRef, { scheduled_classes: newScheduledClasses });
       }
 
@@ -714,9 +722,12 @@ export default function DashboardPage() {
         createdAt: serverTimestamp()
       };
 
-      const docRef = await addDoc(collection(db, 'study_guides'), newGuide);
-
-      const fullGuide = { id: docRef.id, ...newGuide, createdAt: { seconds: Math.floor(Date.now() / 1000) } };
+      const docRef = await fetch('/api/study-guides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newGuide)
+      });
+      const fullGuide = await docRef.json();
 
       setStudyGuides(prev => [fullGuide, ...prev]);
 
@@ -753,7 +764,7 @@ export default function DashboardPage() {
     if (!userData.uid || selectedMaterials.length === 0) return;
     try {
       // 1. Delete all selected documents from Firebase using the correct collection 'vault_files'
-      const deletePromises = selectedMaterials.map(id => deleteDoc(doc(db, 'vault_files', id)));
+      const deletePromises = selectedMaterials.map(id => fetch('/api/documents?id=' + id, { method: 'DELETE' }));
       await Promise.all(deletePromises);
 
       // 2. Clear local state only after DB deletion succeeds
@@ -771,7 +782,7 @@ export default function DashboardPage() {
     if (!userData.uid) return;
     try {
       // 1. Delete single document from Firebase using the correct collection 'vault_files'
-      await deleteDoc(doc(db, 'vault_files', id));
+      await fetch('/api/documents?id=' + id, { method: 'DELETE' });
 
       // 2. Clear local state only after DB deletion succeeds
       setVaultFiles(prev => prev.filter(m => m.id !== id));
@@ -787,9 +798,8 @@ export default function DashboardPage() {
     setIsUploading(true); setUploadProgress(0); setUploadStatus('Scanning Vault for existing records...');
 
     try {
-      const q = query(collection(db, 'vault_files'), where('userId', '==', userData.uid));
-      const querySnapshot = await getDocs(q);
-      const existingFiles = querySnapshot.docs.map(doc => doc.data());
+      const res = await fetch('/api/documents');
+      const existingFiles = await res.json();
 
       const newFilesToUpload: File[] = [];
       const duplicateFiles: File[] = [];
@@ -809,33 +819,86 @@ export default function DashboardPage() {
       if (duplicateFiles.length > 0) setUploadStatus(`Skipped ${duplicateFiles.length} duplicates. Transmitting new files...`);
       else setUploadStatus('Initializing Secure Transfer...');
 
-      const res = await startUpload(newFilesToUpload);
+      setUploadStatus('Uploading to Secure Storage...');
+      
+      const uploadedFiles = [];
+      for (let i = 0; i < newFilesToUpload.length; i++) {
+        const file = newFilesToUpload[i];
+        setUploadProgress(((i + 1) / newFilesToUpload.length) * 100);
+        
+        const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '-');
+        const uniqueSuffix = Math.random().toString(36).substring(2, 8);
+        const filePath = `uploads/${uniqueSuffix}-${cleanFileName}`;
 
-      if (res && res.length > 0) {
-        setUploadStatus('Saving records to Database...');
+        const { data, error } = await supabase.storage
+          .from('workspace-files')
+          .upload(filePath, file);
+
+        if (error) {
+          console.error("Supabase Upload Error:", error);
+          setUploadStatus(`Error: ${error.message || 'Supabase Upload failed.'}`);
+          setIsUploading(false); setUploadProgress(0);
+          return;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from('workspace-files')
+          .getPublicUrl(filePath);
+
+        const fileUrl = publicUrlData.publicUrl;
+        console.log("✅ File uploaded to Bucket:", fileUrl);
+
         try {
-          for (const fileRes of res) {
-            await addDoc(collection(db, 'vault_files'), {
-              userId: userData.uid,
-              fileName: fileRes.name,
-              fileSize: fileRes.size,
-              downloadURL: fileRes.url,
-              category: selectedCategory,
-              uploadedAt: serverTimestamp(),
-              status: 'raw'
-            });
+          const dbResponse = await fetch('/api/documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: file.name, // Save the original pretty name to Postgres
+              url: fileUrl,
+              workspaceId: 'global-vault-001'
+            })
+          });
+
+          // 1. Read as text first to prevent JSON parse crashes on HTML error pages
+          const responseText = await dbResponse.text();
+
+          if (!dbResponse.ok) {
+            console.error(`❌ Database Save Failed (Status: ${dbResponse.status})`);
+            console.error("❌ Server Response:", responseText.substring(0, 500)); // Print first 500 chars of HTML/Text
+            alert("Failed to save to database. Check console for details.");
+            setUploadStatus('Warning: Transfer succeeded, but database save failed.');
+            continue;
           }
-          setUploadStatus('Transfer Complete. Files Secured.');
-        } catch (dbError) {
+
+          // 2. If OK, it is safe to parse
+          const data = JSON.parse(responseText);
+          console.log("✅ File saved to Database successfully!", data);
+
+          // Trigger the UI to re-fetch the document list immediately
+          const docsRes = await fetch(`/api/documents?workspaceId=global-vault-001`);
+          if (docsRes.ok) {
+            const docs = await docsRes.json();
+            console.log("📋 Data received by UI after upload:", docs);
+            setVaultFiles(docs.map((d: any) => ({
+              id: d.id,
+              fileName: d.name,
+              downloadURL: d.url,
+              uploadedAt: d.createdAt,
+              category: 'Note'
+            })));
+          }
+
+        } catch (error) {
+          console.error("❌ Network Error during Database Save:", error);
           setUploadStatus('Warning: Transfer succeeded, but database save failed.');
         }
-        setTimeout(() => { setPendingFiles([]); setIsUploading(false); setUploadStatus(''); setUploadProgress(0); }, 3000);
-      } else {
-        setUploadStatus('Error: Server rejected the batch. Check limits.');
-        setIsUploading(false); setUploadProgress(0);
       }
-    } catch (error) {
-      setUploadStatus('Error: Upload connection failed.');
+
+      setUploadStatus('Transfer Complete. Files Secured.');
+      router.refresh();
+      setTimeout(() => { setPendingFiles([]); setIsUploading(false); setUploadStatus(''); setUploadProgress(0); }, 3000);
+    } catch (error: any) {
+      setUploadStatus(`Error: ${error.message || 'Upload connection failed.'}`);
       setIsUploading(false); setUploadProgress(0);
     }
   };
@@ -1138,7 +1201,7 @@ export default function DashboardPage() {
         if (ttSnap.exists()) {
           await updateDoc(ttRef, { scheduled_classes: newScheduledClasses });
         } else {
-          const { setDoc } = await import('firebase/firestore');
+          const { setDoc } = await import('../../../lib/firebase');
           await setDoc(ttRef, { scheduled_classes: newScheduledClasses });
         }
         setTimetables(newScheduledClasses);
@@ -1264,34 +1327,7 @@ export default function DashboardPage() {
             <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Active Engines</a>
             <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Settings</a>
 
-            <div style={{ marginTop: '1.5rem', borderTop: '1px solid #27272A', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden', flex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#71717A', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recent Chats</span>
-                <button
-                  onClick={() => {
-                    setCurrentChatId(null);
-                    setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
-                    setIsConsoleOpen(true);
-                  }}
-                  style={{ background: 'none', border: 'none', color: '#EA580C', cursor: 'pointer', fontSize: '1.25rem', lineHeight: '1' }}
-                  title="New Chat"
-                >
-                  +
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, paddingRight: '0.5rem' }} className="file-list-container">
-                {chatList.map(chat => (
-                  <button
-                    key={chat.id}
-                    onClick={() => handleLoadChat(chat.id)}
-                    style={{ background: currentChatId === chat.id ? '#18181B' : 'none', border: 'none', color: currentChatId === chat.id ? 'white' : '#A1A1AA', textAlign: 'left', padding: '0.5rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', transition: 'all 0.2s' }}
-                  >
-                    {chat.title}
-                  </button>
-                ))}
-                {chatList.length === 0 && <span style={{ color: '#71717A', fontSize: '0.8rem' }}>No recent chats.</span>}
-              </div>
-            </div>
+
           </nav>
           <div style={{ borderTop: '1px solid #27272A', paddingTop: '1.5rem', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>

@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
-import { auth, db } from '../firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { supabase } from '@/utils/supabase/client';
 
 export interface UserContext {
-  uid: string;
+  uid: string; // Supabase UID
   name: string;
   email: string;
   school?: string;
@@ -17,50 +15,50 @@ export function useUserContext() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        let profileData = null;
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            profileData = userSnap.data();
+    let mounted = true;
 
-            // Legacy Migration: flat `courses` array -> `semesters` array
-            let needsMigration = false;
-            if (!profileData.semesters || profileData.semesters.length === 0) {
-              needsMigration = true;
-              profileData.semesters = [{
-                semesterId: 'current_semester_01',
-                title: 'Current Semester',
-                isActive: true,
-                courses: (profileData.courses && Array.isArray(profileData.courses)) ? profileData.courses : [],
-                timetableUrl: ''
-              }];
-            }
-            if (needsMigration) {
-              await updateDoc(userRef, { semesters: profileData.semesters });
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching user profile", error);
+    async function fetchUser() {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        // Fetch profile from Postgres via Supabase
+        const { data: profileData } = await supabase
+          .from('User')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (mounted) {
+          setContext({
+            uid: session.user.id,
+            name: profileData?.username || session.user.email?.split('@')[0] || 'Student',
+            email: session.user.email || '',
+            school: profileData?.school || '',
+            department: profileData?.department || '',
+            profile: profileData || {}
+          });
         }
-        
-        setContext({
-          uid: user.uid,
-          name: profileData?.username || user.displayName || 'Student',
-          email: user.email || '',
-          school: profileData?.school || '',
-          department: profileData?.department || '',
-          profile: profileData
-        });
       } else {
-        setContext(null);
+        if (mounted) setContext(null);
       }
-      setIsLoading(false);
+      if (mounted) setIsLoading(false);
+    }
+
+    fetchUser();
+
+    // Listen for auth changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+       if (event === 'SIGNED_OUT') {
+         if (mounted) setContext(null);
+       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+         fetchUser();
+       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   return { context, isLoading };

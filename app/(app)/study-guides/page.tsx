@@ -1,8 +1,5 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { auth, db } from '../../../lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, where } from 'firebase/firestore';
 import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 
@@ -15,21 +12,18 @@ export default function StudyGuidesPage() {
   const [isStudyGuideViewOpen, setIsStudyGuideViewOpen] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUserData({ name: user.displayName || 'Student', email: user.email || '', uid: user.uid });
+    const fetchGuides = async () => {
+      const { data: { session } } = await import('@/utils/supabase/client').then(m => m.supabase.auth.getSession());
+      if (session?.user) {
+        setUserData({ name: session.user.email?.split('@')[0] || 'Student', email: session.user.email || '', uid: session.user.id });
         try {
-          const sq = query(collection(db, 'study_guides'), where('userId', '==', user.uid));
-          const studyGuideSnap = await getDocs(sq);
-          const sGuides = studyGuideSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          sGuides.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+          const res = await fetch('/api/study-guides?userId=' + session.user.id);
+          const sGuides = await res.json();
           setStudyGuides(sGuides);
         } catch(e) { console.error(e) }
-      } else {
-        setUserData({ name: 'Guest Student', email: 'Not signed in', uid: '', profile: null });
       }
-    });
-    return () => unsubscribe();
+    };
+    fetchGuides();
   }, []);
 
   return (

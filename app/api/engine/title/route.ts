@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     }
 
     const modelConfig: any = { 
-      model: "gemini-2.5-flash",
+      model: "gemini-3.1-flash-lite",
       systemInstruction: "Generate a short, 3-to-4 word title summarizing the user's prompt. Do not use quotes, punctuation, or special formatting."
     };
     

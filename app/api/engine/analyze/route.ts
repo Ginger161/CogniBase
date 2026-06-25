@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { Pinecone } from "@pinecone-database/pinecone";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { prisma } from "@/lib/prisma";
 
 const PDFParser = require("pdf2json");
 const officeParser = require("officeparser");
-
-const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY as string });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 function extractPDFText(buffer: Buffer): Promise<string> {
@@ -85,33 +83,60 @@ export async function POST(req: Request) {
     }
     
     const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
-    const index = pc.index(process.env.PINECONE_INDEX as string);
 
-    const vectors = await Promise.all(
-      validChunks.map(async (chunk: string, i: number) => {
-        const result = await embeddingModel.embedContent(chunk);
-        const embedding = result.embedding.values;
-        return {
-          id: `${docId}-chunk-${i}`,
-          values: embedding,
-          metadata: {
-            text: chunk,
-            fileName: fileName,
-            userId: userId,
-            docId: docId
-          }
-        };
-      })
-    );
+    // Generate embeddings and insert into Postgres via Prisma
+    let chunksInserted = 0;
+    const batchSize = 5;
+    const allEmbeddings: { id: string; content: string; embeddingStr: string }[] = [];
 
-    // SAFEGUARD: Final check before Pinecone
-    if (vectors.length === 0) {
+    for (let i = 0; i < validChunks.length; i += batchSize) {
+      const batchChunks = validChunks.slice(i, i + batchSize);
+      try {
+        const batchResults = await Promise.all(
+          batchChunks.map(async (chunk, batchIdx) => {
+            const result = await embeddingModel.embedContent(chunk);
+            let embedding = result.embedding.values;
+            if (embedding.length > 768) embedding = embedding.slice(0, 768);
+            return {
+              id: `${docId}-chunk-${i + batchIdx}`,
+              content: chunk,
+              embeddingStr: `[${embedding.join(',')}]`
+            };
+          })
+        );
+        allEmbeddings.push(...batchResults);
+      } catch (e) {
+        console.error(`Failed to process embedding batch starting at ${i}:`, e);
+      }
+    }
+
+    if (allEmbeddings.length > 0) {
+      // Build a single bulk insert query
+      const values: string[] = [];
+      const parameters: any[] = [];
+      let paramIndex = 1;
+
+      for (const item of allEmbeddings) {
+        values.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}::vector)`);
+        parameters.push(item.id, docId, item.content, item.embeddingStr);
+        paramIndex += 4;
+      }
+
+      const query = `INSERT INTO "DocumentChunk" ("id", "documentId", "content", "embedding") VALUES ${values.join(', ')}`;
+      
+      try {
+        await prisma.$executeRawUnsafe(query, ...parameters);
+        chunksInserted = allEmbeddings.length;
+      } catch (e) {
+        console.error("Bulk insert failed:", e);
+      }
+    }
+
+    if (chunksInserted === 0) {
        return NextResponse.json({ error: "Failed to generate AI data from this file." }, { status: 400 });
     }
 
-    await index.upsert({ records: vectors });
-    
-    return NextResponse.json({ success: true, chunksProcessed: validChunks.length });
+    return NextResponse.json({ success: true, chunksProcessed: chunksInserted });
 
   } catch (error: any) {
     console.error("Engine Error:", error);

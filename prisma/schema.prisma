@@ -1,0 +1,90 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  engineType      = "library"
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
+
+model Workspace {
+id        String     @id @default(cuid())
+title     String
+createdAt DateTime   @default(now())
+updatedAt DateTime   @updatedAt
+messages  Message[]
+documents Document[]
+userId    String?
+user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Message {
+id          String    @id @default(cuid())
+role        String
+text        String
+createdAt   DateTime  @default(now())
+workspaceId String
+workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+id          String    @id @default(cuid())
+name        String    // The original file name (e.g., 'ForexCoachings.docx')
+url         String    // The Supabase public storage URL
+createdAt   DateTime  @default(now())
+workspaceId String
+workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+chunks      DocumentChunk[]
+studyGuides StudyGuide[]
+}
+
+model DocumentChunk {
+id          String   @id @default(cuid())
+documentId  String
+content     String
+embedding   Unsupported("vector(768)")?
+pageNumber  Int?
+document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+@@index([embedding], map: "embeddingIndex")
+}
+
+model User {
+id         String      @id @default(cuid()) // Will store Supabase Auth UUID
+email      String      @unique
+username   String?
+school     String?
+department String?
+createdAt  DateTime    @default(now())
+updatedAt  DateTime    @updatedAt
+workspaces Workspace[]
+timetables Timetable[]
+studyGuides StudyGuide[]
+}
+
+model Timetable {
+id        String   @id @default(cuid())
+userId    String
+data      Json     // Store the timetable object here
+user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model StudyGuide {
+id                 String    @id @default(cuid())
+userId             String
+sourceDocumentId   String
+sourceDocumentName String
+sectionConstraint  String
+markdownContent    String
+createdAt          DateTime  @default(now())
+user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+document           Document  @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+}
+
+model ExtractedFormCache {
+hash      String   @id
+courses   Json
+createdAt DateTime @default(now())
+}

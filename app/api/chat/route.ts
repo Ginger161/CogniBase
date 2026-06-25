@@ -12,17 +12,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
-    const url = new URL(req.url);
-    const urlWorkspaceId = url.searchParams.get('workspaceId');
-    const urlSources = url.searchParams.get('sources');
-    const { messages, data, activeSources: bodyActiveSources, workspaceId: bodyWorkspaceId } = await req.json();
-    
-    // Fallback chain: data (freshest from append) -> body -> url -> fallback
-    const workspaceId = data?.workspaceId || urlWorkspaceId || bodyWorkspaceId;
-    const explicitlyPassedDocIds = (data?.activeSources || bodyActiveSources || []).map((s: any) => s.id).filter(Boolean);
-    if (explicitlyPassedDocIds.length === 0 && urlSources) {
-      explicitlyPassedDocIds.push(...urlSources.split(',').filter(Boolean));
-    }
+    const { messages, activeSources, userProfile } = await req.json();
 
     if (!messages || messages.length === 0) {
       return new Response(JSON.stringify({ error: "Missing messages." }), { status: 400 });
@@ -35,35 +25,17 @@ export async function POST(req: Request) {
 
     const userQueryText = normalizedMessages[normalizedMessages.length - 1]?.content || "";
     
-    // Save user message to database if workspaceId is present
-    if (workspaceId) {
-      try {
-        await prisma.message.create({
-          data: {
-            role: 'user',
-            text: userQueryText,
-            workspaceId
-          }
-        });
-      } catch (e) {
-        console.error("Failed to save user message:", e);
-      }
-    }
-
     // 1. Fetch Workspace Metadata First
     // Prioritize activeSources (which are the files the user specifically clicked in their workspace UI)
     let docNames = "";
     let targetDocIds: string[] = [];
     
-    // We prioritize explicit URL sources to bypass stale frontend body closures
-    if (explicitlyPassedDocIds.length > 0) {
-      const dbDocs = await prisma.document.findMany({
-        where: { id: { in: explicitlyPassedDocIds } }
-      });
-      docNames = dbDocs.map(d => d.name).join(', ');
-      targetDocIds = dbDocs.map(d => d.id);
-    } else if (workspaceId) {
-      // Fallback to fetching all workspace docs
+    if (activeSources && activeSources.length > 0) {
+      docNames = activeSources.map((d: any) => d.title || d.name).join(', ');
+      targetDocIds = activeSources.map((d: any) => d.id).filter(Boolean);
+    } else {
+      // Fallback to fetching all workspace docs if no active sources were provided
+      const workspaceId = 'global-vault-001'; 
       const workspaceDocs = await prisma.document.findMany({
         where: { workspaceId }
       });
@@ -88,12 +60,11 @@ export async function POST(req: Request) {
         
         // Execute pgvector search
         const matches: any[] = await prisma.$queryRawUnsafe(`
-          SELECT c."content", d."name" as "documentName", 1 - (c."embedding" <=> $1::vector) as similarity
-          FROM "DocumentChunk" c
-          JOIN "Document" d ON c."documentId" = d."id"
-          WHERE c."documentId" IN (${docIdsParam})
-          ORDER BY c."embedding" <=> $1::vector
-          LIMIT 20
+          SELECT "content", 1 - ("embedding" <=> $1::vector) as similarity
+          FROM "DocumentChunk"
+          WHERE "documentId" IN (${docIdsParam})
+          ORDER BY "embedding" <=> $1::vector
+          LIMIT 5
         `, `[${queryEmbedding.join(',')}]`);
 
         // 3. Build a Meta-Query Fallback
@@ -103,20 +74,19 @@ export async function POST(req: Request) {
           // Fallback: If similarity is low, it's likely a meta-question like "what is this about?"
           // Pull the first 3 chunks of each document to summarize
           const fallbackChunks: any[] = await prisma.$queryRawUnsafe(`
-            SELECT sub."content", d."name" as "documentName"
+            SELECT "content"
             FROM (
               SELECT "content", "documentId",
                      ROW_NUMBER() OVER(PARTITION BY "documentId" ORDER BY "id" ASC) as rn
               FROM "DocumentChunk"
               WHERE "documentId" IN (${docIdsParam})
             ) sub
-            JOIN "Document" d ON sub."documentId" = d."id"
-            WHERE sub.rn <= 3
+            WHERE rn <= 3
           `);
-          searchContext = fallbackChunks.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
+          searchContext = fallbackChunks.map(m => m.content).join("\n\n");
         } else {
           // Use the high-confidence vector matches
-          searchContext = matches.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
+          searchContext = matches.map(m => m.content).join("\n\n");
         }
       } catch (err) {
         console.error("Vector search error:", err);
@@ -162,21 +132,6 @@ ${formattedConversationHistory ? formattedConversationHistory : "No previous con
       model: google('gemini-3.1-flash-lite'),
       system: systemPrompt,
       messages: normalizedMessages,
-      async onFinish({ text }) {
-        if (workspaceId) {
-          try {
-            await prisma.message.create({
-              data: {
-                role: 'assistant',
-                text,
-                workspaceId
-              }
-            });
-          } catch (e) {
-            console.error("Failed to save assistant message:", e);
-          }
-        }
-      }
     });
 
     return result.toUIMessageStreamResponse();
