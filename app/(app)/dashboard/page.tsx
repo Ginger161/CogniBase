@@ -73,7 +73,7 @@ export default function DashboardPage() {
   const handleRetryMessage = () => {
     const lastUserMsg = messages.filter(m => m.role === 'user').pop();
     if (lastUserMsg) {
-      sendMessage({ content: lastUserMsg.content, role: 'user' });
+      sendMessage({ content: lastUserMsg.content });
     }
   };
 
@@ -83,7 +83,7 @@ export default function DashboardPage() {
 
   // Console state
   const [input, setInput] = useState('');
-  const { messages, setMessages, sendMessage, status, error } = useChat({
+  const { messages, setMessages, append: sendMessage, status, error, handleSubmit } = useChat({
     id: activeWorkspaceId || 'default',
     api: '/api/engine/query',
     initialMessages: [{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any],
