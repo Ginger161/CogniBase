@@ -22,7 +22,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     });
 
     // 2. Extract storage paths
-    const pathsToDelete = docs.map(doc => {
+    const pathsToDelete = docs.map((doc: any) => {
       const urlParts = doc.url.split('workspace-files/');
       return urlParts.length > 1 ? urlParts[1] : null;
     }).filter(Boolean) as string[];
