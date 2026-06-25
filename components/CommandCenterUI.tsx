@@ -79,7 +79,7 @@ onRetry
 const [mobileTab, setMobileTab] = useState<'chat' | 'studio'>('chat');
 const [isEditingTitle, setIsEditingTitle] = useState(false);
 const [tempTitle, setTempTitle] = useState(title);
-const [feedback, setFeedback] = useState<Record<number, 'like' | 'dislike'>>({});
+const [feedback, setFeedback] = useState<Record<number, 'like' | 'dislike' | undefined>>({});
 const [isExpanded, setIsExpanded] = useState(false);
 
 // Sync local title state if the prop changes

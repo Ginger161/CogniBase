@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const url = new URL(req.url);
     const urlWorkspaceId = url.searchParams.get('workspaceId');
     const urlSources = url.searchParams.get('sources');
-    const { messages, data, activeSources: bodyActiveSources, workspaceId: bodyWorkspaceId } = await req.json();
+    const { messages, data, activeSources: bodyActiveSources, workspaceId: bodyWorkspaceId, userProfile } = await req.json();
     
     // Fallback chain: data (freshest from append) -> body -> url -> fallback
     const workspaceId = data?.workspaceId || urlWorkspaceId || bodyWorkspaceId;

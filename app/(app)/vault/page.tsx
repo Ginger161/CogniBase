@@ -144,7 +144,7 @@ export default function DashboardPage() {
       try {
         const timetablesSnap = await getDoc(doc(db, 'timetables', context.uid));
         if (timetablesSnap.exists()) {
-          const fetchedClasses = timetablesSnap.data().scheduled_classes || [];
+          const fetchedClasses = (timetablesSnap.data() as any)?.scheduled_classes || [];
           const classesWithIds = fetchedClasses.map((c: any) => c.id ? c : { ...c, id: Date.now().toString(36) + Math.random().toString(36).substring(2) });
           setTimetables(classesWithIds);
         }
@@ -172,8 +172,8 @@ export default function DashboardPage() {
       try {
         const q = query(collection(db, 'chats'), where('userId', '==', context.uid));
         const chatSnap = await getDocs(q);
-        const chats = chatSnap.docs.map(d => ({ id: d.id, title: d.data().title, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
-        chats.sort((a, b) => b.updatedAt - a.updatedAt);
+        const chats = (chatSnap as any).docs.map((d: any) => ({ id: d.id, title: d.data().title, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
+        chats.sort((a: any, b: any) => b.updatedAt - a.updatedAt);
         setChatList(chats);
       } catch (error) {
         console.error("Error fetching chats:", error);
@@ -805,7 +805,7 @@ export default function DashboardPage() {
       const duplicateFiles: File[] = [];
 
       pendingFiles.forEach(file => {
-        const isDuplicate = existingFiles.some(ef => ef.fileName === file.name && ef.fileSize === file.size);
+        const isDuplicate = existingFiles.some((ef: any) => ef.fileName === file.name && ef.fileSize === file.size);
         if (isDuplicate) duplicateFiles.push(file);
         else newFilesToUpload.push(file);
       });
@@ -919,7 +919,7 @@ export default function DashboardPage() {
         return;
       }
 
-      const files = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const files = querySnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 
       // NEW: Sort files by newest first (reverse chronological)
       files.sort((a: any, b: any) => {
@@ -1008,8 +1008,8 @@ export default function DashboardPage() {
         const chatDoc = await getDoc(doc(db, 'chats', currentChatId));
         if (chatDoc.exists()) {
           const data = chatDoc.data();
-          if (data.messages && data.messages.length > 0) {
-            setMessages(data.messages);
+          if ((data as any).messages && (data as any).messages.length > 0) {
+            setMessages((data as any).messages);
           } else {
             setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
           }
