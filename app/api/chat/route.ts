@@ -39,8 +39,8 @@ export async function POST(req: Request) {
       const workspaceDocs = await prisma.document.findMany({
         where: { workspaceId }
       });
-      docNames = workspaceDocs.map(d => d.name).join(', ');
-      targetDocIds = workspaceDocs.map(d => d.id);
+      docNames = workspaceDocs.map((d: any) => d.name).join(', ');
+      targetDocIds = workspaceDocs.map((d: any) => d.id);
     }
 
     let searchContext = "";
