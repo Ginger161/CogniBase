@@ -35,7 +35,7 @@ async function run() {
         ALTER TABLE "DocumentChunk" ADD CONSTRAINT "DocumentChunk_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE CASCADE ON UPDATE CASCADE;
       `);
       console.log("Foreign key constraint added!");
-    } catch(e) {
+    } catch(e: any) {
       console.log("Constraint might already exist:", e.message);
     }
 

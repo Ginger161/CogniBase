@@ -60,15 +60,15 @@ export async function POST(req: Request) {
       const dbDocs = await prisma.document.findMany({
         where: { id: { in: explicitlyPassedDocIds } }
       });
-      docNames = dbDocs.map(d => d.name).join(', ');
-      targetDocIds = dbDocs.map(d => d.id);
+      docNames = dbDocs.map((d: any) => d.name).join(', ');
+      targetDocIds = dbDocs.map((d: any) => d.id);
     } else if (workspaceId) {
       // Fallback to fetching all workspace docs
       const workspaceDocs = await prisma.document.findMany({
         where: { workspaceId }
       });
-      docNames = workspaceDocs.map(d => d.name).join(', ');
-      targetDocIds = workspaceDocs.map(d => d.id);
+      docNames = workspaceDocs.map((d: any) => d.name).join(', ');
+      targetDocIds = workspaceDocs.map((d: any) => d.id);
     }
 
     let searchContext = "";
