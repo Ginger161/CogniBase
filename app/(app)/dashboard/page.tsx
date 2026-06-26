@@ -133,15 +133,25 @@ export default function DashboardPage() {
     id: activeWorkspaceId || 'default',
     api: '/api/engine/query',
     initialMessages: [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }] } as any],
-    body: {
-      activeSources: activeSources,
-      workspaceId: activeWorkspaceId,
-      userProfile: {
-        name: context?.name || 'Guest',
-        school: context?.school || '',
-        department: context?.department || '',
-        courses: context?.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
+    fetch: async (input, init) => {
+      if (init && init.body) {
+        try {
+          const parsedBody = JSON.parse(init.body as string);
+          // Inject LATEST React state into the request payload
+          parsedBody.workspaceId = activeWorkspaceId;
+          parsedBody.activeSources = activeSources;
+          parsedBody.userProfile = {
+            name: context?.name || 'Guest',
+            school: context?.school || '',
+            department: context?.department || '',
+            courses: context?.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
+          };
+          init.body = JSON.stringify(parsedBody);
+        } catch (e) {
+          console.error("Failed to intercept useChat fetch:", e);
+        }
       }
+      return fetch(input, init);
     }
   } as any);
   const isLoading = status === 'streaming' || status === 'submitted';
