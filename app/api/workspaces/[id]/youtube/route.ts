@@ -11,17 +11,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Missing or invalid URL" }, { status: 400 });
     }
 
-    // Extract video ID from URL for the name
-    const videoIdMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
-    const videoId = videoIdMatch ? videoIdMatch[1] : 'Unknown';
-    let name = `YouTube Video: ${videoId}`;
-
+    let name = "YouTube Video";
     try {
-      const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-      const oembedRes = await fetch(oembedUrl);
-      if (oembedRes.ok) {
-        const oembedData = await oembedRes.json();
-        if (oembedData.title) name = oembedData.title;
+      const oembed = await fetch('https://www.youtube.com/oembed?url=' + url + '&format=json');
+      const oembedData = await oembed.json();
+      if (oembedData.title) {
+        name = oembedData.title;
       }
     } catch (e) {
       console.warn("Failed to fetch YouTube title:", e);

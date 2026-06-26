@@ -84,27 +84,37 @@ export async function POST(req: Request) {
     // Prioritize activeSources (which are the files the user specifically clicked in their workspace UI)
     let docNames = "";
     let targetDocIds: string[] = [];
+    let fetchedDocs: any[] = [];
     
     // We prioritize explicit URL sources to bypass stale frontend body closures
     if (explicitlyPassedDocIds.length > 0) {
-      const dbDocs = await prisma.document.findMany({
+      fetchedDocs = await prisma.document.findMany({
         where: { 
           id: { in: explicitlyPassedDocIds },
           ...(workspaceId ? { workspaceId } : {}) // STRICT ISOLATION only if workspaceId exists
         }
       });
-      docNames = dbDocs.map((d: any) => d.name).join(', ');
-      targetDocIds = dbDocs.map((d: any) => d.id);
     } else if (workspaceId) {
       // Fallback to fetching all workspace docs
-      const workspaceDocs = await prisma.document.findMany({
+      fetchedDocs = await prisma.document.findMany({
         where: { workspaceId }
       });
-      docNames = workspaceDocs.map((d: any) => d.name).join(', ');
-      targetDocIds = workspaceDocs.map((d: any) => d.id);
     }
+    
+    docNames = fetchedDocs.map((d: any) => d.name).join(', ');
+    targetDocIds = fetchedDocs.map((d: any) => d.id);
 
     let searchContext = "";
+    
+    // Inject full textContent from any document that has it (e.g. YouTube transcripts)
+    const fullTextDocs = fetchedDocs
+      .filter((d: any) => d.textContent)
+      .map((d: any) => `[Full Text - ${d.name}]\n${d.textContent}`)
+      .join("\n\n---\n\n");
+      
+    if (fullTextDocs) {
+      searchContext += fullTextDocs + "\n\n---\n\n";
+    }
 
     // 2. pgvector similarity search
     if (targetDocIds.length > 0 && userQueryText.trim().length > 0) {
@@ -146,10 +156,10 @@ export async function POST(req: Request) {
             JOIN "Document" d ON sub."documentId" = d."id"
             WHERE sub.rn <= 3
           `);
-          searchContext = fallbackChunks.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
+          searchContext += fallbackChunks.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
         } else {
           // Use the high-confidence vector matches
-          searchContext = matches.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
+          searchContext += matches.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
         }
       } catch (err) {
         console.error("Vector search error:", err);
