@@ -108,7 +108,18 @@ export default function DashboardPage() {
     const lastUserMsg = messages.filter(m => m.role === 'user').pop();
     if (lastUserMsg) {
       const msgText = lastUserMsg.parts ? lastUserMsg.parts.filter(p => p.type === 'text').map(p => (p as any).text).join('\n') : (lastUserMsg as any).text || (lastUserMsg as any).content || '';
-      sendMessage({ role: 'user', parts: [{ type: 'text', text: msgText }] } as any);
+      sendMessage({ role: 'user', parts: [{ type: 'text', text: msgText }] } as any, {
+        body: {
+          activeSources,
+          workspaceId: activeWorkspaceId,
+          userProfile: {
+            name: context?.name || 'Guest',
+            school: context?.school || '',
+            department: context?.department || '',
+            courses: context?.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
+          }
+        }
+      });
     }
   };
 
@@ -614,7 +625,18 @@ export default function DashboardPage() {
       return;
     }
 
-    sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any);
+    sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any, {
+      body: {
+        activeSources,
+        workspaceId: activeWorkspaceId,
+        userProfile: {
+          name: context?.name || 'Guest',
+          school: context?.school || '',
+          department: context?.department || '',
+          courses: context?.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
+        }
+      }
+    });
     setInput('');
   };
 
@@ -829,7 +851,18 @@ export default function DashboardPage() {
                 setChatInput={setInput}
                 onSendMessage={() => {
                   if (!input.trim() || isLoading) return;
-                  sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any);
+                  sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any, {
+                    body: {
+                      activeSources,
+                      workspaceId: activeWorkspaceId,
+                      userProfile: {
+                        name: context?.name || 'Guest',
+                        school: context?.school || '',
+                        department: context?.department || '',
+                        courses: context?.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
+                      }
+                    }
+                  });
                   setInput('');
                 }}
                 isChatLoading={isLoading}
