@@ -113,10 +113,10 @@ export default function DashboardPage() {
           activeSources,
           workspaceId: activeWorkspaceId,
           userProfile: {
-            name: context?.name || 'Guest',
-            school: context?.school || '',
-            department: context?.department || '',
-            courses: context?.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
+            name: userData.name,
+            school: userData.school,
+            department: userData.department,
+            courses: userData.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
           }
         }
       });
@@ -129,40 +129,13 @@ export default function DashboardPage() {
 
   // Console state
   const [input, setInput] = useState('');
-  // Refs to prevent stale closures in useChat's fetch interceptor
-  const workspaceIdRef = useRef(activeWorkspaceId);
-  const activeSourcesRef = useRef(activeSources);
-  useEffect(() => {
-    workspaceIdRef.current = activeWorkspaceId;
-    activeSourcesRef.current = activeSources;
-  }, [activeWorkspaceId, activeSources]);
 
   const { messages, setMessages, sendMessage, status, error } = useChat({
     id: activeWorkspaceId || 'default',
     api: '/api/engine/query',
     initialMessages: [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }] } as any],
-    onError: (err) => {
+    onError: (err: Error) => {
       console.error("Caught Backend Error:", err.message);
-    },
-    fetch: async (input, init) => {
-      if (init && init.body) {
-        try {
-          const parsedBody = JSON.parse(init.body as string);
-          // Inject LATEST React state via refs into the request payload
-          parsedBody.workspaceId = workspaceIdRef.current;
-          parsedBody.activeSources = activeSourcesRef.current;
-          parsedBody.userProfile = {
-            name: context?.name || 'Guest',
-            school: context?.school || '',
-            department: context?.department || '',
-            courses: context?.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
-          };
-          init.body = JSON.stringify(parsedBody);
-        } catch (e) {
-          console.error("Failed to intercept useChat fetch:", e);
-        }
-      }
-      return fetch(input, init);
     }
   } as any);
   const isLoading = status === 'streaming' || status === 'submitted';
@@ -874,7 +847,7 @@ export default function DashboardPage() {
                 onSendMessage={() => {
                   if (!input.trim() || isLoading) return;
                   console.log('🚀 Sending to backend - Workspace ID:', activeWorkspaceId, 'Sources attached:', activeSources);
-    sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any, {
+                  sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any, {
                     body: {
                       activeSources,
                       workspaceId: activeWorkspaceId,

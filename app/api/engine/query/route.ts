@@ -100,10 +100,6 @@ export async function POST(req: Request) {
         where: { workspaceId }
       });
     }
-
-    if (!fetchedDocs || fetchedDocs.length === 0) {
-      return NextResponse.json({ error: "DEBUG_HALT: Backend received Workspace ID: " + workspaceId + ", but found 0 documents in the database." }, { status: 400 });
-    }
     
     docNames = fetchedDocs.map((d: any) => d.name).join(', ');
     targetDocIds = fetchedDocs.map((d: any) => d.id);
