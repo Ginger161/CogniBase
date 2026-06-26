@@ -201,6 +201,8 @@ ${searchContext ? searchContext : "No relevant content found in the files for th
 ${formattedConversationHistory ? formattedConversationHistory : "No previous conversation history."}`;
 
     // 5. Stream response using Vercel AI SDK
+    console.log("🧠 AI System Prompt Length:", searchContext.length, "| First 100 chars:", searchContext.substring(0, 100));
+    
     const result = streamText({
       model: google('gemini-3.1-flash-lite'),
       system: systemPrompt,
