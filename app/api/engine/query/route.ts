@@ -3,6 +3,8 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY || '',
@@ -17,10 +19,34 @@ export async function POST(req: Request) {
     const urlSources = url.searchParams.get('sources');
     const { messages, data, activeSources: bodyActiveSources, workspaceId: bodyWorkspaceId, userProfile } = await req.json();
     
-    // Fallback chain: data (freshest from append) -> body -> url -> fallback
     const workspaceId = data?.workspaceId || urlWorkspaceId || bodyWorkspaceId;
-    if (!workspaceId) {
-      return new Response(JSON.stringify({ error: "Unauthorized: Missing workspaceId" }), { status: 401 });
+
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch {
+              // Ignore in route handlers
+            }
+          },
+        },
+      }
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Please log in." }), { status: 401 });
     }
 
     const explicitlyPassedDocIds = (data?.activeSources || bodyActiveSources || []).map((s: any) => s.id).filter(Boolean);
@@ -64,7 +90,7 @@ export async function POST(req: Request) {
       const dbDocs = await prisma.document.findMany({
         where: { 
           id: { in: explicitlyPassedDocIds },
-          workspaceId: workspaceId // STRICT ISOLATION
+          ...(workspaceId ? { workspaceId } : {}) // STRICT ISOLATION only if workspaceId exists
         }
       });
       docNames = dbDocs.map((d: any) => d.name).join(', ');
@@ -98,7 +124,7 @@ export async function POST(req: Request) {
           SELECT c."content", d."name" as "documentName", 1 - (c."embedding" <=> $1::vector) as similarity
           FROM "DocumentChunk" c
           JOIN "Document" d ON c."documentId" = d."id"
-          WHERE c."documentId" IN (${docIdsParam}) AND d."workspaceId" = '${workspaceId}'
+          WHERE c."documentId" IN (${docIdsParam}) ${workspaceId ? `AND d."workspaceId" = '${workspaceId}'` : ''}
           ORDER BY c."embedding" <=> $1::vector
           LIMIT 20
         `, `[${queryEmbedding.join(',')}]`);

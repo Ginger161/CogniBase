@@ -156,9 +156,9 @@ return (
     
     {/* Chips */}
     <div className="flex flex-wrap items-center gap-3">
-      {(isExpanded ? activeSources : activeSources.slice(0, 3)).map((source, idx) => (
+      {(isExpanded ? activeSources : activeSources.slice(0, 3)).map((source: any, idx) => (
         <div key={source.id || idx} className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-gray-200 text-sm rounded-lg border border-gray-700 shadow-sm">
-          <span className="truncate max-w-[200px]">{source.title}</span>
+          <span className="truncate max-w-[200px]">{source.title || source.name || source.url || 'Untitled Document'}</span>
           <button onClick={() => onRemoveSource(source.id)} className="text-gray-500 hover:text-white">✕</button>
         </div>
       ))}
@@ -250,30 +250,33 @@ return (
           </div>
         ) : (
           chatMessages.map((msg, i) => (
-            <div key={i} className={`group relative rounded-lg p-3 text-sm w-fit max-w-[85%] break-words ${msg.role === 'user' ? 'bg-orange-900/30 border border-orange-800/50 ml-auto text-white' : 'bg-gray-900 border border-gray-800 text-gray-300'}`}>
-              <div className="prose prose-invert max-w-none text-sm leading-relaxed prose-p:leading-relaxed prose-pre:bg-black prose-pre:border prose-pre:border-gray-800">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {msg.text}
-                </ReactMarkdown>
+            <div key={i} className={`group flex flex-col ${msg.role === 'user' ? 'items-end ml-auto' : 'items-start'} max-w-[85%] w-fit`}>
+              {/* Message Bubble */}
+              <div className={`relative rounded-lg p-3 text-sm break-words w-full ${msg.role === 'user' ? 'bg-orange-900/30 border border-orange-800/50 text-white' : 'bg-gray-900 border border-gray-800 text-gray-300'}`}>
+                <div className="prose prose-invert max-w-none text-sm leading-relaxed prose-p:leading-relaxed prose-pre:bg-black prose-pre:border prose-pre:border-gray-800">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.text}
+                  </ReactMarkdown>
+                </div>
               </div>
 
-              {/* Hover Action Bar */}
-              <div className={`absolute ${msg.role === 'user' ? '-bottom-3 right-0' : '-bottom-3 left-0'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-black/80 backdrop-blur-sm p-1 rounded-md border border-gray-700 flex gap-1 z-10 shadow-lg`}>
+              {/* Action Bar (underneath) */}
+              <div className={`flex gap-2 mt-1 text-sm text-gray-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}>
                 {msg.role === 'user' ? (
-                  <button onClick={() => setChatInput && setChatInput(msg.text)} className="p-1.5 hover:bg-gray-800 rounded transition-colors" title="Edit Message">
-                    <Pencil className="w-4 h-4 text-gray-400 hover:text-white" />
+                  <button onClick={() => setChatInput && setChatInput(msg.text)} className="p-1 hover:text-white transition-colors" title="Edit Message">
+                    <Pencil className="w-3.5 h-3.5" />
                   </button>
                 ) : (
                   <>
-                    <button onClick={() => setFeedback(prev => ({...prev, [i]: prev[i] === 'like' ? undefined : 'like'}))} className="p-1.5 hover:bg-gray-800 rounded transition-colors" title="Helpful">
-                      <ThumbsUp className={`w-4 h-4 ${feedback[i] === 'like' ? 'text-green-500' : 'text-gray-400 hover:text-white'}`} />
+                    <button onClick={() => setFeedback(prev => ({...prev, [i]: prev[i] === 'like' ? undefined : 'like'}))} className="p-1 hover:text-white transition-colors" title="Helpful">
+                      <ThumbsUp className={`w-3.5 h-3.5 ${feedback[i] === 'like' ? 'text-green-500' : ''}`} />
                     </button>
-                    <button onClick={() => setFeedback(prev => ({...prev, [i]: prev[i] === 'dislike' ? undefined : 'dislike'}))} className="p-1.5 hover:bg-gray-800 rounded transition-colors" title="Not Helpful">
-                      <ThumbsDown className={`w-4 h-4 ${feedback[i] === 'dislike' ? 'text-red-500' : 'text-gray-400 hover:text-white'}`} />
+                    <button onClick={() => setFeedback(prev => ({...prev, [i]: prev[i] === 'dislike' ? undefined : 'dislike'}))} className="p-1 hover:text-white transition-colors" title="Not Helpful">
+                      <ThumbsDown className={`w-3.5 h-3.5 ${feedback[i] === 'dislike' ? 'text-red-500' : ''}`} />
                     </button>
                     {onRetry && i === chatMessages.length - 1 && (
-                      <button onClick={onRetry} className="p-1.5 hover:bg-gray-800 rounded transition-colors" title="Retry Generation">
-                        <RefreshCcw className="w-4 h-4 text-gray-400 hover:text-white" />
+                      <button onClick={onRetry} className="p-1 hover:text-white transition-colors" title="Retry Generation">
+                        <RefreshCcw className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </>
