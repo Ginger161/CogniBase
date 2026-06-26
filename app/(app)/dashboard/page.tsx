@@ -141,6 +141,9 @@ export default function DashboardPage() {
     id: activeWorkspaceId || 'default',
     api: '/api/engine/query',
     initialMessages: [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }] } as any],
+    onError: (err) => {
+      console.error("Caught Backend Error:", err.message);
+    },
     fetch: async (input, init) => {
       if (init && init.body) {
         try {
@@ -643,6 +646,7 @@ export default function DashboardPage() {
       return;
     }
 
+    console.log('🚀 Sending to backend - Workspace ID:', activeWorkspaceId, 'Sources attached:', activeSources);
     sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any, {
       body: {
         activeSources,
@@ -869,7 +873,8 @@ export default function DashboardPage() {
                 setChatInput={setInput}
                 onSendMessage={() => {
                   if (!input.trim() || isLoading) return;
-                  sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any, {
+                  console.log('🚀 Sending to backend - Workspace ID:', activeWorkspaceId, 'Sources attached:', activeSources);
+    sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] } as any, {
                     body: {
                       activeSources,
                       workspaceId: activeWorkspaceId,
