@@ -129,6 +129,14 @@ export default function DashboardPage() {
 
   // Console state
   const [input, setInput] = useState('');
+  // Refs to prevent stale closures in useChat's fetch interceptor
+  const workspaceIdRef = useRef(activeWorkspaceId);
+  const activeSourcesRef = useRef(activeSources);
+  useEffect(() => {
+    workspaceIdRef.current = activeWorkspaceId;
+    activeSourcesRef.current = activeSources;
+  }, [activeWorkspaceId, activeSources]);
+
   const { messages, setMessages, sendMessage, status, error } = useChat({
     id: activeWorkspaceId || 'default',
     api: '/api/engine/query',
@@ -137,9 +145,9 @@ export default function DashboardPage() {
       if (init && init.body) {
         try {
           const parsedBody = JSON.parse(init.body as string);
-          // Inject LATEST React state into the request payload
-          parsedBody.workspaceId = activeWorkspaceId;
-          parsedBody.activeSources = activeSources;
+          // Inject LATEST React state via refs into the request payload
+          parsedBody.workspaceId = workspaceIdRef.current;
+          parsedBody.activeSources = activeSourcesRef.current;
           parsedBody.userProfile = {
             name: context?.name || 'Guest',
             school: context?.school || '',

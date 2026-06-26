@@ -33,6 +33,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const transcriptText = transcriptItems.map(item => item.text).join(' ');
+    console.log("Saved transcript length:", transcriptText.length);
 
     // Save to the database
     const newDoc = await prisma.document.create({
