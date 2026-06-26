@@ -19,6 +19,10 @@ export async function POST(req: Request) {
     
     // Fallback chain: data (freshest from append) -> body -> url -> fallback
     const workspaceId = data?.workspaceId || urlWorkspaceId || bodyWorkspaceId;
+    if (!workspaceId) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Missing workspaceId" }), { status: 401 });
+    }
+
     const explicitlyPassedDocIds = (data?.activeSources || bodyActiveSources || []).map((s: any) => s.id).filter(Boolean);
     if (explicitlyPassedDocIds.length === 0 && urlSources) {
       explicitlyPassedDocIds.push(...urlSources.split(',').filter(Boolean));
@@ -58,7 +62,10 @@ export async function POST(req: Request) {
     // We prioritize explicit URL sources to bypass stale frontend body closures
     if (explicitlyPassedDocIds.length > 0) {
       const dbDocs = await prisma.document.findMany({
-        where: { id: { in: explicitlyPassedDocIds } }
+        where: { 
+          id: { in: explicitlyPassedDocIds },
+          workspaceId: workspaceId // STRICT ISOLATION
+        }
       });
       docNames = dbDocs.map((d: any) => d.name).join(', ');
       targetDocIds = dbDocs.map((d: any) => d.id);
@@ -91,7 +98,7 @@ export async function POST(req: Request) {
           SELECT c."content", d."name" as "documentName", 1 - (c."embedding" <=> $1::vector) as similarity
           FROM "DocumentChunk" c
           JOIN "Document" d ON c."documentId" = d."id"
-          WHERE c."documentId" IN (${docIdsParam})
+          WHERE c."documentId" IN (${docIdsParam}) AND d."workspaceId" = '${workspaceId}'
           ORDER BY c."embedding" <=> $1::vector
           LIMIT 20
         `, `[${queryEmbedding.join(',')}]`);

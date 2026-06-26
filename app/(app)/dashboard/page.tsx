@@ -53,6 +53,40 @@ export default function DashboardPage() {
     setActiveDropdownId(null);
   };
 
+  const handleYouTubeSubmit = async (url: string) => {
+    if (!activeWorkspaceId) {
+      throw new Error("Please select or create a desk first.");
+    }
+    
+    const res = await fetch(`/api/workspaces/${activeWorkspaceId}/youtube`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Failed to extract YouTube transcript");
+    }
+    
+    const newDoc = await res.json();
+    
+    // Update local state
+    setActiveSources(prev => [...prev, { id: newDoc.id, title: newDoc.name, type: 'youtube', content: '' }]);
+    
+    // Optionally trigger backend analysis asynchronously 
+    fetch('/api/engine/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentId: newDoc.id })
+    }).catch(console.error);
+
+    // We don't have to await fetchWorkspaces since state is already updated, but we can do it to sync
+    if (typeof fetchWorkspaces === 'function') {
+      fetchWorkspaces();
+    }
+  };
+
   const submitDeskRename = async (id: string) => {
     if (!editingDeskTitle.trim()) return;
     try {
@@ -788,6 +822,7 @@ export default function DashboardPage() {
                   setActiveWorkspaceName("Untitled Workspace"); 
                   setMessages([{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any]);
                 }}
+                onYouTubeSubmit={handleYouTubeSubmit}
                 onRetry={handleRetryMessage}
                 chatMessages={messages.map(m => ({ role: m.role, text: m.parts ? m.parts.map(p => (p as any).text).join('') : (m as any).content || '' }))}
                 chatInput={input}

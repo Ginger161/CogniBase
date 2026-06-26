@@ -12,7 +12,11 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
-    const { messages, activeSources, userProfile } = await req.json();
+    const { messages, activeSources, userProfile, workspaceId } = await req.json();
+
+    if (!workspaceId) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Missing workspaceId" }), { status: 401 });
+    }
 
     if (!messages || messages.length === 0) {
       return new Response(JSON.stringify({ error: "Missing messages." }), { status: 400 });
@@ -31,11 +35,14 @@ export async function POST(req: Request) {
     let targetDocIds: string[] = [];
     
     if (activeSources && activeSources.length > 0) {
-      docNames = activeSources.map((d: any) => d.title || d.name).join(', ');
-      targetDocIds = activeSources.map((d: any) => d.id).filter(Boolean);
+      const activeIds = activeSources.map((d: any) => d.id).filter(Boolean);
+      const dbDocs = await prisma.document.findMany({
+        where: { id: { in: activeIds }, workspaceId: workspaceId }
+      });
+      docNames = dbDocs.map((d: any) => d.name || d.title).join(', ');
+      targetDocIds = dbDocs.map((d: any) => d.id);
     } else {
-      // Fallback to fetching all workspace docs if no active sources were provided
-      const workspaceId = 'global-vault-001'; 
+      // Fallback to fetching all workspace docs
       const workspaceDocs = await prisma.document.findMany({
         where: { workspaceId }
       });
@@ -55,16 +62,15 @@ export async function POST(req: Request) {
           queryEmbedding = queryEmbedding.slice(0, 768);
         }
 
-        // Use Prisma raw query to search vectors, scoped to the active document IDs
         const docIdsParam = targetDocIds.map(id => `'${id}'`).join(',');
         
-        // Execute pgvector search
         const matches: any[] = await prisma.$queryRawUnsafe(`
-          SELECT "content", 1 - ("embedding" <=> $1::vector) as similarity
-          FROM "DocumentChunk"
-          WHERE "documentId" IN (${docIdsParam})
-          ORDER BY "embedding" <=> $1::vector
-          LIMIT 5
+          SELECT c."content", d."name" as "documentName", 1 - (c."embedding" <=> $1::vector) as similarity
+          FROM "DocumentChunk" c
+          JOIN "Document" d ON c."documentId" = d."id"
+          WHERE c."documentId" IN (${docIdsParam}) AND d."workspaceId" = '${workspaceId}'
+          ORDER BY c."embedding" <=> $1::vector
+          LIMIT 20
         `, `[${queryEmbedding.join(',')}]`);
 
         // 3. Build a Meta-Query Fallback

@@ -36,6 +36,7 @@ isAssimilating?: boolean;
 assimilationStatus?: string;
 chatError?: any;
 onRetry?: () => void;
+onYouTubeSubmit?: (url: string) => Promise<void>;
 }
 
 const getFriendlyErrorMessage = (error: any) => {
@@ -73,7 +74,8 @@ isChatLoading = false,
 isAssimilating = false,
 assimilationStatus = "",
 chatError = null,
-onRetry
+onRetry,
+onYouTubeSubmit
 }: CommandCenterUIProps) {
 // UI States
 const [mobileTab, setMobileTab] = useState<'chat' | 'studio'>('chat');
@@ -81,6 +83,37 @@ const [isEditingTitle, setIsEditingTitle] = useState(false);
 const [tempTitle, setTempTitle] = useState(title);
 const [feedback, setFeedback] = useState<Record<number, 'like' | 'dislike' | undefined>>({});
 const [isExpanded, setIsExpanded] = useState(false);
+const [youtubeUrl, setYoutubeUrl] = useState("");
+const [isYoutubeLoading, setIsYoutubeLoading] = useState(false);
+const [youtubeLoadingText, setYoutubeLoadingText] = useState(">_ Bypassing mainframe... scraping captions [     ]");
+const [youtubeError, setYoutubeError] = useState<string | null>(null);
+
+const handleYouTubeSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!youtubeUrl.trim() || !onYouTubeSubmit) return;
+  
+  setIsYoutubeLoading(true);
+  setYoutubeError(null);
+  
+  let dots = 0;
+  const interval = setInterval(() => {
+    dots = (dots + 1) % 6;
+    const progress = "=".repeat(dots) + " ".repeat(5 - dots);
+    setYoutubeLoadingText(`>_ Bypassing mainframe... scraping captions [${progress}]`);
+  }, 200);
+
+  try {
+    await onYouTubeSubmit(youtubeUrl.trim());
+    setYoutubeUrl("");
+  } catch (error: any) {
+    console.error("YouTube extract error:", error);
+    setYoutubeError(`>_ ERROR: ${error.message}`);
+  } finally {
+    clearInterval(interval);
+    setIsYoutubeLoading(false);
+  }
+};
+
 
 // Sync local title state if the prop changes
 useEffect(() => {
@@ -148,6 +181,41 @@ return (
         </button>
       )}
     </div>
+
+    {/* YouTube CLI Input */}
+    {onYouTubeSubmit && (
+      <form onSubmit={handleYouTubeSubmit} className="mt-4 flex items-center gap-2 bg-black border border-gray-700 rounded-md p-2 w-full max-w-2xl shadow-inner">
+        <span className="text-orange-500 font-mono text-sm pl-2 select-none">&gt;_</span>
+        <input
+          type="text"
+          value={youtubeUrl}
+          onChange={(e) => setYoutubeUrl(e.target.value)}
+          placeholder="Enter YouTube URL to extract..."
+          disabled={isYoutubeLoading}
+          className="flex-1 bg-transparent border-none outline-none text-gray-200 font-mono text-sm px-2 focus:ring-0 placeholder-gray-600 disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={isYoutubeLoading || !youtubeUrl.trim()}
+          className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-orange-500 font-mono text-xs px-4 py-1.5 rounded transition-colors border border-gray-700 font-bold tracking-widest uppercase"
+        >
+          {isYoutubeLoading ? 'SYNCING...' : 'EXECUTE'}
+        </button>
+      </form>
+    )}
+    
+    {isYoutubeLoading && (
+      <div className="mt-2 text-green-500 font-mono text-xs animate-pulse">
+        {youtubeLoadingText}
+      </div>
+    )}
+
+    {youtubeError && !isYoutubeLoading && (
+      <div className="mt-2 text-red-500 font-mono text-xs">
+        {youtubeError}
+      </div>
+    )}
+
   </div>
 
   {/* Mobile Tab Toggle (Visible only on mobile) */}
@@ -190,7 +258,7 @@ return (
               </div>
 
               {/* Hover Action Bar */}
-              <div className={`absolute ${msg.role === 'user' ? '-bottom-3 right-0' : '-bottom-3 left-0'} opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 backdrop-blur-sm p-1 rounded-md border border-gray-700 flex gap-1 z-10 shadow-lg`}>
+              <div className={`absolute ${msg.role === 'user' ? '-bottom-3 right-0' : '-bottom-3 left-0'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-black/80 backdrop-blur-sm p-1 rounded-md border border-gray-700 flex gap-1 z-10 shadow-lg`}>
                 {msg.role === 'user' ? (
                   <button onClick={() => setChatInput && setChatInput(msg.text)} className="p-1.5 hover:bg-gray-800 rounded transition-colors" title="Edit Message">
                     <Pencil className="w-4 h-4 text-gray-400 hover:text-white" />
