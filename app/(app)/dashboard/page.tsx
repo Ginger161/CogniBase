@@ -330,6 +330,39 @@ export default function DashboardPage() {
       const res = await fetch(`/api/workspaces${context?.uid ? `?userId=${context.uid}` : ''}`);
       const ws = await res.json();
       setWorkspaces(ws);
+      
+      // Auto-Create or Fetch Workspace on Mount if activeWorkspaceId is null
+      if (!activeWorkspaceId) {
+        // Fetch the absolute most recent workspace including empty ones
+        const initRes = await fetch(`/api/workspaces?includeEmpty=true${context?.uid ? `&userId=${context.uid}` : ''}`);
+        const initWs = await initRes.json();
+        
+        if (initWs && initWs.length > 0) {
+          handleSelectWorkspace(initWs[0]);
+          // Add it to the sidebar list if it's not already there
+          if (!ws.find((w: any) => w.id === initWs[0].id)) {
+            setWorkspaces([initWs[0], ...ws]);
+          }
+        } else {
+          // No workspaces exist at all, create a new default workspace
+          try {
+            const createRes = await fetch('/api/workspaces', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: context?.uid || null, userEmail: context?.email || 'guest@example.com' })
+            });
+            if (createRes.ok) {
+              const newWs = await createRes.json();
+              if (newWs && newWs.id) {
+                setWorkspaces([newWs, ...ws]);
+                handleSelectWorkspace(newWs);
+              }
+            }
+          } catch (createErr) {
+            console.error("Failed to auto-create workspace", createErr);
+          }
+        }
+      }
     } catch (e) { 
       console.error(e) 
     } finally {
@@ -866,6 +899,7 @@ export default function DashboardPage() {
                 assimilationStatus={assimilationStatus}
                 onUpdateTitle={setActiveWorkspaceName}
                 chatError={error}
+                isWorkspaceReady={!!activeWorkspaceId}
               />
             )}
           </div>

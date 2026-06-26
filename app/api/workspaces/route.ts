@@ -5,13 +5,19 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
+    const includeEmpty = searchParams.get('includeEmpty') === 'true';
+
+    const whereClause: any = {
+      userId: userId ? userId : null,
+      id: { not: 'global-vault-001' }
+    };
+
+    if (!includeEmpty) {
+      whereClause.documents = { some: {} };
+    }
 
     const workspaces = await prisma.workspace.findMany({
-      where: {
-        userId: userId ? userId : null,
-        id: { not: 'global-vault-001' },
-        documents: { some: {} }
-      },
+      where: whereClause,
       include: {
         documents: {
           select: { id: true, name: true }

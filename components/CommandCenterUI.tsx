@@ -37,6 +37,7 @@ assimilationStatus?: string;
 chatError?: any;
 onRetry?: () => void;
 onYouTubeSubmit?: (url: string) => Promise<void>;
+isWorkspaceReady?: boolean;
 }
 
 const getFriendlyErrorMessage = (error: any) => {
@@ -75,7 +76,8 @@ isAssimilating = false,
 assimilationStatus = "",
 chatError = null,
 onRetry,
-onYouTubeSubmit
+onYouTubeSubmit,
+isWorkspaceReady = true
 }: CommandCenterUIProps) {
 // UI States
 const [mobileTab, setMobileTab] = useState<'chat' | 'studio'>('chat');
@@ -190,13 +192,13 @@ return (
           type="text"
           value={youtubeUrl}
           onChange={(e) => setYoutubeUrl(e.target.value)}
-          placeholder="Enter YouTube URL to extract..."
-          disabled={isYoutubeLoading}
+          placeholder={isWorkspaceReady ? "Enter YouTube URL to extract..." : "Initializing workspace..."}
+          disabled={isYoutubeLoading || !isWorkspaceReady}
           className="flex-1 bg-transparent border-none outline-none text-gray-200 font-mono text-sm px-2 focus:ring-0 placeholder-gray-600 disabled:opacity-50"
         />
         <button
           type="submit"
-          disabled={isYoutubeLoading || !youtubeUrl.trim()}
+          disabled={isYoutubeLoading || !youtubeUrl.trim() || !isWorkspaceReady}
           className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-orange-500 font-mono text-xs px-4 py-1.5 rounded transition-colors border border-gray-700 font-bold tracking-widest uppercase"
         >
           {isYoutubeLoading ? 'SYNCING...' : 'EXECUTE'}
@@ -319,6 +321,7 @@ return (
             <textarea
               id="chat-textarea"
               value={chatInput}
+              disabled={!isWorkspaceReady}
               onChange={(e) => {
                 setChatInput(e.target.value);
                 e.target.style.height = 'auto';
@@ -331,18 +334,19 @@ return (
                   e.currentTarget.style.height = 'auto';
                 }
               }}
-              placeholder="Ask a question..." 
+              placeholder={isWorkspaceReady ? "Ask a question..." : "Initializing workspace..."} 
               rows={1}
-              className="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500 resize-none overflow-y-auto"
+              className="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500 resize-none overflow-y-auto disabled:opacity-50"
               style={{ minHeight: '46px', maxHeight: '150px' }}
             />
             <button 
+              disabled={!isWorkspaceReady}
               onClick={() => {
                 onSendMessage();
                 const el = document.getElementById('chat-textarea');
                 if (el) el.style.height = 'auto';
               }} 
-              className="shrink-0 bg-orange-600 hover:bg-orange-500 text-white rounded-lg px-4 py-3 flex items-center justify-center transition-colors"
+              className="shrink-0 bg-orange-600 hover:bg-orange-500 disabled:bg-gray-700 disabled:text-gray-400 text-white rounded-lg px-4 py-3 flex items-center justify-center transition-colors"
             >
               ➔
             </button>
