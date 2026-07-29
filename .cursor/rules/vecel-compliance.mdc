@@ -1,0 +1,11 @@
+---
+description: "Strict code requirements to ensure flawless Vercel deployments and Next.js build compliance"
+alwaysApply: true
+---
+
+**Strict Vercel & Next.js Deployment Requirements:**
+- **Zero Build Warnings:** Code must be written to pass a strict `npm run build` without triggering ESLint or TypeScript compiler errors. 
+- **No Unused Variables:** Do not leave unused imports, variables, or console logs in the final component code. If a variable is required but temporarily unused, prefix it with an underscore (e.g., `_unusedVar`) or remove it entirely.
+- **Strict TypeScript:** Avoid using `any` types unless absolutely necessary. Define proper interfaces or types for API responses, component props, and JSON payloads.
+- **Client/Server Component Rules:** Strictly maintain the boundary between Server and Client components. Ensure `"use client";` is present on any file using React hooks (`useState`, `useEffect`, `useRef`) or browser APIs (like `window` or `document`).
+- **Safe Async Handling:** API route handlers (`route.ts`) must properly await all asynchronous operations and return standard Next.js `NextResponse` objects. Never leave dangling promises that can crash serverless functions.

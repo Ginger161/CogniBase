@@ -1,17 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createClient } from '@/utils/supabase/server';
+import { ensurePrismaUser } from '@/lib/auth-sync';
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
     
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    await ensurePrismaUser(user);
+
     const studyGuides = await prisma.studyGuide.findMany({
-      where: { userId },
+      where: { userId: user.id },
       orderBy: { createdAt: 'desc' }
     });
 
@@ -25,15 +29,25 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { userId, sourceDocumentId, sourceDocumentName, sectionConstraint, markdownContent } = await req.json();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await ensurePrismaUser(user);
+
+    const { sourceDocumentId, sourceDocumentName, sectionConstraint, markdownContent, strategyData } = await req.json();
 
     const newGuide = await prisma.studyGuide.create({
       data: {
-        userId,
+        userId: user.id,
         sourceDocumentId,
         sourceDocumentName,
         sectionConstraint,
-        markdownContent
+        markdownContent,
+        strategyData
       }
     });
 

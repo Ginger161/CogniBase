@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireUser } from '@/lib/api-auth';
 
 export async function GET(req: Request) {
   try {
+    const { user, response } = await requireUser();
+    if (!user) return response;
+
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
     const includeEmpty = searchParams.get('includeEmpty') === 'true';
 
     const whereClause: any = {
-      userId: userId ? userId : null,
-      id: { not: 'global-vault-001' }
+      userId: user.id
     };
 
     if (!includeEmpty) {
@@ -36,43 +38,13 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { userId, userEmail } = await req.json();
-
-    let validUserId = null;
-    if (userId) {
-      let uEmail = userEmail;
-      if (!uEmail || uEmail === 'guest@example.com') {
-        uEmail = `guest_${userId}@example.com`;
-      }
-      try {
-        await prisma.user.upsert({
-          where: { id: userId },
-          update: {},
-          create: { id: userId, email: uEmail }
-        });
-        validUserId = userId;
-      } catch (upsertError) {
-        console.error("Failed to upsert user with email, trying fallback:", upsertError);
-        try {
-          // If unique constraint fails, forcefully create with unique email
-          await prisma.user.upsert({
-            where: { id: userId },
-            update: {},
-            create: { id: userId, email: `${userId}_${uEmail}` }
-          });
-          validUserId = userId;
-        } catch(fallbackError) {
-          console.error("Critical failure upserting user:", fallbackError);
-          // Only if absolutely everything fails do we fallback to null
-          validUserId = null;
-        }
-      }
-    }
+    const { user, response } = await requireUser();
+    if (!user) return response;
 
     const newWorkspace = await prisma.workspace.create({
       data: {
         title: 'Untitled workspace',
-        userId: validUserId
+        userId: user.id
       }
     });
 

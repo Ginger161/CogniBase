@@ -7,9 +7,11 @@ import { usePullToRefresh } from '../lib/hooks/usePullToRefresh';
 export default function PullToRefresh({
   children,
   onRefresh,
+  disablePageScroll = false,
 }: {
   children: React.ReactNode;
   onRefresh: () => Promise<void>;
+  disablePageScroll?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -31,7 +33,7 @@ export default function PullToRefresh({
       <motion.div
         animate={{ y: isRefreshing ? threshold : pullDistance }}
         transition={{ type: 'spring', stiffness: 300, damping: 30, mass: 1 }}
-        className="min-h-full relative w-full"
+        className={disablePageScroll ? "h-full relative w-full overflow-hidden" : "min-h-full relative w-full"}
       >
         {/* Terminal UI Wrapper - Placed visually above the content */}
         <div 

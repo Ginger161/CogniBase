@@ -1,0 +1,9 @@
+---
+description: "Strict anti-hallucination guardrails for API errors and assumptions"
+alwaysApply: true
+---
+
+**Strict Guardrails:**
+- **Never Hallucinate Fixes:** If you encounter an API error (like a 503 or 500), do NOT invent or suggest undocumented model names, API keys, or fake libraries to bypass it.
+- **No Assumptions:** If a problem is ambiguous or missing context, you must stop and ask me for clarification instead of guessing or making assumptions.
+- **Verify Context:** Always verify information against the existing codebase before proposing a structural change.

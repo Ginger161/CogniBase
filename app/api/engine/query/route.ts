@@ -2,9 +2,7 @@ import { streamText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { prisma } from '@/lib/prisma';
-import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { requireUser, requireWorkspaceOwnership } from '@/lib/api-auth';
 
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY || '',
@@ -14,39 +12,19 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
+    const { user, response } = await requireUser();
+    if (!user) return response;
+
     const url = new URL(req.url);
     const urlWorkspaceId = url.searchParams.get('workspaceId');
     const urlSources = url.searchParams.get('sources');
     const { messages, data, activeSources: bodyActiveSources, workspaceId: bodyWorkspaceId, userProfile } = await req.json();
-    
+
     const workspaceId = data?.workspaceId || urlWorkspaceId || bodyWorkspaceId;
 
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // Ignore in route handlers
-            }
-          },
-        },
-      }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized: Please log in." }), { status: 401 });
+    if (workspaceId) {
+      const { workspace, response: ownerResp } = await requireWorkspaceOwnership(workspaceId, user.id);
+      if (!workspace) return ownerResp;
     }
 
     const explicitlyPassedDocIds = (data?.activeSources || bodyActiveSources || []).map((s: any) => s.id).filter(Boolean);
@@ -64,8 +42,7 @@ export async function POST(req: Request) {
     }));
 
     const userQueryText = normalizedMessages[normalizedMessages.length - 1]?.content || "";
-    
-    // Save user message to database if workspaceId is present
+
     if (workspaceId) {
       try {
         await prisma.message.create({
@@ -80,43 +57,30 @@ export async function POST(req: Request) {
       }
     }
 
-    // 1. Fetch Workspace Metadata First
-    // Prioritize activeSources (which are the files the user specifically clicked in their workspace UI)
     let docNames = "";
     let targetDocIds: string[] = [];
     let fetchedDocs: any[] = [];
-    
-    // We prioritize explicit URL sources to bypass stale frontend body closures
+
+    // Ownership is always enforced here, whether or not workspaceId was passed
     if (explicitlyPassedDocIds.length > 0) {
       fetchedDocs = await prisma.document.findMany({
-        where: { 
+        where: {
           id: { in: explicitlyPassedDocIds },
-          ...(workspaceId ? { workspaceId } : {}) // STRICT ISOLATION only if workspaceId exists
+          workspace: { userId: user.id },
+          ...(workspaceId ? { workspaceId } : {})
         }
       });
     } else if (workspaceId) {
-      // Fallback to fetching all workspace docs
       fetchedDocs = await prisma.document.findMany({
-        where: { workspaceId }
+        where: { workspaceId, workspace: { userId: user.id } }
       });
     }
-    
+
     docNames = fetchedDocs.map((d: any) => d.name).join(', ');
     targetDocIds = fetchedDocs.map((d: any) => d.id);
 
     let searchContext = "";
-    
-    // Inject full textContent from any document that has it (e.g. YouTube transcripts)
-    const fullTextDocs = fetchedDocs
-      .filter((d: any) => d.textContent)
-      .map((d: any) => `[Full Text - ${d.name}]\n${d.textContent}`)
-      .join("\n\n---\n\n");
-      
-    if (fullTextDocs) {
-      searchContext += fullTextDocs + "\n\n---\n\n";
-    }
 
-    // 2. pgvector similarity search
     if (targetDocIds.length > 0 && userQueryText.trim().length > 0) {
       try {
         const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
@@ -126,25 +90,30 @@ export async function POST(req: Request) {
           queryEmbedding = queryEmbedding.slice(0, 768);
         }
 
-        // Use Prisma raw query to search vectors, scoped to the active document IDs
         const docIdsParam = targetDocIds.map(id => `'${id}'`).join(',');
-        
-        // Execute pgvector search
-        const matches: any[] = await prisma.$queryRawUnsafe(`
-          SELECT c."content", d."name" as "documentName", 1 - (c."embedding" <=> $1::vector) as similarity
-          FROM "DocumentChunk" c
-          JOIN "Document" d ON c."documentId" = d."id"
-          WHERE c."documentId" IN (${docIdsParam}) ${workspaceId ? `AND d."workspaceId" = '${workspaceId}'` : ''}
-          ORDER BY c."embedding" <=> $1::vector
-          LIMIT 20
-        `, `[${queryEmbedding.join(',')}]`);
+        const embeddingParam = `[${queryEmbedding.join(',')}]`;
 
-        // 3. Build a Meta-Query Fallback
+        const matches: any[] = workspaceId
+          ? await prisma.$queryRawUnsafe(`
+              SELECT c."content", d."name" as "documentName", 1 - (c."embedding" <=> $1::vector) as similarity
+              FROM "DocumentChunk" c
+              JOIN "Document" d ON c."documentId" = d."id"
+              WHERE c."documentId" IN (${docIdsParam}) AND d."workspaceId" = $2
+              ORDER BY c."embedding" <=> $1::vector
+              LIMIT 20
+            `, embeddingParam, workspaceId)
+          : await prisma.$queryRawUnsafe(`
+              SELECT c."content", d."name" as "documentName", 1 - (c."embedding" <=> $1::vector) as similarity
+              FROM "DocumentChunk" c
+              JOIN "Document" d ON c."documentId" = d."id"
+              WHERE c."documentId" IN (${docIdsParam})
+              ORDER BY c."embedding" <=> $1::vector
+              LIMIT 20
+            `, embeddingParam);
+
         const highestSimilarity = matches.length > 0 ? matches[0].similarity : 0;
-        
+
         if (highestSimilarity < 0.65 || matches.length === 0) {
-          // Fallback: If similarity is low, it's likely a meta-question like "what is this about?"
-          // Pull the first 3 chunks of each document to summarize
           const fallbackChunks: any[] = await prisma.$queryRawUnsafe(`
             SELECT sub."content", d."name" as "documentName"
             FROM (
@@ -158,7 +127,6 @@ export async function POST(req: Request) {
           `);
           searchContext += fallbackChunks.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
         } else {
-          // Use the high-confidence vector matches
           searchContext += matches.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
         }
       } catch (err) {
@@ -166,7 +134,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3. Format Conversation History for Strict Memory Tracking
     let formattedConversationHistory = "";
     normalizedMessages.slice(0, -1).forEach((msg: any, index: number) => {
       formattedConversationHistory += `[interaction_id: ${index + 1}]`;
@@ -178,7 +145,6 @@ export async function POST(req: Request) {
       formattedConversationHistory += `Role: ${msg.role}\nMessage: ${msg.content}\n\n`;
     });
 
-    // 4. Hard-Inject File Awareness into the System Prompt
     const systemPrompt = `CRITICAL CONTEXT: The user is currently inside a workspace that contains the following uploaded study documents: [${docNames}]. You have full access to these materials via the injected chunks below. Never say you do not have access to these files.
 
 YOU ARE AN ELITE ACADEMIC TUTOR AND EXAM STRATEGIST. Your sole purpose is to help university students master their course materials, synthesize complex information, and ace their exams. You are empathetic, proactive, and highly structured.
@@ -200,11 +166,8 @@ ${searchContext ? searchContext : "No relevant content found in the files for th
 [LINKED CONVERSATION HISTORY]
 ${formattedConversationHistory ? formattedConversationHistory : "No previous conversation history."}`;
 
-    // 5. Stream response using Vercel AI SDK
-    console.log("🧠 AI System Prompt Length:", searchContext.length, "| First 100 chars:", searchContext.substring(0, 100));
-    
     const result = streamText({
-      model: google('gemini-3.1-flash-lite'),
+      model: google('gemini-3.5-flash'),
       system: systemPrompt,
       messages: normalizedMessages,
       async onFinish({ text }) {
@@ -228,6 +191,9 @@ ${formattedConversationHistory ? formattedConversationHistory : "No previous con
 
   } catch (error: any) {
     console.error("Query Error:", error);
-    return new Response(JSON.stringify({ error: error.message || "Failed to generate response" }), { status: 500 });
+    if (error.message?.includes("503") || error.message?.includes("high demand") || error.message?.includes("Service Unavailable")) {
+      return new Response("The AI servers are currently experiencing high demand. Please try again in a few minutes.", { status: 503 });
+    }
+    return new Response(error.message || "Failed to generate response", { status: 500 });
   }
 }

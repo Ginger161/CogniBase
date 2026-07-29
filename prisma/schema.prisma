@@ -10,83 +10,163 @@ datasource db {
 }
 
 model Workspace {
-id        String     @id @default(cuid())
-title     String
-createdAt DateTime   @default(now())
-updatedAt DateTime   @updatedAt
-messages  Message[]
-documents Document[]
-userId    String?
-user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String        @id @default(cuid())
+  title        String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  messages     Message[]
+  documents    Document[]
+  userId       String?
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studioAssets StudioAsset[]
 }
 
 model Message {
-id          String    @id @default(cuid())
-role        String
-text        String
-createdAt   DateTime  @default(now())
-workspaceId String
-workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  role        String
+  text        String
+  createdAt   DateTime  @default(now())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 model Document {
-id          String    @id @default(cuid())
-name        String    // The original file name (e.g., 'ForexCoachings.docx')
-url         String    // The Supabase public storage URL or YouTube URL
-sourceType  String    @default("file") // e.g., "file" or "youtube"
-textContent String?   // Raw text content
-createdAt   DateTime  @default(now())
-workspaceId String
-workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-chunks      DocumentChunk[]
-studyGuides StudyGuide[]
+  id          String          @id @default(cuid())
+  name        String // The original file name (e.g., 'ForexCoachings.docx')
+  url         String // The Supabase public storage URL or YouTube URL
+  sourceType  String          @default("file") // e.g., "file" or "youtube"
+  textContent String? // Raw text content
+  fileSize    Int? // Size in bytes
+  createdAt   DateTime        @default(now())
+  workspaceId String
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chunks      DocumentChunk[]
+  studyGuides StudyGuide[]
 }
 
 model DocumentChunk {
-id          String   @id @default(cuid())
-documentId  String
-content     String
-embedding   Unsupported("vector(768)")?
-pageNumber  Int?
-document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  id         String                      @id @default(cuid())
+  documentId String
+  content    String
+  embedding  Unsupported("vector(768)")?
+  pageNumber Int?
+  document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
-@@index([embedding], map: "embeddingIndex")
+  @@index([embedding], map: "embeddingIndex")
 }
 
 model User {
-id         String      @id @default(cuid()) // Will store Supabase Auth UUID
-email      String      @unique
-username   String?
-school     String?
-department String?
-createdAt  DateTime    @default(now())
-updatedAt  DateTime    @updatedAt
-workspaces Workspace[]
-timetables Timetable[]
-studyGuides StudyGuide[]
+  id               String        @id @default(cuid()) // Will store Supabase Auth UUID
+  email            String        @unique
+  username         String?
+  school           String?
+  department       String?
+  stripeCustomerId String?       @unique
+  planTier         String        @default("FREE")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  workspaces       Workspace[]
+  timetables       Timetable[]
+  studyGuides      StudyGuide[]
+  studyGoals       StudyGoal[]
+  dailyMetrics     DailyMetric[]
+  auditLogs        AuditLog[]
+  studyGuideProgress StudyGuideProgress[]
+  preferences      UserPreferences?
 }
 
 model Timetable {
-id        String   @id @default(cuid())
-userId    String
-data      Json     // Store the timetable object here
-user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  data   Json // Store the timetable object here
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model StudyGuide {
-id                 String    @id @default(cuid())
-userId             String
-sourceDocumentId   String
-sourceDocumentName String
-sectionConstraint  String
-markdownContent    String
-createdAt          DateTime  @default(now())
-user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-document           Document  @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  id                 String   @id @default(cuid())
+  userId             String
+  sourceDocumentId   String
+  sourceDocumentName String?
+  sectionConstraint  String?
+  markdownContent    String?
+  title              String?
+  strategyData       Json?
+  isPublic           Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document           Document @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  progress           StudyGuideProgress[]
 }
 
 model ExtractedFormCache {
-hash      String   @id
-courses   Json
-createdAt DateTime @default(now())
+  hash      String   @id
+  courses   Json
+  createdAt DateTime @default(now())
 }
+
+model StudioAsset {
+  id          String    @id @default(uuid())
+  workspaceId String
+  title       String
+  type        String // 'FLASHCARD', 'MINDMAP', 'PRESENTATION', 'AUDIO'
+  content     Json
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model StudyGoal {
+  id          String   @id @default(cuid())
+  title       String // e.g., "Master EDM 205"
+  targetDate  DateTime
+  targetHours Int // Goal for focus hours
+  createdAt   DateTime @default(now())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DailyMetric {
+  id              String   @id @default(cuid())
+  date            DateTime @default(now()) // Stored as midnight for easy querying
+  focusMinutes    Int      @default(0)
+  tasksCompleted  Int      @default(0)
+  averageAccuracy Float    @default(0.0) // From knowledge checks
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([date, userId]) // One record per user per day
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  userId    String
+  details   String   @db.Text
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model StudyGuideProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  guideId     String
+  phaseId     String
+  completed   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guide       StudyGuide @relation(fields: [guideId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, guideId, phaseId])
+}
+
+model UserPreferences {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  theme           String   @default("system")
+  sidebarMode     String   @default("expanded")
+  dailyFocusGoal  Int      @default(120)
+  guideComplexity String   @default("standard")
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+

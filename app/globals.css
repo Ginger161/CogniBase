@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @source "../components";
+@source "../app";
 
 @layer base {
   body {

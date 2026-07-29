@@ -2,46 +2,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db, collection, addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc, getDoc, arrayUnion, deleteDoc } from '../../../lib/firebase';
 import { supabase } from '../../../utils/supabase/client';
-import { Pencil, Plus, RefreshCcw, ThumbsUp, ThumbsDown, LayoutGrid, List, Trash2, Calendar, MoreVertical, ChevronLeft, ChevronRight, Save } from 'lucide-react';
+import { Pencil, Plus, RefreshCcw, ThumbsUp, ThumbsDown, LayoutGrid, List, Trash2, Calendar, MoreVertical, ChevronLeft, ChevronRight, Save, UploadCloud, File, Play, Loader2, Sparkles, Maximize2 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useThrottle } from '../../hooks/useThrottle';
 import { checkClash } from '../../../lib/utils/timetable';
 import { useUserContext } from '../../../lib/hooks/useUserContext';
+import { StudyEngine } from '@/components/StudyEngine';
 
-export type VaultChatMessage = { role: 'ai' | 'user' | 'system'; content: string; type?: string; feedback?: 'up' | 'down'; action?: string; payload?: any; };
+
+
 
 export default function DashboardPage() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isConsoleOpen, setIsConsoleOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [chatList, setChatList] = useState<Array<{ id: string, title: string, updatedAt: any }>>([]);
+  
 
-  // Console state
-  const [messages, setMessages] = useState<VaultChatMessage[]>([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
-  const [consoleInput, setConsoleInput] = useState('');
-  const [isQuerying, setIsQuerying] = useState(false);
-  const [thinkingStatus, setThinkingStatus] = useState('Locating course notes in Vault...');
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isQuerying) {
-      setThinkingStatus('Locating course notes in Vault...');
-      interval = setInterval(() => {
-        setThinkingStatus(prev => 
-          prev === 'Locating course notes in Vault...' 
-          ? 'Parsing context & removing academic jargon...' 
-          : 'Locating course notes in Vault...'
-        );
-      }, 2000);
-    }
-    return () => clearInterval(interval);
-  }, [isQuerying]);
 
   const [vaultFiles, setVaultFiles] = useState<any[]>([]);
-  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
-  const [editInput, setEditInput] = useState("");
 
   // Vault state
   const [activeTab, setActiveTab] = useState<'courses' | 'timetable' | 'materials'>('courses');
@@ -62,7 +40,7 @@ export default function DashboardPage() {
 
   // Materials state
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<'Note' | 'Assignment' | 'Audio' | 'Video'>('Note');
+  const [selectedCategory, setSelectedCategory] = useState<'Note' | 'Assignment'>('Note');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('vaultViewMode') as 'grid' | 'list') || 'grid';
@@ -85,7 +63,9 @@ export default function DashboardPage() {
   // Study Guide state
   const [studyGuides, setStudyGuides] = useState<any[]>([]);
   const [isStudyGuideModalOpen, setIsStudyGuideModalOpen] = useState(false);
-  const [studyGuideConstraint, setStudyGuideConstraint] = useState('');
+  const [studyGuideFormat, setStudyGuideFormat] = useState('General Knowledge');
+  const [studyGuideTimeframe, setStudyGuideTimeframe] = useState('Standard');
+  const [studyGuideLevel, setStudyGuideLevel] = useState('Intermediate');
   const [isGeneratingStudyGuide, setIsGeneratingStudyGuide] = useState(false);
   const [isStudyGuideViewOpen, setIsStudyGuideViewOpen] = useState(false);
   const [activeStudyGuide, setActiveStudyGuide] = useState<any>(null);
@@ -130,8 +110,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!context?.uid) {
-      setChatList([]);
-      setCurrentChatId(null);
       setVaultFiles([]);
       setTimetables([]);
       setStudyGuides([]);
@@ -154,7 +132,7 @@ export default function DashboardPage() {
 
       // Fetch Vault Files
       try {
-        const docsRes = await fetch(`/api/documents?workspaceId=global-vault-001`);
+        const docsRes = await fetch(`/api/documents`);
         if (docsRes.ok) {
           const docs = await docsRes.json();
           console.log("📋 Data received by UI on load:", docs);
@@ -168,16 +146,6 @@ export default function DashboardPage() {
         }
       } catch (e) { console.error("Failed to fetch documents:", e) }
 
-      // Fetch Chat List
-      try {
-        const q = query(collection(db, 'chats'), where('userId', '==', context.uid));
-        const chatSnap = await getDocs(q);
-        const chats = (chatSnap as any).docs.map((d: any) => ({ id: d.id, title: d.data().title, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
-        chats.sort((a: any, b: any) => b.updatedAt - a.updatedAt);
-        setChatList(chats);
-      } catch (error) {
-        console.error("Error fetching chats:", error);
-      }
 
       // Fetch Study Guides
       try {
@@ -688,16 +656,14 @@ export default function DashboardPage() {
       return;
     }
     setActiveDocumentId(file.id);
-    setStudyGuideConstraint('');
+    setStudyGuideFormat('General Knowledge');
+    setStudyGuideTimeframe('Standard');
+    setStudyGuideLevel('Intermediate');
     setIsStudyGuideModalOpen(true);
   };
 
   const handleGenerateStudyGuide = async () => {
-    if (!studyGuideConstraint.trim()) {
-      setToastMessage("Please enter a section to cover.");
-      return;
-    }
-
+    const payloadConstraint = `Format: ${studyGuideFormat} | Timeframe: ${studyGuideTimeframe} | Level: ${studyGuideLevel}`;
     const file = vaultFiles.find(f => f.id === activeDocumentId);
     if (!file) return;
 
@@ -707,7 +673,7 @@ export default function DashboardPage() {
       const res = await fetch('/api/engine/generate-study-guide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUrl: file.downloadURL, sectionConstraint: studyGuideConstraint })
+        body: JSON.stringify({ fileUrl: file.downloadURL, sectionConstraint: payloadConstraint })
       });
       const data = await res.json();
 
@@ -717,8 +683,8 @@ export default function DashboardPage() {
         userId: userData.uid,
         sourceDocumentId: file.id,
         sourceDocumentName: file.fileName,
-        sectionConstraint: studyGuideConstraint,
-        markdownContent: data.studyGuide,
+        sectionConstraint: payloadConstraint,
+        strategyData: data.studyGuide,
         createdAt: serverTimestamp()
       };
 
@@ -820,12 +786,12 @@ export default function DashboardPage() {
       else setUploadStatus('Initializing Secure Transfer...');
 
       setUploadStatus('Uploading to Secure Storage...');
-      
+
       const uploadedFiles = [];
       for (let i = 0; i < newFilesToUpload.length; i++) {
         const file = newFilesToUpload[i];
         setUploadProgress(((i + 1) / newFilesToUpload.length) * 100);
-        
+
         const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '-');
         const uniqueSuffix = Math.random().toString(36).substring(2, 8);
         const filePath = `uploads/${uniqueSuffix}-${cleanFileName}`;
@@ -855,18 +821,23 @@ export default function DashboardPage() {
             body: JSON.stringify({
               name: file.name, // Save the original pretty name to Postgres
               url: fileUrl,
-              workspaceId: 'global-vault-001'
+              fileSize: file.size
             })
           });
 
           // 1. Read as text first to prevent JSON parse crashes on HTML error pages
           const responseText = await dbResponse.text();
-
           if (!dbResponse.ok) {
             console.error(`❌ Database Save Failed (Status: ${dbResponse.status})`);
-            console.error("❌ Server Response:", responseText.substring(0, 500)); // Print first 500 chars of HTML/Text
-            alert("Failed to save to database. Check console for details.");
-            setUploadStatus('Warning: Transfer succeeded, but database save failed.');
+
+            try {
+              const errData = JSON.parse(responseText);
+              import('sonner').then(mod => mod.toast.error(errData.error || "Failed to save to database."));
+            } catch (e) {
+              alert("Failed to save to database. Check console for details.");
+            }
+
+            setUploadStatus('Upload failed.');
             continue;
           }
 
@@ -875,7 +846,7 @@ export default function DashboardPage() {
           console.log("✅ File saved to Database successfully!", data);
 
           // Trigger the UI to re-fetch the document list immediately
-          const docsRes = await fetch(`/api/documents?workspaceId=global-vault-001`);
+          const docsRes = await fetch(`/api/documents`);
           if (docsRes.ok) {
             const docs = await docsRes.json();
             console.log("📋 Data received by UI after upload:", docs);
@@ -998,263 +969,6 @@ export default function DashboardPage() {
     }
   };
 
-  useEffect(() => {
-    const fetchChatHistory = async () => {
-      if (!currentChatId) {
-        setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
-        return;
-      }
-      try {
-        const chatDoc = await getDoc(doc(db, 'chats', currentChatId));
-        if (chatDoc.exists()) {
-          const data = chatDoc.data();
-          if ((data as any).messages && (data as any).messages.length > 0) {
-            setMessages((data as any).messages);
-          } else {
-            setMessages([{ role: 'ai', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }]);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load chat", error);
-      }
-    };
-
-    fetchChatHistory();
-  }, [currentChatId]);
-
-  const handleLoadChat = (chatId: string) => {
-    setCurrentChatId(chatId);
-    setIsConsoleOpen(true);
-  };
-
-  const submitQuery = async (userMessage: string, historyPrefix?: Array<VaultChatMessage>) => {
-    if (isQuerying) return;
-    const baseMessages = historyPrefix || messages;
-    const history = baseMessages.filter(m => m.type !== 'action_required').slice(-10);
-
-    const newUserMsg: VaultChatMessage = { role: 'user', content: userMessage };
-    const updatedMessages = [...baseMessages, newUserMsg];
-
-    setMessages(updatedMessages);
-    setIsQuerying(true);
-
-    if (isLoading || isContextLoading || !context) {
-      setMessages([...updatedMessages, { role: 'ai', content: 'Syncing Academic Data... Please wait.' }]);
-      setIsQuerying(false);
-      return;
-    }
-
-    try {
-      const userProfilePayload = {
-        name: context.name,
-        school: context.school,
-        department: context.department,
-        courses: context.profile?.semesters?.find((s: any) => s.isActive)?.courses || []
-      };
-
-      const response = await fetch('/api/engine/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          messages: updatedMessages.filter(m => m.type !== 'action_required').slice(-10),
-          activeFileId: activeDocumentId,
-          sessionId: currentChatId,
-          userProfile: userProfilePayload
-        })
-      });
-      const contentType = response.headers.get('content-type');
-      let finalMessages: VaultChatMessage[] = [];
-
-      if (contentType && contentType.includes('application/json')) {
-        const data = await response.json();
-
-        if (data.error) {
-          setMessages([...updatedMessages, { role: 'ai', content: `System Error: ${data.error}` }]);
-          setIsQuerying(false);
-          return;
-        }
-
-        let newAiMsg: VaultChatMessage;
-        if (data.type === 'action_required') {
-          let content = '';
-          if (data.action === 'add_course') {
-            content = `I can add ${data.payload.courseCode} - ${data.payload.courseTitle} to your ${data.payload.semester} semester.`;
-          } else if (data.action === 'delete_course') {
-            content = `I can remove ${data.payload.courseCode} from your active semester.`;
-          } else if (data.action === 'add_to_timetable') {
-            content = `I can add ${data.payload.courseCode} to your timetable on ${data.payload.day} from ${data.payload.startTime} to ${data.payload.endTime}.`;
-          }
-          newAiMsg = {
-            role: 'ai',
-            content,
-            type: 'action_required',
-            action: data.action,
-            payload: data.payload,
-            ...(data.error ? { error: data.error } : {})
-          } as any;
-        } else {
-          newAiMsg = { role: 'ai', content: data.answer };
-        }
-
-        finalMessages = [...updatedMessages, newAiMsg];
-        setMessages(finalMessages);
-      } else if (response.body) {
-        // Stream text token by token
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let aiContent = '';
-        let newAiMsg: VaultChatMessage = { role: 'ai', content: '' };
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          aiContent += decoder.decode(value, { stream: true });
-          newAiMsg.content = aiContent;
-          setMessages([...updatedMessages, newAiMsg]);
-        }
-        finalMessages = [...updatedMessages, newAiMsg];
-      } else {
-        setIsQuerying(false);
-        return;
-      }
-
-      // Persist to Firestore
-      if (currentChatId) {
-        const chatRef = doc(db, 'chats', currentChatId);
-        await updateDoc(chatRef, {
-          messages: finalMessages,
-          updatedAt: serverTimestamp()
-        });
-        setChatList(prev => prev.map(c => c.id === currentChatId ? { ...c, updatedAt: Date.now() } : c).sort((a, b) => b.updatedAt - a.updatedAt));
-      } else {
-        let title = userMessage.split(' ').slice(0, 4).join(' ') + '...';
-
-        const newChatDoc = await addDoc(collection(db, 'chats'), {
-          userId: userData.uid,
-          title: title,
-          messages: finalMessages,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-
-        setCurrentChatId(newChatDoc.id);
-        setChatList(prev => [{ id: newChatDoc.id, title, updatedAt: Date.now() }, ...prev]);
-
-        // Generate title asynchronously
-        fetch('/api/engine/title', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: userMessage })
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.title) {
-              updateDoc(doc(db, 'chats', newChatDoc.id), { title: data.title });
-              setChatList(prev => prev.map(c => c.id === newChatDoc.id ? { ...c, title: data.title } : c));
-            }
-          })
-          .catch(e => console.error("Async title generation failed", e));
-      }
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', content: "Error: Could not reach the brain." }]);
-    } finally {
-      setIsQuerying(false);
-    }
-  };
-
-  const executeAction = async (msgIndex: number, action: string, payload: any, confirm: boolean) => {
-    if (!userData.uid || !userData.profile || !userData.profile.semesters) return;
-
-    if (!confirm) {
-      setMessages(prev => [...prev, { role: 'ai', content: 'Action cancelled.' }]);
-      return;
-    }
-
-    try {
-      const semesters = [...userData.profile.semesters];
-      const activeSemIdx = semesters.findIndex((s: any) => s.isActive);
-      if (activeSemIdx === -1) {
-        setToastMessage("No active semester found.");
-        return;
-      }
-
-      const activeSem = semesters[activeSemIdx];
-
-      if (action === 'add_course') {
-        if (!activeSem.courses.some((c: any) => c.courseCode === payload.courseCode)) {
-          activeSem.courses.push({ courseCode: payload.courseCode, courseTitle: payload.courseTitle, semester: payload.semester });
-        }
-      } else if (action === 'delete_course') {
-        activeSem.courses = activeSem.courses.filter((c: any) => c.courseCode !== payload.courseCode);
-      } else if (action === 'add_to_timetable') {
-        const newClass = {
-          day: payload.day,
-          startTime: payload.startTime,
-          endTime: payload.endTime,
-          courseCode: payload.courseCode.toUpperCase(),
-          courseTitle: '',
-          location: ''
-        };
-        const newScheduledClasses = [...timetables, newClass];
-        const ttRef = doc(db, 'timetables', userData.uid);
-        const ttSnap = await getDoc(ttRef);
-        if (ttSnap.exists()) {
-          await updateDoc(ttRef, { scheduled_classes: newScheduledClasses });
-        } else {
-          const { setDoc } = await import('../../../lib/firebase');
-          await setDoc(ttRef, { scheduled_classes: newScheduledClasses });
-        }
-        setTimetables(newScheduledClasses);
-      }
-
-      const userRef = doc(db, 'users', userData.uid);
-      await updateDoc(userRef, { semesters });
-      setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
-
-      setMessages(prev => [...prev, { role: 'ai', content: 'Action completed successfully.' }]);
-    } catch (err: any) {
-      console.error(err);
-      setToastMessage("Failed to execute action.");
-    }
-  };
-
-  const handleConsoleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!consoleInput.trim() || isQuerying) return;
-    const msg = consoleInput;
-    setConsoleInput('');
-    await submitQuery(msg);
-  };
-
-  const handleEditSubmit = (index: number) => {
-    if (!editInput.trim() || isQuerying) return;
-    const historyPrefix = messages.slice(0, index);
-    setEditingMessageIndex(null);
-    submitQuery(editInput, historyPrefix);
-  };
-
-  const handleRegenerate = (index: number) => {
-    if (isQuerying) return;
-    const userMsg = messages[index - 1];
-    if (userMsg && userMsg.role === 'user') {
-      const historyPrefix = messages.slice(0, index - 1);
-      submitQuery(userMsg.content, historyPrefix);
-    }
-  };
-
-  const handleFeedback = async (index: number, type: 'up' | 'down') => {
-    const newMessages = [...messages];
-    newMessages[index] = { ...newMessages[index], feedback: type };
-    setMessages(newMessages);
-
-    if (currentChatId) {
-      try {
-        await updateDoc(doc(db, 'chats', currentChatId), {
-          messages: newMessages
-        });
-      } catch (e) { console.error("Failed to save feedback", e); }
-    }
-  };
 
   const extractionPhases = ['Uploading document...', 'Scanning document structure...', 'Analyzing course codes...', 'Optimizing for high traffic...', 'Finalizing extraction...'];
 
@@ -1273,95 +987,28 @@ export default function DashboardPage() {
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        @keyframes indeterminate-bar {
-          0% { left: -30%; }
-          100% { left: 100%; }
-        }
-        .dashboard-layout, .dashboard-layout * { box-sizing: border-box; }
-        .dashboard-layout { display: flex; flex-direction: column; height: 100dvh; background-color: #0A1128; color: white; overflow-x: hidden; overflow-y: hidden; position: relative; width: 100%; max-width: 100vw; }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 40; display: none; opacity: 0; transition: opacity 0.3s; }
-        .overlay.visible { display: block; opacity: 1; }
-        .sidebar { position: fixed; top: 0; left: -300px; width: 260px; height: 100dvh; background-color: #111111; border-right: 1px solid #27272A; padding: 1.5rem; display: flex; flex-direction: column; z-index: 50; transition: left 0.3s ease; }
-        .sidebar.open { left: 0; }
-        .console-panel { position: fixed; top: 0; right: -100%; width: 100%; height: 100dvh; background-color: #111111; display: flex; flex-direction: column; z-index: 50; transition: right 0.3s ease; }
-        .console-panel.open { right: 0; }
-        .main-content { flex: 1; padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem; overflow-y: auto; overflow-x: hidden; height: 100dvh; width: 100%; max-width: 100vw; }
-        .logo-img { width: 8rem; margin-bottom: 2rem; }
-        .mobile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; width: 100%; }
-        .menu-btn { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0.5rem; display: flex; }
-        .desktop-toggle-btn { display: none; background-color: #18181B; padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #27272A; cursor: pointer; font-size: 0.875rem; font-weight: bold; align-items: center; gap: 0.5rem; transition: all 0.2s; }
-        .mobile-text { display: inline; }
-        .desktop-text { display: none; }
-        .file-list-container::-webkit-scrollbar { width: 6px; }
-        .file-list-container::-webkit-scrollbar-track { background: #111111; }
-        .file-list-container::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 3px; }
-        .custom-checkbox { accent-color: #EA580C; width: 1.2rem; height: 1.2rem; cursor: pointer; }
-        @media (min-width: 1024px) {
-          .dashboard-layout { flex-direction: row; }
-          .overlay { display: none !important; }
-          .mobile-header { display: none; }
-          .sidebar { position: static; width: 250px; left: 0; transition: none; flex-shrink: 0; }
-          .console-panel { position: static; width: 100%; max-width: 400px; right: 0; transition: none; display: none; flex-shrink: 0; border-left: 1px solid #27272A; }
-          .console-panel.open { display: flex; }
-          .main-content { padding: 3rem; flex: 1; }
-          .logo-img { width: 10rem; margin-bottom: 3rem; }
-          .desktop-toggle-btn { display: flex; }
-          .mobile-text { display: none; }
-          .desktop-text { display: inline; }
-        }
-      `}} />
+      
 
-      <div className="dashboard-layout">
-        <div className={`overlay ${isSidebarOpen || isConsoleOpen ? 'visible' : ''}`} onClick={() => { setIsSidebarOpen(false); setIsConsoleOpen(false); }}></div>
-        <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <img src="/logo.png" alt="CogniBase" className="logo-img" style={{ marginBottom: '0' }} />
-            <button className="menu-btn lg:hidden" onClick={() => setIsSidebarOpen(false)} style={{ display: 'none' }}>✕</button>
-          </div>
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, marginTop: '3rem' }}>
-            <a href="/dashboard" style={{ color: pathname === '/dashboard' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/dashboard' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Command Center</a>
-            <a href="/vault" style={{ color: pathname === '/vault' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/vault' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>My Vault</a>
-            <a href="/study-guides" style={{ color: pathname === '/study-guides' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/study-guides' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Study Guides</a>
-            <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Active Engines</a>
-            <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Settings</a>
-
-
-          </nav>
-          <div style={{ borderTop: '1px solid #27272A', paddingTop: '1.5rem', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-              <span style={{ color: 'white', fontWeight: 'bold', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userData.name}</span>
-              <span style={{ color: '#A1A1AA', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userData.email}</span>
-            </div>
-            <div style={{ color: '#71717A', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ width: '6px', height: '6px', backgroundColor: '#22C55E', borderRadius: '50%', display: 'inline-block' }}></span>
-              <span>System Online</span>
-            </div>
-          </div>
-        </aside>
-        <main className="main-content">
-          <div className="mobile-header">
-            <button className="menu-btn" onClick={() => setIsSidebarOpen(true)}>☰</button>
-            <button onClick={() => setIsConsoleOpen(true)} style={{ backgroundColor: '#18181B', color: '#EA580C', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              &gt;_ Console
-            </button>
-          </div>
+      <div className="flex flex-col h-full w-full">
+        
+        
+        
+        <div className="flex-1 flex flex-col h-full overflow-hidden p-6" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1, overflowY: 'auto' }}>
+          
 
           <header style={{ borderBottom: '1px solid #27272A', paddingBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
               <h1 style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em' }}>My Vault</h1>
               <p style={{ color: '#A1A1AA', margin: '0.5rem 0 0 0', fontSize: '1rem' }}>Your Student Operating System.</p>
             </div>
-            <button onClick={() => setIsConsoleOpen(!isConsoleOpen)} className="desktop-toggle-btn" style={{ color: isConsoleOpen ? '#A1A1AA' : '#EA580C' }}>
-              <span style={{ color: '#EA580C' }}>&gt;_</span> {isConsoleOpen ? 'Close Console' : 'Open Console'}
-            </button>
           </header>
 
           <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '1rem' }}>
             <button onClick={() => setActiveTab('courses')} style={{ background: 'none', border: 'none', color: activeTab === 'courses' ? 'white' : '#A1A1AA', fontWeight: activeTab === 'courses' ? 'bold' : 'normal', cursor: 'pointer', fontSize: '1rem', padding: '0.5rem 1rem', borderBottom: activeTab === 'courses' ? '2px solid #EA580C' : '2px solid transparent' }}>My Courses</button>
             <button onClick={() => setActiveTab('timetable')} style={{ background: 'none', border: 'none', color: activeTab === 'timetable' ? 'white' : '#A1A1AA', fontWeight: activeTab === 'timetable' ? 'bold' : 'normal', cursor: 'pointer', fontSize: '1rem', padding: '0.5rem 1rem', borderBottom: activeTab === 'timetable' ? '2px solid #EA580C' : '2px solid transparent' }}>My Timetable</button>
             <button onClick={() => setActiveTab('materials')} style={{ background: 'none', border: 'none', color: activeTab === 'materials' ? 'white' : '#A1A1AA', fontWeight: activeTab === 'materials' ? 'bold' : 'normal', cursor: 'pointer', fontSize: '1rem', padding: '0.5rem 1rem', borderBottom: activeTab === 'materials' ? '2px solid #EA580C' : '2px solid transparent' }}>Lecture Materials</button>
+
+
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1 }}>
@@ -1432,7 +1079,7 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                <div className="w-full max-w-full overflow-hidden" style={{ gridColumn: '1 / -1', backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="w-full max-w-full" style={{ gridColumn: '1 / -1', backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>My Registered Courses</h3>
                     {selectedCourseCodes.length > 0 && (
@@ -1441,7 +1088,7 @@ export default function DashboardPage() {
                       </button>
                     )}
                   </div>
-                  <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  <div className="w-full max-w-full" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                     {isLoading ? (
                       <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginTop: '0.5rem' }}>
                         {/* Injecting raw CSS to bypass Tailwind completely */}
@@ -1478,14 +1125,14 @@ export default function DashboardPage() {
 
                       return (
                         <>
-                          <div className="w-full max-w-full overflow-hidden">
+                          <div className="w-full max-w-full">
                             {firstSemesterCourses.length > 0 ? (
                               <>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '0.5rem' }}>
                                   <input type="checkbox" checked={firstSemesterCourses.every((c: any) => selectedCourseCodes.includes(c.courseCode))} onChange={(e) => handleToggleSemesterSelection(firstSemesterCourses, !e.target.checked)} style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} title="Select All First Semester" />
                                   <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>First Semester</h4>
                                 </div>
-                                <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <div className="w-full max-w-full" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                   {firstSemesterCourses.map((course: any, index: number) => {
                                     const isSelected = selectedCourseCodes.includes(course.courseCode);
 
@@ -1535,14 +1182,14 @@ export default function DashboardPage() {
                               <p style={{ color: '#71717A', fontSize: '0.9rem', fontStyle: 'italic' }}>No First Semester courses added yet.</p>
                             )}
                           </div>
-                          <div className="w-full max-w-full overflow-hidden">
+                          <div className="w-full max-w-full">
                             {secondSemesterCourses.length > 0 ? (
                               <>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '0.5rem' }}>
                                   <input type="checkbox" checked={secondSemesterCourses.every((c: any) => selectedCourseCodes.includes(c.courseCode))} onChange={(e) => handleToggleSemesterSelection(secondSemesterCourses, !e.target.checked)} style={{ accentColor: '#EA580C', width: '1rem', height: '1rem', cursor: 'pointer' }} title="Select All Second Semester" />
                                   <h4 style={{ color: '#A1A1AA', fontSize: '1rem', margin: 0, fontWeight: 'normal' }}>Second Semester</h4>
                                 </div>
-                                <div className="w-full max-w-full overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <div className="w-full max-w-full" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                   {secondSemesterCourses.map((course: any, index: number) => {
                                     const isSelected = selectedCourseCodes.includes(course.courseCode);
 
@@ -1823,15 +1470,13 @@ export default function DashboardPage() {
                 <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Upload Material</h3>
                   <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0 }}>Upload lecture slides or PDFs to build your knowledge base.</p>
-
-                  <input type="file" multiple accept=".pdf,.pptx,.docx,.txt" ref={fileInputRef} onChange={handleFileInput} style={{ display: 'none' }} />
-
+                  <input type="file" disabled={isUploading} multiple accept=".pdf,.pptx,.docx,.txt" ref={fileInputRef} onChange={handleFileInput} style={{ display: 'none' }} />
                   <div
                     onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
                     style={{ backgroundColor: isDragging ? '#27272A' : '#18181B', padding: '1.5rem', borderRadius: '0.5rem', border: isDragging ? '1px dashed #EA580C' : '1px dashed #3F3F46', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginTop: 'auto', opacity: isUploading ? 0.5 : 1, pointerEvents: isUploading ? 'none' : 'auto' }}
                   >
-                    <span className="mobile-text" style={{ color: isDragging ? '#EA580C' : 'white', fontWeight: '500' }}>+ Tap to Stage Files</span>
-                    <span className="desktop-text" style={{ color: isDragging ? '#EA580C' : 'white', fontWeight: '500' }}>{isDragging ? 'Drop files now...' : '+ Click or Drag Files to Stage'}</span>
+                    <span className="sm:hidden" style={{ color: isDragging ? '#EA580C' : 'white', fontWeight: '500' }}>+ Tap to Stage Files</span>
+                    <span className="hidden sm:inline" style={{ color: isDragging ? '#EA580C' : 'white', fontWeight: '500' }}>{isDragging ? 'Drop files now...' : '+ Click or Drag Files to Stage'}</span>
                     <span style={{ color: '#71717A', fontSize: '0.75rem' }}>PDF, PPTX, DOCX, TXT (Max 20)</span>
                   </div>
 
@@ -1848,11 +1493,14 @@ export default function DashboardPage() {
 
                       {pendingFiles.length > 0 && !isUploading && (
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
-                          <select value={selectedCategory} onChange={(e: any) => setSelectedCategory(e.target.value)} style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #3F3F46', padding: '0.5rem', borderRadius: '0.25rem', outline: 'none', flex: 1 }}>
+                          <select
+                            value={selectedCategory}
+                            onChange={(e: any) => setSelectedCategory(e.target.value)}
+                            className="transition-colors hover:border-[#EA580C] focus:border-[#EA580C]"
+                            style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #3F3F46', padding: '0.5rem', borderRadius: '0.25rem', outline: 'none', flex: 1 }}
+                          >
                             <option value="Note">Note</option>
                             <option value="Assignment">Assignment</option>
-                            <option value="Audio">Audio Recording</option>
-                            <option value="Video">Video Recording</option>
                           </select>
                           <button
                             onClick={handleUploadToVault} disabled={isUploading}
@@ -1953,7 +1601,7 @@ export default function DashboardPage() {
                           <>
                             {filteredSortedFiles.map(file => (
                               viewMode === 'list' ? (
-                                <div key={file.id} className="w-full overflow-hidden px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem' }}>
+                                <div key={file.id} className="w-full px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem' }}>
                                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-0 justify-between items-start sm:items-center w-full min-w-0">
                                     <div className="flex flex-row min-w-0 w-full items-center gap-3">
                                       <input
@@ -1963,8 +1611,8 @@ export default function DashboardPage() {
                                         style={{ accentColor: '#EA580C', width: '1.1rem', height: '1.1rem', cursor: 'pointer', flexShrink: 0 }}
                                       />
                                       <div className="flex flex-col min-w-0 w-full">
-                                        <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{file.fileName}</span>
-                                        <span style={{ color: '#71717A', fontSize: '0.75rem' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                                        <a href={`/lecture-materials/${file.id}`} className="hover:text-[#EA580C] hover:underline break-words whitespace-normal min-w-0 block transition-colors" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{file.fileName}</a>
+                                        <span style={{ color: '#71717A', fontSize: '0.75rem' }}>{(file.fileSize ? (file.fileSize / 1024 / 1024).toFixed(2) : '0.00')} MB</span>
                                       </div>
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -1974,7 +1622,7 @@ export default function DashboardPage() {
                                           <MoreVertical size={16} />
                                         </button>
                                         {activeFileDropdown === file.id && (
-                                          <div style={{ position: 'absolute', right: 0, top: '100%', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.5rem', zIndex: 10, display: 'flex', flexDirection: 'column', minWidth: '180px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
+                                          <div className="absolute right-0 mt-2 origin-top-right z-50" style={{ top: '100%', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.5rem', display: 'flex', flexDirection: 'column', minWidth: '180px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
                                             <button onClick={() => handleOpenStudyGuideModal(file)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: 'white', padding: '0.5rem', cursor: 'pointer', textAlign: 'left', borderRadius: '0.25rem', fontSize: '0.85rem' }} className="hover:bg-zinc-600 transition-colors">
                                               📚 Generate Study Guide
                                             </button>
@@ -2004,7 +1652,7 @@ export default function DashboardPage() {
                                   )}
                                 </div>
                               ) : (
-                                <div key={file.id} className="w-full overflow-hidden px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem', position: 'relative' }}>
+                                <div key={file.id} className="w-full px-3 sm:px-4" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', gap: '0.5rem', position: 'relative' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                       <input
@@ -2020,7 +1668,7 @@ export default function DashboardPage() {
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg>
                                       </button>
                                       {activeFileDropdown === file.id && (
-                                        <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '0.5rem', width: '200px', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.25rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
+                                        <div className="absolute right-0 mt-2 origin-top-right z-50" style={{ top: '100%', width: '200px', backgroundColor: '#27272A', border: '1px solid #3F3F46', borderRadius: '0.5rem', padding: '0.25rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}>
                                           <button onClick={() => handleOpenStudyGuideModal(file)} style={{ width: '100%', textAlign: 'left', padding: '0.5rem', background: 'none', border: 'none', color: '#F9FAFB', cursor: 'pointer', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#3F3F46'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                                             📚 Generate Study Guide
                                           </button>
@@ -2032,8 +1680,8 @@ export default function DashboardPage() {
                                       )}
                                     </div>
                                   </div>
-                                  <span className="break-words whitespace-normal min-w-0 block" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }} title={file.fileName}>{file.fileName}</span>
-                                  <span style={{ color: '#71717A', fontSize: '0.75rem', marginTop: 'auto' }}>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                                  <a href={`/lecture-materials/${file.id}`} className="hover:text-[#EA580C] hover:underline break-words whitespace-normal min-w-0 block transition-colors" style={{ color: 'white', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }} title={file.fileName}>{file.fileName}</a>
+                                  <span style={{ color: '#71717A', fontSize: '0.75rem', marginTop: 'auto' }}>{(file.fileSize ? (file.fileSize / 1024 / 1024).toFixed(2) : '0.00')} MB</span>
 
                                   {studyGuides.filter(g => g.sourceDocumentId === file.id).length > 0 && (
                                     <div style={{ marginTop: '0.25rem', paddingTop: '0.5rem', borderTop: '1px dashed #3F3F46' }}>
@@ -2063,166 +1711,10 @@ export default function DashboardPage() {
                 })()}
               </div>
             )}
+            
+
           </div>
-        </main>
-
-        <aside className={`console-panel ${isConsoleOpen ? 'open' : ''}`}>
-          <div style={{ padding: '1.5rem', borderBottom: '1px solid #27272A', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ color: '#EA580C', fontWeight: 'bold' }}>&gt;_</span>
-              <span style={{ fontWeight: 'bold', letterSpacing: '0.05em' }}>console</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <button
-                onClick={() => {
-                  setCurrentChatId(null);
-                  setToastMessage("Fresh session started");
-                }}
-                className="text-gray-400 hover:text-white transition-colors cursor-pointer"
-                style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center' }}
-                title="New Chat"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
-              <button className="menu-btn lg:hidden" onClick={() => setIsConsoleOpen(false)}>✕</button>
-            </div>
-          </div>
-          <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ color: '#A1A1AA', fontSize: '0.75rem', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px dashed #27272A', paddingBottom: '0.5rem' }}>Secure Session Established</div>
-
-            {messages.map((msg, i) => {
-              const isError = msg.content.startsWith("Error:") || msg.content.includes("Failed to query the AI brain.");
-
-              const lowerMsg = msg.content.toLowerCase();
-              const needsDisambiguation = lowerMsg.includes("which specific") || lowerMsg.includes("which document") || lowerMsg.includes("tell me which");
-
-              return (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: msg.role === 'user' ? '#A1A1AA' : isError ? '#EF4444' : '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                      {msg.role === 'user' ? userData.name.split(' ')[0] : '>_console'}
-                    </span>
-                    {msg.role === 'user' && (
-                      <button onClick={() => { setEditingMessageIndex(i); setEditInput(msg.content); }} className="hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: '#9CA3AF', padding: 0 }} title="Edit">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  {editingMessageIndex === i ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '90%', alignItems: 'flex-end' }}>
-                      <textarea
-                        value={editInput}
-                        onChange={e => setEditInput(e.target.value)}
-                        style={{ width: '100%', backgroundColor: '#27272A', color: 'white', border: '1px solid #EA580C', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', outline: 'none', resize: 'vertical', minHeight: '80px' }}
-                      />
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => setEditingMessageIndex(null)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
-                        <button onClick={() => handleEditSubmit(i)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>Save & Resubmit</button>
-                      </div>
-                    </div>
-                  ) : msg.type === 'action_required' ? (
-                    <div className="w-full max-w-md overflow-hidden break-words whitespace-pre-wrap" style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: (msg as any).error?.status === 'clash' ? '1px solid #DC2626' : '1px solid #EA580C', color: '#E4E4E7', fontSize: '0.9rem' }}>
-                      <p className="min-w-0 break-words" style={{ margin: '0 0 1rem 0', fontWeight: 'bold' }}>{msg.content}</p>
-                      {(msg as any).error?.status === 'clash' && (
-                        <p style={{ margin: '0 0 1rem 0', color: '#FCA5A5', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                          ⚠️ WARNING: This class clashes with {(msg as any).error.existingCourse}.
-                        </p>
-                      )}
-                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                        <button onClick={() => executeAction(i, msg.action!, msg.payload, false)} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.5rem 1rem', borderRadius: '0.25rem', fontSize: '0.85rem', cursor: 'pointer' }}>Cancel</button>
-                        {(msg as any).error?.status === 'clash' ? (
-                          <button onClick={() => executeAction(i, msg.action!, msg.payload, true)} style={{ backgroundColor: '#DC2626', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.25rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }}>Override & Save</button>
-                        ) : (
-                          <button onClick={() => executeAction(i, msg.action!, msg.payload, true)} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.25rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }}>Confirm Action</button>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="max-w-full sm:max-w-[90%] break-words whitespace-pre-wrap min-w-0" style={{
-                      backgroundColor: msg.role === 'user' ? '#27272A' : isError ? '#450a0a' : '#18181B',
-                      padding: '1rem',
-                      borderRadius: '0.5rem',
-                      border: isError ? '1px solid #7f1d1d' : '1px solid #27272A',
-                      color: isError ? '#fca5a5' : '#E4E4E7',
-                      fontSize: '0.9rem',
-                      lineHeight: '1.6'
-                    }}>
-                      {msg.content}
-                    </div>
-                  )}
-
-                  {/* Smart Vault Selector for Disambiguation */}
-                  {msg.role === 'ai' && needsDisambiguation && !isError && i === messages.length - 1 && vaultFiles.length > 0 && (
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem', maxWidth: '90%' }}>
-                      {vaultFiles.map(file => (
-                        <button
-                          key={file.id}
-                          disabled={isQuerying}
-                          onClick={() => submitQuery(`Please use the document: ${file.fileName} as the context.`)}
-                          style={{ backgroundColor: '#18181B', color: '#A1A1AA', border: '1px solid #EA580C', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}
-                        >
-                          📄 {file.fileName}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* AI Action Buttons & Controls */}
-                  {msg.role === 'ai' && msg.type !== 'action_required' && !isError && i > 0 && (
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem', alignItems: 'center' }}>
-                      {!needsDisambiguation && (
-                        <>
-
-                          <button disabled={isQuerying} onClick={() => submitQuery("Please extract and summarize the absolute key terms from the response above into a bulleted list.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                            📝 Summarize Key Terms
-                          </button>
-                          <button disabled={isQuerying} onClick={() => submitQuery("Please generate a quick 3-question multiple-choice quiz based on the information above to test my understanding.")} style={{ backgroundColor: '#27272A', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.4rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', cursor: isQuerying ? 'not-allowed' : 'pointer', opacity: isQuerying ? 0.5 : 1, transition: 'all 0.2s' }}>
-                            🧠 Generate Practice Quiz
-                          </button>
-                        </>
-                      )}
-                      <div style={{ flex: 1 }}></div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button disabled={isQuerying} onClick={() => handleRegenerate(i)} className="hover:text-white transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: '#9CA3AF', opacity: isQuerying ? 0.5 : 1, padding: 0 }} title="Regenerate">
-                          <RefreshCcw className="w-3.5 h-3.5" />
-                        </button>
-                        <button disabled={isQuerying} onClick={() => handleFeedback(i, 'up')} className="hover:text-green-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'up' ? '#22C55E' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1, padding: 0 }} title="Good response">
-                          <ThumbsUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button disabled={isQuerying} onClick={() => handleFeedback(i, 'down')} className="hover:text-red-500 transition-colors cursor-pointer" style={{ background: 'none', border: 'none', color: msg.feedback === 'down' ? '#EF4444' : '#9CA3AF', opacity: isQuerying ? 0.5 : 1, padding: 0 }} title="Bad response">
-                          <ThumbsDown className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-
-            {isQuerying && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
-                <span style={{ color: '#EA580C', fontWeight: 'bold', fontSize: '0.85rem' }}>&gt;_console</span>
-                <div style={{ backgroundColor: '#18181B', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #27272A', color: '#E4E4E7', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <div style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid #EA580C', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                  {thinkingStatus}
-                </div>
-              </div>
-            )}
-          </div>
-          <div style={{ padding: '1.5rem', borderTop: '1px solid #27272A', backgroundColor: '#000000' }}>
-            <form style={{ display: 'flex', gap: '0.5rem' }} onSubmit={handleConsoleSubmit}>
-              <input
-                value={consoleInput}
-                onChange={(e) => setConsoleInput(e.target.value)}
-                type="text"
-                placeholder="Enter command or query..."
-                style={{ flex: 1, backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '16px', outline: 'none', minWidth: '0' }}
-              />
-              <button type="submit" disabled={isQuerying} style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0 1rem', borderRadius: '0.5rem', cursor: isQuerying ? 'not-allowed' : 'pointer', fontWeight: 'bold', flexShrink: 0, opacity: isQuerying ? 0.5 : 1 }}>→</button>
-            </form>
-          </div>
-        </aside>
+        </div>
       </div>
 
       {/* Clear Timetable Custom Modal */}
@@ -2271,16 +1763,63 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label style={{ color: '#E4E4E7', fontSize: '0.9rem' }}>What section should we cover?</label>
-              <input
-                type="text"
-                value={studyGuideConstraint}
-                onChange={(e) => setStudyGuideConstraint(e.target.value)}
-                placeholder="e.g., Pages 1-5, or Chapter 2: Supply & Demand"
-                style={{ backgroundColor: '#18181B', color: 'white', border: '1px solid #3F3F46', padding: '0.75rem', borderRadius: '0.5rem', outline: 'none', width: '100%' }}
-                autoFocus
-              />
+            <div className="flex flex-col gap-6">
+              {/* Target Format */}
+              <div className="flex flex-col gap-3">
+                <label className="text-zinc-400 font-semibold text-sm uppercase tracking-wider">Target Format</label>
+                <div className="flex flex-wrap gap-2">
+                  {['Multiple Choice', 'Written Essay', 'General Knowledge'].map(format => (
+                    <button
+                      key={format}
+                      onClick={() => setStudyGuideFormat(format)}
+                      className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${studyGuideFormat === format
+                        ? 'bg-[#EA580C] text-white shadow-[0_0_15px_rgba(234,88,12,0.4)] border border-[#EA580C]'
+                        : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-800'
+                        }`}
+                    >
+                      {format}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Timeframe */}
+              <div className="flex flex-col gap-3">
+                <label className="text-zinc-400 font-semibold text-sm uppercase tracking-wider">Timeframe</label>
+                <div className="flex flex-wrap gap-2">
+                  {['Cramming (<24h)', 'Standard', 'Deep Study'].map(timeframe => (
+                    <button
+                      key={timeframe}
+                      onClick={() => setStudyGuideTimeframe(timeframe)}
+                      className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${studyGuideTimeframe === timeframe
+                        ? 'bg-[#EA580C] text-white shadow-[0_0_15px_rgba(234,88,12,0.4)] border border-[#EA580C]'
+                        : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-800'
+                        }`}
+                    >
+                      {timeframe}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Current Level */}
+              <div className="flex flex-col gap-3">
+                <label className="text-zinc-400 font-semibold text-sm uppercase tracking-wider">Current Level</label>
+                <div className="flex flex-wrap gap-2">
+                  {['Beginner', 'Intermediate', 'Expert'].map(level => (
+                    <button
+                      key={level}
+                      onClick={() => setStudyGuideLevel(level)}
+                      className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${studyGuideLevel === level
+                        ? 'bg-[#EA580C] text-white shadow-[0_0_15px_rgba(234,88,12,0.4)] border border-[#EA580C]'
+                        : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-800'
+                        }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
@@ -2292,8 +1831,8 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={handleGenerateStudyGuide}
-                disabled={isGeneratingStudyGuide || !studyGuideConstraint.trim()}
-                style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: (isGeneratingStudyGuide || !studyGuideConstraint.trim()) ? 'not-allowed' : 'pointer', opacity: (isGeneratingStudyGuide || !studyGuideConstraint.trim()) ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                disabled={isGeneratingStudyGuide}
+                style={{ backgroundColor: '#EA580C', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: isGeneratingStudyGuide ? 'not-allowed' : 'pointer', opacity: isGeneratingStudyGuide ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
               >
                 {isGeneratingStudyGuide ? 'Generating...' : 'Generate Guide'}
               </button>
@@ -2323,9 +1862,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="px-3 sm:px-8 py-3 sm:py-8" style={{ flex: 1, overflowY: 'auto', color: '#E4E4E7', lineHeight: '1.6', fontSize: '0.95rem' }}>
-              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
-                {activeStudyGuide.markdownContent}
-              </pre>
+              <StudyEngine guideData={activeStudyGuide.strategyData || activeStudyGuide.markdownContent} />
             </div>
           </div>
         </div>

@@ -2,15 +2,19 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { requireUser } from '@/lib/api-auth';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 export async function POST(req: Request) {
   try {
-    const { fileUrl, userId, semesterId } = await req.json();
+    const { user, response } = await requireUser();
+    if (!user) return response;
 
-    if (!fileUrl || !userId || !semesterId) {
-      return NextResponse.json({ error: "Missing fileUrl, userId, or semesterId." }, { status: 400 });
+    const { fileUrl, semesterId } = await req.json();
+
+    if (!fileUrl || !semesterId) {
+      return NextResponse.json({ error: "Missing fileUrl or semesterId." }, { status: 400 });
     }
 
     // Step 4: Backend API fetches the file from the URL
@@ -39,7 +43,7 @@ export async function POST(req: Request) {
       console.error("Cache read error:", e);
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
     const prompt = `First, verify if this document is a university course registration form or student schedule. If it is NOT, do not extract any courses. Instead, return a JSON object containing strictly: { "error": "invalid_document" }.\n\nIf it IS a valid form, you are analyzing a university course registration form. This form may contain multiple semesters. Please extract the courses and the semester they belong to. Return ONLY a raw JSON array of objects with keys "courseCode", "courseTitle", and "semester" (strictly string values of either 'First' or 'Second').\n\nCRITICAL: Do NOT wrap the response in markdown code blocks (e.g., no \`\`\`json). Return ONLY the raw array bracket structure or the error JSON object.`;
     const imageParts = [{ inlineData: { data: imageBase64, mimeType } }];
 

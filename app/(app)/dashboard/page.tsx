@@ -5,9 +5,11 @@ import { useChat } from '@ai-sdk/react';
 import { supabase } from '../../../utils/supabase/client';
 import { Pencil, RefreshCcw, ThumbsUp, ThumbsDown, MoreVertical } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
+
 import { useUserContext } from '../../../lib/hooks/useUserContext';
 import CommandCenterUI from '../../../components/CommandCenterUI';
 import PullToRefresh from '../../../components/PullToRefresh';
+import { toast } from 'sonner';
 
 export default function DashboardPage() {
   const pathname = usePathname();
@@ -25,7 +27,7 @@ export default function DashboardPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [isLoadingVault, setIsLoadingVault] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
 
   // Workspace Desk Management State
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
@@ -36,11 +38,18 @@ export default function DashboardPage() {
   const handleDeleteWorkspace = async () => {
     if (!workspaceToDelete) return;
     try {
-      await fetch(`/api/workspaces/${workspaceToDelete}`, { method: 'DELETE' });
-      setWorkspaces(prev => prev.filter(w => w.id !== workspaceToDelete));
-      setWorkspaceToDelete(null);
-      if (activeWorkspaceId === workspaceToDelete) {
-        setActiveWorkspaceId(null);
+      const res = await fetch(`/api/workspaces/${workspaceToDelete}`, { method: 'DELETE' });
+      if (res.ok) {
+        setWorkspaces(prev => prev.filter(w => w.id !== workspaceToDelete));
+        setWorkspaceToDelete(null);
+        if (activeWorkspaceId === workspaceToDelete) {
+          setActiveWorkspaceId(null);
+          setActiveSources([]);
+          setMessages([{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any]);
+        }
+      } else {
+        console.error("Failed to delete workspace on the server.");
+        alert("Failed to delete workspace. Please try again.");
       }
     } catch (e) {
       console.error(e);
@@ -125,7 +134,7 @@ export default function DashboardPage() {
 
 
   const { context, isLoading: isContextLoading } = useUserContext();
-  const userData = context || { name: 'Guest Student', email: 'Not signed in', uid: '', profile: null };
+  const userData = context || { name: 'Guest Student', email: 'Not signed in', uid: '', profile: null, school: '', department: '' };
 
   // Console state
   const [input, setInput] = useState('');
@@ -135,7 +144,12 @@ export default function DashboardPage() {
     api: '/api/engine/query',
     initialMessages: [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' }] } as any],
     onError: (err: Error) => {
-      console.error("Caught Backend Error:", err.message);
+      console.warn("Caught Backend Error:", err.message);
+      if (err.message.includes('503') || err.message.includes('demand')) {
+        toast.error("High traffic detected. The AI servers are currently busy. Please try again in a few moments.");
+      } else {
+        toast.error(err.message || "An error occurred while communicating with the AI.");
+      }
     }
   } as any);
   const isLoading = status === 'streaming' || status === 'submitted';
@@ -201,6 +215,7 @@ export default function DashboardPage() {
           targetWorkspaceId = ws.id;
           setActiveWorkspaceId(ws.id);
           setActiveSources([]); // Clear any previous desk's sources
+          setMessages([{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any]);
         } else {
           throw new Error('No workspace ID returned');
         }
@@ -248,11 +263,19 @@ export default function DashboardPage() {
           body: JSON.stringify({
             name: file.name,
             url: fileUrl,
-            workspaceId: targetWorkspaceId
+            workspaceId: targetWorkspaceId,
+            fileSize: file.size
           })
         });
         if (res.ok) {
           const newDoc = await res.json();
+          
+          setActiveSources(prev => [...prev, {
+            id: newDoc.id,
+            title: file.name,
+            type: file.name.endsWith('.pdf') ? 'pdf' : 'document',
+            content: ''
+          }]);
 
           setAssimilationStatus('Generating AI semantic vectors...');
           setProgressPercentage(getProgress(2));
@@ -265,23 +288,38 @@ export default function DashboardPage() {
                 fileUrl: fileUrl,
                 fileName: file.name,
                 docId: newDoc.id,
-                userId: context?.uid || 'guest'
+                userId: context?.uid || 'guest',
+                workspaceId: targetWorkspaceId,
+                workspaceName: activeWorkspaceName
               })
             });
             
             if (analyzeRes.ok) {
-               setActiveSources(prev => [...prev, {
-                 id: newDoc.id,
-                 title: file.name,
-                 type: file.name.endsWith('.pdf') ? 'pdf' : 'document',
-                 content: '' // AI fetches chunks dynamically now
-               }]);
+               const analyzeData = await analyzeRes.json();
+               
+               if (analyzeData.workspaceTitle) {
+                 setActiveWorkspaceName(analyzeData.workspaceTitle);
+                 setWorkspaces(prev => prev.map(w => w.id === targetWorkspaceId ? { ...w, title: analyzeData.workspaceTitle } : w));
+               }
             } else {
-              console.error("Analysis failed");
+              const errData = await analyzeRes.json();
+              if (analyzeRes.status === 503 || errData.isCongested) {
+                toast.error("High traffic detected. The AI servers are currently busy. Please try again in a few moments.");
+              } else {
+                toast.error(errData.error || "Analysis failed.");
+              }
+              console.warn("Analysis failed gracefully", errData);
             }
           } catch (analyzeError) {
             console.error("Analysis request failed", analyzeError);
           }
+        } else {
+          const errData = await res.json();
+          toast.error(errData.error || "Failed to save document.");
+          setAssimilationStatus('');
+          setIsAssimilating(false);
+          setIsExtractingMock(false);
+          continue;
         }
       } catch (e) {
         console.error("Failed to save to database:", e);
@@ -289,22 +327,8 @@ export default function DashboardPage() {
       setProgressPercentage(getProgress(3));
     }
 
-    if (activeWorkspaceName === 'Untitled Workspace' || activeWorkspaceName === 'Untitled workspace') {
-      try {
-        setAssimilationStatus('Generating workspace title...');
-        const renameRes = await fetch(`/api/workspaces/${targetWorkspaceId}/rename`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName: files[0].name })
-        });
-        if (renameRes.ok) {
-          const { title } = await renameRes.json();
-          setActiveWorkspaceName(title);
-        }
-      } catch (e) {
-        console.error("Auto rename failed", e);
-      }
-    }
+    // We removed the old rename workflow here because the title is now 
+    // dynamically generated during the document analysis phase directly in /api/engine/analyze
     
     setAssimilationStatus('Finalizing your study desk...');
     setProgressPercentage(100);
@@ -331,38 +355,8 @@ export default function DashboardPage() {
       const ws = await res.json();
       setWorkspaces(ws);
       
-      // Auto-Create or Fetch Workspace on Mount if activeWorkspaceId is null
-      if (!activeWorkspaceId) {
-        // Fetch the absolute most recent workspace including empty ones
-        const initRes = await fetch(`/api/workspaces?includeEmpty=true${context?.uid ? `&userId=${context.uid}` : ''}`);
-        const initWs = await initRes.json();
-        
-        if (initWs && initWs.length > 0) {
-          handleSelectWorkspace(initWs[0]);
-          // Add it to the sidebar list if it's not already there
-          if (!ws.find((w: any) => w.id === initWs[0].id)) {
-            setWorkspaces([initWs[0], ...ws]);
-          }
-        } else {
-          // No workspaces exist at all, create a new default workspace
-          try {
-            const createRes = await fetch('/api/workspaces', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: context?.uid || null, userEmail: context?.email || 'guest@example.com' })
-            });
-            if (createRes.ok) {
-              const newWs = await createRes.json();
-              if (newWs && newWs.id) {
-                setWorkspaces([newWs, ...ws]);
-                handleSelectWorkspace(newWs);
-              }
-            }
-          } catch (createErr) {
-            console.error("Failed to auto-create workspace", createErr);
-          }
-        }
-      }
+      // Auto-select removed per user request: The user prefers to see the empty state 
+      // showing their desks and the option to create a new workspace on load.
     } catch (e) { 
       console.error(e) 
     } finally {
@@ -410,9 +404,9 @@ export default function DashboardPage() {
       setTimeout(() => setUploadStatus(''), 5000);
       return;
     }
-    const validFiles = files.filter(f => f.name.match(/\.(pdf|pptx|docx|txt)$/i));
+    const validFiles = files.filter(f => f.name.match(/\.(pdf|pptx|docx|txt|jpg|jpeg|png|webp|heic)$/i));
     if (validFiles.length !== files.length) {
-      setUploadStatus('Error: Legacy .doc files are not supported. Please save as modern .docx or .pdf.');
+      setUploadStatus('Error: Unsupported file type. Please upload PDF, DOCX, PPTX, TXT, or Image files.');
       setTimeout(() => setUploadStatus(''), 5000);
       return;
     }
@@ -678,46 +672,10 @@ export default function DashboardPage() {
   };
 
   return (
-    <PullToRefresh onRefresh={handleRefresh}>
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        .dashboard-layout, .dashboard-layout * { box-sizing: border-box; }
-        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .dashboard-layout { display: flex; flex-direction: column; height: 100dvh; background-color: #0A1128; color: white; overflow-x: hidden; overflow-y: hidden; position: relative; width: 100%; max-width: 100vw; }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 40; display: none; opacity: 0; transition: opacity 0.3s; }
-        .overlay.visible { display: block; opacity: 1; }
-        .sidebar { position: fixed; top: 0; left: -300px; width: 260px; height: 100dvh; background-color: #111111; border-right: 1px solid #27272A; padding: 1.5rem; display: flex; flex-direction: column; z-index: 50; transition: left 0.3s ease; }
-        .sidebar.open { left: 0; }
-        .console-panel { position: fixed; top: 0; right: -100%; width: 100%; height: 100dvh; background-color: #111111; display: flex; flex-direction: column; z-index: 50; transition: right 0.3s ease; }
-        .console-panel.open { right: 0; }
-        .main-content { flex: 1; padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem; overflow-y: auto; overflow-x: hidden; height: 100dvh; width: 100%; max-width: 100vw; }
-        .logo-img { width: 8rem; margin-bottom: 2rem; }
-        .mobile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; width: 100%; }
-        .menu-btn { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0.5rem; display: flex; }
-        .desktop-toggle-btn { display: none; background-color: #18181B; padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #27272A; cursor: pointer; font-size: 0.875rem; font-weight: bold; align-items: center; gap: 0.5rem; transition: all 0.2s; }
-        .mobile-text { display: inline; }
-        .desktop-text { display: none; }
-        .file-list-container::-webkit-scrollbar { width: 6px; }
-        .file-list-container::-webkit-scrollbar-track { background: #111111; }
-        .file-list-container::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 3px; }
-        .custom-checkbox { accent-color: #EA580C; width: 1.2rem; height: 1.2rem; cursor: pointer; }
-        @media (min-width: 1024px) {
-          .dashboard-layout { flex-direction: row; }
-          .overlay { display: none !important; }
-          .mobile-header { display: none; }
-          .sidebar { position: static; width: 250px; left: 0; transition: none; flex-shrink: 0; }
-          .console-panel { position: static; width: 400px; right: 0; transition: none; display: none; flex-shrink: 0; border-left: 1px solid #27272A; }
-          .console-panel.open { display: flex; }
-          .main-content { padding: 3rem; flex: 1; }
-          .logo-img { width: 10rem; margin-bottom: 3rem; }
-          .desktop-toggle-btn { display: flex; }
-          .mobile-text { display: none; }
-          .desktop-text { display: inline; }
-        }
-      `}} />
+    <PullToRefresh onRefresh={handleRefresh} disablePageScroll>
+      
 
-      <div className="dashboard-layout">
+      <div className="flex flex-col h-full w-full">
         {isAssimilating && (
           <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md transition-opacity duration-300">
             <div className="flex flex-col items-center gap-4 p-8 rounded-2xl bg-gray-900 border border-gray-700 shadow-2xl w-full max-w-md">
@@ -735,36 +693,11 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
-        <div className={`overlay ${isSidebarOpen || isConsoleOpen ? 'visible' : ''}`} onClick={() => { setIsSidebarOpen(false); setIsConsoleOpen(false); }}></div>
-        <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <img src="/logo.png" alt="CogniBase" className="logo-img" style={{ marginBottom: '0' }} />
-            <button className="menu-btn lg:hidden" onClick={() => setIsSidebarOpen(false)} style={{ display: 'none' }}>✕</button>
-          </div>
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, marginTop: '3rem' }}>
-            <a href="/dashboard" style={{ color: pathname === '/dashboard' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/dashboard' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Command Center</a>
-            <a href="/vault" style={{ color: pathname === '/vault' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/vault' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>My Vault</a>
-            <a href="/study-guides" style={{ color: pathname === '/study-guides' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/study-guides' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Study Guides</a>
-            <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Active Engines</a>
-            <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Settings</a>
+        
+        
 
-            </nav>
-          <div style={{ borderTop: '1px solid #27272A', paddingTop: '1.5rem', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-              <span style={{ color: 'white', fontWeight: 'bold', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userData.name}</span>
-              <span style={{ color: '#A1A1AA', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userData.email}</span>
-            </div>
-            <div style={{ color: '#71717A', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ width: '6px', height: '6px', backgroundColor: '#22C55E', borderRadius: '50%', display: 'inline-block' }}></span>
-              <span>System Online</span>
-            </div>
-          </div>
-        </aside>
-
-                <main className="main-content max-w-[100vw]" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', overflowX: 'hidden' }}>
-          <div className="mobile-header">
-            <button className="menu-btn" onClick={() => setIsSidebarOpen(true)}>☰</button>
-          </div>
+                <div className="flex-1 flex flex-col h-full overflow-hidden p-3 sm:p-6 min-h-0">
+          
 
           {activeSources.length === 0 && (
             <header style={{ borderBottom: '1px solid #27272A', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
@@ -775,7 +708,7 @@ export default function DashboardPage() {
             </header>
           )}
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
+          <div style={{ flex: 1, overflow: 'hidden', padding: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {activeSources.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '2rem' }}>
                 <div style={{ textAlign: 'center', maxWidth: '600px' }}>
@@ -787,7 +720,12 @@ export default function DashboardPage() {
                   <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Upload New Source</h3>
                     <div
-                      onClick={() => setIsAddSourceModalOpen(true)}
+                      onClick={() => {
+                        setActiveWorkspaceId(null);
+                        setActiveWorkspaceName("Untitled Workspace");
+                        setMessages([{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any]);
+                        setIsAddSourceModalOpen(true);
+                      }}
                       style={{ backgroundColor: '#18181B', padding: '2rem', borderRadius: '0.5rem', border: '1px dashed #3F3F46', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s', marginTop: 'auto' }}
                     >
                       <span style={{ color: 'white', fontWeight: '500' }}>+ Add Source</span>
@@ -857,12 +795,16 @@ export default function DashboardPage() {
               </div>
             ) : (
               <CommandCenterUI
+                workspaceId={activeWorkspaceId || ''}
                 title={activeWorkspaceName || (activeSources.length > 0 ? activeSources[0].title : 'Untitled Workspace')}
                 activeSources={activeSources}
                 onRemoveSource={(id) => {
                   setActiveSources(prev => prev.filter(s => s.id !== id));
                 }}
                 onAddSource={() => {
+                  setActiveWorkspaceId(null);
+                  setActiveWorkspaceName("Untitled Workspace");
+                  setMessages([{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any]);
                   setIsAddSourceModalOpen(true);
                   setSourceModalView('options');
                 }}
@@ -903,7 +845,7 @@ export default function DashboardPage() {
               />
             )}
           </div>
-        </main>
+        </div>
 
         {/* Add Source Modal */}
         {isAddSourceModalOpen && (

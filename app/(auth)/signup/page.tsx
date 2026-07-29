@@ -45,6 +45,20 @@ export default function SignUpPage() {
       });
 
       if (supaError) throw supaError;
+
+      // Handle Supabase's silent duplicate email protection
+      if (data?.user && data.user.identities && data.user.identities.length === 0) {
+        throw new Error('This email is already registered. Try logging in!');
+      }
+      
+      // Auto-login immediately to ensure session is created if signUp doesn't attach it automatically
+      if (!data.session) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+        if (signInError) throw signInError;
+      }
       
       setStep(2);
       setIsLoading(false);
@@ -81,9 +95,13 @@ export default function SignUpPage() {
       }
 
       router.push('/dashboard');
+      router.refresh();
     } catch (err: any) {
       setError('Failed to save details, but account was created. Redirecting...');
-      setTimeout(() => router.push('/dashboard'), 2000);
+      setTimeout(() => {
+        router.push('/dashboard');
+        router.refresh();
+      }, 2000);
     }
   };
 

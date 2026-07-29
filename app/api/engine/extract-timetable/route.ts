@@ -1,18 +1,26 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { parseOffice } from "officeparser";
+import { createClient } from '@/utils/supabase/server';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized: Please log in." }, { status: 401 });
+    }
+
     const { imageBase64, mimeType } = await req.json();
 
     if (!imageBase64 || !mimeType) {
       return NextResponse.json({ error: "Missing image or mimeType." }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
     const prompt = `First, evaluate the document. If it does not contain a recognizable timetable or schedule, immediately return a JSON object exactly like this: { "error": "NOT_A_TIMETABLE" }. Do not attempt to guess.\n\nRegardless of the input format (handwritten photo, Excel sheet, plain text), extract all detected classes into this standardized JSON format. Return ONLY a clean JSON array of objects. Each object must have the following exact keys: "courseCode" (e.g. "CSC 101"), "day" (e.g. "Monday", "Tuesday"), "startTime" (e.g. "10:00 AM"), "endTime" (e.g. "11:30 AM"), and "location" (e.g. "Room 404"). If the location is missing, set it to an empty string. Do not include any markdown backticks. Return the raw JSON array or the error object.`;
 
@@ -44,7 +52,10 @@ export async function POST(req: Request) {
       ];
     }
 
-    const result = await model.generateContent([prompt, ...contentParts]);
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [prompt, ...contentParts].map(p => typeof p === 'string' ? { text: p } : p) }],
+      generationConfig: { responseMimeType: "application/json" }
+    });
     const response = await result.response;
     let text = response.text();
     

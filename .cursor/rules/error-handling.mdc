@@ -1,0 +1,13 @@
+---
+description: "Global error handling requirements for all components and API routes"
+alwaysApply: true
+---
+
+**Strict Error Handling Requirements:**
+- **No Silent Failures:** Every potential point of failure (API calls, database queries, file uploads) must be wrapped in error-handling logic (e.g., try/catch blocks).
+- **Mandatory Sonner Integration:** All client-facing errors must be communicated using the Sonner toast library.
+- **NEVER Dump Raw Errors:** Absolutely NEVER pass raw `error.message` strings, JSON objects, stack traces, or third-party API error logs directly to the Sonner toast or the UI. 
+- **Error Sanitization:** You MUST intercept technical errors and translate them into premium, concise, human-readable language before showing them to the user.
+   - *Example (BAD):* `toast.error(error.message)`
+   - *Example (GOOD):* `toast.error("We couldn't generate that right now. Please try again.")`
+- **Rate Limit & Traffic Handling:** Always assume third-party LLM APIs will occasionally hit rate limits (429) or traffic overloads (503). Explicitly catch these and use a premium fallback string like: *"The AI servers are currently experiencing high demand. Please try again in a few moments."*

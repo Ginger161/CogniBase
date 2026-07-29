@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
+import { requireUser, requireDocumentOwnership, requireWorkspaceOwnership } from '@/lib/api-auth';
 
 const PDFParser = require("pdf2json");
 const officeParser = require("officeparser");
@@ -17,17 +18,27 @@ function extractPDFText(buffer: Buffer): Promise<string> {
   });
 }
 
-function chunkText(text: string, maxChunkSize: number = 1000) {
+function chunkText(text: string, maxChunkSize: number = 1000, overlapSize: number = 200) {
   const words = text.replace(/\s+/g, " ").split(" ");
   const chunks = [];
-  let currentChunk = [];
+  let currentChunk: string[] = [];
   let currentLength = 0;
 
-  for (const word of words) {
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
     if (currentLength + word.length > maxChunkSize) {
       chunks.push(currentChunk.join(" "));
-      currentChunk = [];
-      currentLength = 0;
+      
+      let overlapChunk: string[] = [];
+      let overlapLength = 0;
+      for (let j = currentChunk.length - 1; j >= 0; j--) {
+        const overlapWord = currentChunk[j];
+        if (overlapLength + overlapWord.length > overlapSize) break;
+        overlapChunk.unshift(overlapWord);
+        overlapLength += overlapWord.length + 1;
+      }
+      currentChunk = [...overlapChunk];
+      currentLength = overlapLength;
     }
     currentChunk.push(word);
     currentLength += word.length + 1;
@@ -38,10 +49,23 @@ function chunkText(text: string, maxChunkSize: number = 1000) {
 
 export async function POST(req: Request) {
   try {
-    const { fileUrl, fileName, docId, userId } = await req.json();
+    const { user, response: authResponse } = await requireUser();
+    if (!user) return authResponse;
 
-    if (!fileUrl || !fileName || !userId) {
+    const { fileUrl, fileName, docId, workspaceId, workspaceName } = await req.json();
+
+    if (!fileUrl || !fileName) {
       return NextResponse.json({ error: "Missing required file data." }, { status: 400 });
+    }
+
+    if (docId) {
+      const { doc: document, response: docResp } = await requireDocumentOwnership(docId, user.id);
+      if (!document) return docResp;
+    }
+
+    if (workspaceId) {
+      const { workspace, response: wsResp } = await requireWorkspaceOwnership(workspaceId, user.id);
+      if (!workspace) return wsResp;
     }
 
     const response = await fetch(fileUrl);
@@ -64,6 +88,26 @@ export async function POST(req: Request) {
       }
     } else if (extension === "txt") {
       extractedText = buffer.toString("utf-8");
+    } else if (["png", "jpg", "jpeg", "webp", "heic"].includes(extension as string)) {
+      try {
+        const generativeModel = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+        const prompt = "Please extract all text from this image accurately. If there are diagrams, describe them in text. If there is no text or diagrams, just describe the visual content in detail so a student can study it.";
+        const mimeType = extension === 'jpg' ? 'image/jpeg' : `image/${extension}`;
+        
+        const result = await generativeModel.generateContent([
+          prompt,
+          {
+            inlineData: {
+              data: buffer.toString("base64"),
+              mimeType
+            }
+          }
+        ]);
+        extractedText = result.response.text();
+      } catch (err) {
+        console.error("Gemini Vision Error:", err);
+        return NextResponse.json({ error: "Failed to process image with AI Vision." }, { status: 500 });
+      }
     } else {
       return NextResponse.json({ error: `Unsupported file extension: .${extension}` }, { status: 400 });
     }
@@ -136,10 +180,37 @@ export async function POST(req: Request) {
        return NextResponse.json({ error: "Failed to generate AI data from this file." }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, chunksProcessed: chunksInserted });
+    let generatedTitle = null;
+    
+    // Only generate a title if it's the default or generic name, or if we want to auto-update
+    if (workspaceId && (!workspaceName || workspaceName.toLowerCase().includes('untitled') || workspaceName.toLowerCase().includes('optimizing academic'))) {
+      try {
+        const titleModel = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+        const titlePrompt = `Based on the following academic text, generate a short, highly relevant title (3 to 5 words maximum) for a study workspace. Do not use quotes or special characters. Text excerpt: ${extractedText.substring(0, 1500)}`;
+        const titleResult = await titleModel.generateContent(titlePrompt);
+        generatedTitle = titleResult.response.text().trim().replace(/^["'](.*)["']$/, '$1');
+        
+        await prisma.workspace.update({
+          where: { id: workspaceId },
+          data: { title: generatedTitle }
+        });
+      } catch (titleErr) {
+        console.error("Failed to generate workspace title:", titleErr);
+      }
+    }
+
+    return NextResponse.json({ success: true, chunksProcessed: chunksInserted, workspaceTitle: generatedTitle });
 
   } catch (error: any) {
     console.error("Engine Error:", error);
+    
+    if (error.message?.includes("503") || error.message?.includes("high demand") || error.message?.includes("Service Unavailable")) {
+      return NextResponse.json({ 
+        error: "The AI servers are currently experiencing high demand from students. Please try again in a few minutes.",
+        isCongested: true
+      }, { status: 503 });
+    }
+
     return NextResponse.json({ error: error.message || "Failed to process document." }, { status: 500 });
   }
 }

@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { getAIModel } from "@/lib/ai/model-router";
 import { parseOffice } from "officeparser";
+import { createClient } from '@/utils/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized: Please log in." }, { status: 401 });
+    }
+
     const { fileUrl, sectionConstraint } = await req.json();
 
     if (!fileUrl || typeof fileUrl !== 'string') {
@@ -45,7 +53,7 @@ export async function POST(req: Request) {
         text = buffer.toString('utf-8');
       } else {
         const doc = await parseOffice(buffer, { fileType: ext });
-        text = doc.toText();
+        text = typeof doc === 'string' ? doc : (doc.toText ? doc.toText() : JSON.stringify(doc));
       }
     } catch (err) {
       console.error("Parser error:", err);
@@ -58,10 +66,26 @@ export async function POST(req: Request) {
 
     const model = getAIModel('complex');
     
-    const prompt = `You are a master tutor. Create a beautifully formatted markdown study guide based ONLY on the following requested section of the document.
-Requested Section: ${sectionConstraint}
+    const prompt = `You are a master tutor. Create a highly structured JSON study guide based on the following document content, strictly adhering to the user's Study Brief Configuration parameters.
+Study Brief Configuration: ${sectionConstraint}
 
-Format the output with clear headings (##, ###), bullet points, bold terms, and structured sections to maximize learning efficiency. Do not include any JSON formatting, just output the raw markdown text.
+You MUST return a raw JSON object that EXACTLY matches this schema. Do not include markdown wrappers.
+{
+  "guideTitle": "Mastering EDM 205",
+  "phases": [
+    {
+      "phaseId": "1",
+      "title": "Phase 1: Core Definitions",
+      "microBites": [
+        "Educational Planning is the systematic process of...",
+        "It requires resource allocation and..."
+      ],
+      "flashcards": [
+        { "question": "What is Educational Planning?", "answer": "A systematic process..." }
+      ]
+    }
+  ]
+}
 
 Document Context:
 ${text.substring(0, 40000)}
@@ -78,7 +102,8 @@ ${text.substring(0, 40000)}
     let result;
     try {
       result = await model.generateContent({
-        contents: [{ role: "user", parts: contentParts.map(p => typeof p === 'string' ? { text: p } : p) }]
+        contents: [{ role: "user", parts: contentParts.map(p => typeof p === 'string' ? { text: p } : p) }],
+        generationConfig: { responseMimeType: "application/json" }
       });
     } catch (aiError: any) {
       console.error("Study Guide Gen Error:", aiError);
@@ -88,7 +113,35 @@ ${text.substring(0, 40000)}
     const response = await result.response;
     const markdownOut = response.text();
     
-    return NextResponse.json({ studyGuide: markdownOut });
+    let parsedJson;
+    try {
+      parsedJson = JSON.parse(markdownOut);
+    } catch (e) {
+      console.error("JSON Parse failed on raw AI output:", e);
+      console.log("--- RAW AI OUTPUT START ---");
+      console.log(markdownOut);
+      console.log("--- RAW AI OUTPUT END ---");
+      try {
+        const cleaned = markdownOut.replace(/```json/g, '').replace(/```/g, '').trim();
+        parsedJson = JSON.parse(cleaned);
+      } catch (cleanError) {
+        console.error("Cleaned JSON Parse failed:", cleanError);
+        throw new Error("AI returned malformed JSON");
+      }
+    }
+    try {
+      const origin = req.headers.get('origin') || new URL(req.url).origin;
+      const cookieHeader = req.headers.get('cookie');
+      await fetch(`${origin}/api/metrics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(cookieHeader ? { 'cookie': cookieHeader } : {}) },
+        body: JSON.stringify({ action: 'generate_guide' })
+      });
+    } catch (metricErr) {
+      console.error("Failed to update gamification metric:", metricErr);
+    }
+
+    return NextResponse.json({ studyGuide: parsedJson });
 
   } catch (error: any) {
     console.error("Study Guide Route Error:", error);

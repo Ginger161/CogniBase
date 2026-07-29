@@ -24,15 +24,24 @@ export const viewport: Viewport = {
   interactiveWidget: 'resizes-content',
 };
 
+import { Toaster } from 'sonner';
+import { UserProvider } from '@/lib/hooks/useUserContext';
+import { ThemeProvider } from '@/components/ThemeProvider';
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${plusJakartaSans.className} ${spaceGrotesk.variable} antialiased min-h-dvh`}>
-        {children}
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <UserProvider>
+            {children}
+            <Toaster position="bottom-right" theme="dark" richColors closeButton />
+          </UserProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

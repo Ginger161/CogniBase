@@ -1,15 +1,22 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { YoutubeTranscript } from 'youtube-transcript';
+import { requireUser, requireWorkspaceOwnership } from '@/lib/api-auth';
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { user, response } = await requireUser();
+    if (!user) return response;
+
     const { id: workspaceId } = await params;
     const { url } = await req.json();
 
     if (!url || typeof url !== 'string') {
       return NextResponse.json({ error: "Missing or invalid URL" }, { status: 400 });
     }
+
+    const { workspace, response: ownerResp } = await requireWorkspaceOwnership(workspaceId, user.id);
+    if (!workspace) return ownerResp;
 
     let name = "YouTube Video";
     try {

@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { getAIModel } from "@/lib/ai/model-router";
 import { parseOffice } from "officeparser";
+import { createClient } from '@/utils/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized: Please log in." }, { status: 401 });
+    }
+
     const { fileUrl, text: providedText } = await req.json();
 
     let text = providedText || '';
@@ -44,7 +52,7 @@ export async function POST(req: Request) {
           text = buffer.toString('utf-8');
         } else {
           const doc = await parseOffice(buffer, { fileType: ext });
-          text = doc.toText();
+          text = typeof doc === 'string' ? doc : (doc.toText ? doc.toText() : JSON.stringify(doc));
         }
       } catch (err) {
         console.error("Parser error:", err);

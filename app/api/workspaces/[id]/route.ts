@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createClient } from '@supabase/supabase-js';
+import { requireUser, requireWorkspaceOwnership, getOrCreateUserVault } from '@/lib/api-auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -9,6 +10,9 @@ const supabase = createClient(
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { user, response } = await requireUser();
+    if (!user) return response;
+
     const resolvedParams = await params;
     const workspaceId = resolvedParams.id;
 
@@ -16,30 +20,19 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ error: "Missing workspace id" }, { status: 400 });
     }
 
-    // 1. Get all documents for this workspace
-    const docs = await prisma.document.findMany({
-      where: { workspaceId }
+    const { workspace, response: ownerResp } = await requireWorkspaceOwnership(workspaceId, user.id);
+    if (!workspace) return ownerResp;
+
+    // 0. Ensure user Vault exists
+    const vault = await getOrCreateUserVault(user.id);
+
+    // 1. Move all documents for this workspace into the User's Vault so they survive the Cascade
+    await prisma.document.updateMany({
+      where: { workspaceId },
+      data: { workspaceId: vault.id }
     });
 
-    // 2. Extract storage paths
-    const pathsToDelete = docs.map((doc: any) => {
-      const urlParts = doc.url.split('workspace-files/');
-      return urlParts.length > 1 ? urlParts[1] : null;
-    }).filter(Boolean) as string[];
-
-    // 3. Delete files from Supabase Storage
-    if (pathsToDelete.length > 0) {
-      const { error: storageError } = await supabase.storage
-        .from('workspace-files')
-        .remove(pathsToDelete);
-        
-      if (storageError) {
-        console.error("Supabase Storage Deletion Error:", storageError);
-        // Continue anyway to ensure the DB is cleaned up even if storage fails
-      }
-    }
-
-    // 4. Delete the workspace (Cascade will handle Documents, Messages, Chunks)
+    // 2. Delete the workspace (Cascade will handle Messages, but Documents are safe now)
     try {
       await prisma.workspace.delete({
         where: { id: workspaceId }

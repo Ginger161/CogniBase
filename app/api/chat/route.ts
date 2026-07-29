@@ -1,10 +1,11 @@
-import { streamText } from 'ai';
+import { streamText, tool, stepCountIs } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { z } from 'zod';
 
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY || '',
@@ -49,11 +50,6 @@ export async function POST(req: Request) {
       return new Response(JSON.stringify({ error: "Unauthorized: Please log in." }), { status: 401 });
     }
 
-    const explicitlyPassedDocIds = (data?.activeSources || bodyActiveSources || []).map((s: any) => s.id).filter(Boolean);
-    if (explicitlyPassedDocIds.length === 0 && urlSources) {
-      explicitlyPassedDocIds.push(...urlSources.split(',').filter(Boolean));
-    }
-
     if (!messages || messages.length === 0) {
       return new Response(JSON.stringify({ error: "Missing messages." }), { status: 400 });
     }
@@ -65,7 +61,6 @@ export async function POST(req: Request) {
 
     const userQueryText = normalizedMessages[normalizedMessages.length - 1]?.content || "";
     
-    // Save user message to database if workspaceId is present
     if (workspaceId) {
       try {
         await prisma.message.create({
@@ -80,135 +75,79 @@ export async function POST(req: Request) {
       }
     }
 
-    // 1. Fetch Workspace Metadata First
-    // Prioritize activeSources (which are the files the user specifically clicked in their workspace UI)
-    let docNames = "";
-    let targetDocIds: string[] = [];
-    let fetchedDocs: any[] = [];
-    
-    // We prioritize explicit URL sources to bypass stale frontend body closures
-    if (explicitlyPassedDocIds.length > 0) {
-      fetchedDocs = await prisma.document.findMany({
-        where: { 
-          id: { in: explicitlyPassedDocIds },
-          ...(workspaceId ? { workspaceId } : {}) // STRICT ISOLATION only if workspaceId exists
-        }
-      });
-    } else if (workspaceId) {
-      // Fallback to fetching all workspace docs
-      fetchedDocs = await prisma.document.findMany({
-        where: { workspaceId }
-      });
-    }
-    
-    docNames = fetchedDocs.map((d: any) => d.name).join(', ');
-    targetDocIds = fetchedDocs.map((d: any) => d.id);
-
-    let searchContext = "";
-    
-    // Inject full textContent from any document that has it (e.g. YouTube transcripts)
-    const fullTextDocs = fetchedDocs
-      .filter((d: any) => d.textContent)
-      .map((d: any) => `[Full Text - ${d.name}]\n${d.textContent}`)
-      .join("\n\n---\n\n");
-      
-    if (fullTextDocs) {
-      searchContext += fullTextDocs + "\n\n---\n\n";
-    }
-
-    // 2. pgvector similarity search
-    if (targetDocIds.length > 0 && userQueryText.trim().length > 0) {
-      try {
-        const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
-        const queryResult = await embeddingModel.embedContent(userQueryText);
-        let queryEmbedding = queryResult.embedding.values;
-        if (queryEmbedding.length > 768) {
-          queryEmbedding = queryEmbedding.slice(0, 768);
-        }
-
-        // Use Prisma raw query to search vectors, scoped to the active document IDs
-        const docIdsParam = targetDocIds.map(id => `'${id}'`).join(',');
-        
-        // Execute pgvector search
-        const matches: any[] = await prisma.$queryRawUnsafe(`
-          SELECT c."content", d."name" as "documentName", 1 - (c."embedding" <=> $1::vector) as similarity
-          FROM "DocumentChunk" c
-          JOIN "Document" d ON c."documentId" = d."id"
-          WHERE c."documentId" IN (${docIdsParam}) ${workspaceId ? `AND d."workspaceId" = '${workspaceId}'` : ''}
-          ORDER BY c."embedding" <=> $1::vector
-          LIMIT 20
-        `, `[${queryEmbedding.join(',')}]`);
-
-        // 3. Build a Meta-Query Fallback
-        const highestSimilarity = matches.length > 0 ? matches[0].similarity : 0;
-        
-        if (highestSimilarity < 0.65 || matches.length === 0) {
-          // Fallback: If similarity is low, it's likely a meta-question like "what is this about?"
-          // Pull the first 3 chunks of each document to summarize
-          const fallbackChunks: any[] = await prisma.$queryRawUnsafe(`
-            SELECT sub."content", d."name" as "documentName"
-            FROM (
-              SELECT "content", "documentId",
-                     ROW_NUMBER() OVER(PARTITION BY "documentId" ORDER BY "id" ASC) as rn
-              FROM "DocumentChunk"
-              WHERE "documentId" IN (${docIdsParam})
-            ) sub
-            JOIN "Document" d ON sub."documentId" = d."id"
-            WHERE sub.rn <= 3
-          `);
-          searchContext += fallbackChunks.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
-        } else {
-          // Use the high-confidence vector matches
-          searchContext += matches.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
-        }
-      } catch (err) {
-        console.error("Vector search error:", err);
-      }
-    }
-
-    // 3. Format Conversation History for Strict Memory Tracking
-    let formattedConversationHistory = "";
-    normalizedMessages.slice(0, -1).forEach((msg: any, index: number) => {
-      formattedConversationHistory += `[interaction_id: ${index + 1}]`;
-      if (index > 0) {
-        formattedConversationHistory += ` [previous_interaction_id: ${index}]\n`;
-      } else {
-        formattedConversationHistory += `\n`;
-      }
-      formattedConversationHistory += `Role: ${msg.role}\nMessage: ${msg.content}\n\n`;
-    });
-
-    // 4. Hard-Inject File Awareness into the System Prompt
-    const systemPrompt = `CRITICAL CONTEXT: The user is currently inside a workspace that contains the following uploaded study documents: [${docNames}]. You have full access to these materials via the injected chunks below. Never say you do not have access to these files.
-
-YOU ARE AN ELITE ACADEMIC TUTOR AND EXAM STRATEGIST. Your sole purpose is to help university students master their course materials, synthesize complex information, and ace their exams. You are empathetic, proactive, and highly structured.
-
-Rule 1: Your primary knowledge must come strictly from the provided DocumentChunks. If the user asks what the materials are about, analyze the text and mention the specific details present (e.g., specific instructors, specific technical indicators like Dojis or Ema mentioned in the text). Do not speak in broad, generic subject terms if they aren't in the chunks.
-
-Rule 2: If the user asks a question that requires external knowledge or goes beyond what is written in the document, you MUST explicitly state: "This information is not explicitly found in your uploaded materials, but based on general best practices..." before providing the answer. Never hallucinate that external information is part of the document.
-
-Rule 3: You must maintain perfect continuity across the entire conversation history. When the user uses pronouns or references previous explanations (e.g., "explain that rule further"), cross-reference the chat history to identify the exact topic before querying the vector database or answering.
-
-[WORKSPACE METADATA]
-User Profile Context (Name, School, Department, Courses):
+    // Agentic Tool-Calling: System Prompt focuses strictly on identity and tool delegation
+    const systemPrompt = `You are CogniBase, an elite academic AI co-pilot. Here is your current user context, which you must use silently to calibrate your responses, unless explicitly helpful to bring up:
 ${JSON.stringify(userProfile)}
 
-[VECTOR CHUNKS]
-Extracted Context from Workspace Files:
-${searchContext ? searchContext : "No relevant content found in the files for this specific query."}
+If the user asks a general question unrelated to this context, ignore the context and answer directly. Use your tools to fetch their timetable, metrics, or search their workspace files when appropriate. Maintain continuity across the conversation history.`;
 
-[LINKED CONVERSATION HISTORY]
-${formattedConversationHistory ? formattedConversationHistory : "No previous conversation history."}`;
-
-    // 5. Stream response using Vercel AI SDK
-    console.log("🧠 AI System Prompt Length:", searchContext.length, "| First 100 chars:", searchContext.substring(0, 100));
-    
     const result = streamText({
-      model: google('gemini-3.1-flash-lite'),
+      model: google('gemini-3.5-flash'),
       system: systemPrompt,
       messages: normalizedMessages,
+      stopWhen: stepCountIs(5),
+      tools: {
+        getUserTimetable: tool({
+          description: "Get the user's timetable/schedule data. Use this when the user asks about their classes or timings.",
+          inputSchema: z.object({}),
+          execute: async () => {
+             try {
+               const timetable = await prisma.timetable.findFirst({ where: { userId: user.id } });
+               return timetable ? timetable.data : { error: "No timetable found" };
+             } catch(e) { return { error: "Failed to fetch timetable" }; }
+          }
+        }),
+        getDailyMetrics: tool({
+          description: "Get the user's daily performance metrics for today (focus hours, tasks completed, accuracy). Use this when the user asks for coaching feedback or focus metrics.",
+          inputSchema: z.object({}),
+          execute: async () => {
+             try {
+               const startOfDay = new Date();
+               startOfDay.setHours(0, 0, 0, 0);
+               const metric = await prisma.dailyMetric.findFirst({
+                 where: { userId: user.id, date: { gte: startOfDay } }
+               });
+               return metric || { error: "No metrics recorded for today." };
+             } catch(e) { return { error: "Failed to fetch metrics" }; }
+          }
+        }),
+        searchWorkspaceFiles: tool({
+          description: "Search the contents of the user's uploaded workspace files. Use this when the user asks questions about the content of their documents.",
+          inputSchema: z.object({
+            query: z.string().describe("The specific search query to run against the document contents")
+          }),
+          execute: async ({ query }) => {
+            if (!workspaceId) return { error: "No active workspace. Please open a workspace to search files." };
+            try {
+              const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
+              const queryResult = await embeddingModel.embedContent(query);
+              let queryEmbedding = queryResult.embedding.values;
+              if (queryEmbedding.length > 768) {
+                queryEmbedding = queryEmbedding.slice(0, 768);
+              }
+              const embeddingString = `[${queryEmbedding.join(',')}]`;
+
+              // SECURE: Parameterized Prisma.$queryRaw
+              const matches: any[] = await prisma.$queryRaw`
+                SELECT c."content", d."name" as "documentName", 1 - (c."embedding" <=> CAST(${embeddingString} AS vector)) as similarity
+                FROM "DocumentChunk" c
+                JOIN "Document" d ON c."documentId" = d."id"
+                WHERE d."workspaceId" = ${workspaceId}
+                ORDER BY c."embedding" <=> CAST(${embeddingString} AS vector)
+                LIMIT 10
+              `;
+              
+              if (!matches || matches.length === 0) return { result: "No matching content found in workspace files." };
+              return matches.map(m => `[Source Document: ${m.documentName}]\n${m.content}`).join("\n\n---\n\n");
+            } catch(e: any) {
+              console.error("Vector search error in tool", e);
+              return { error: e.message };
+            }
+          }
+        })
+      },
       async onFinish({ text }) {
-        if (workspaceId) {
+        if (workspaceId && text) {
           try {
             await prisma.message.create({
               data: {
@@ -228,6 +167,9 @@ ${formattedConversationHistory ? formattedConversationHistory : "No previous con
 
   } catch (error: any) {
     console.error("Query Error:", error);
-    return new Response(JSON.stringify({ error: error.message || "Failed to generate response" }), { status: 500 });
+    if (error.message?.includes("503") || error.message?.includes("high demand") || error.message?.includes("Service Unavailable")) {
+      return new Response("The AI servers are currently experiencing high demand. Please try again in a few minutes.", { status: 503 });
+    }
+    return new Response(error.message || "Failed to generate response", { status: 500 });
   }
 }

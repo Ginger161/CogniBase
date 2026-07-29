@@ -2,14 +2,45 @@
 import React, { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
+import { StudyEngine } from '@/components/StudyEngine';
+import { toast } from 'sonner';
+import { formatSmartTime } from '@/lib/utils/time';
+
 
 export default function StudyGuidesPage() {
   const pathname = usePathname();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
   const [userData, setUserData] = useState<any>({ name: 'Loading...', email: '', uid: '', profile: null });
   const [studyGuides, setStudyGuides] = useState<any[]>([]);
   const [activeStudyGuide, setActiveStudyGuide] = useState<any>(null);
   const [isStudyGuideViewOpen, setIsStudyGuideViewOpen] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (deleteConfirmId !== id) {
+      setDeleteConfirmId(id);
+      setTimeout(() => {
+        setDeleteConfirmId(null);
+      }, 3000);
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/study-guides/${id}?userId=${userData.uid}`, { method: 'DELETE' });
+      if (res.ok) {
+        setStudyGuides(prev => prev.filter(g => g.id !== id));
+        setDeleteConfirmId(null);
+        toast.success("Study guide deleted successfully.");
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to delete study guide.");
+      }
+    } catch (error) {
+      console.error("Delete failed", error);
+      toast.error("An unexpected error occurred.");
+    }
+  };
 
   useEffect(() => {
     const fetchGuides = async () => {
@@ -39,49 +70,46 @@ export default function StudyGuidesPage() {
         }
       `}</style>
       
-      <div className="dashboard-layout">
-        <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <img src="/logo.png" alt="CogniBase" style={{ width: '120px' }} />
-            <button className="menu-btn lg:hidden" onClick={() => setIsSidebarOpen(false)} style={{ display: 'none' }}>✕</button>
-          </div>
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, marginTop: '3rem' }}>
-            <a href="/dashboard" style={{ color: pathname === '/dashboard' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/dashboard' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Command Center</a>
-            <a href="/vault" style={{ color: pathname === '/vault' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/vault' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>My Vault</a>
-            <a href="/study-guides" style={{ color: pathname === '/study-guides' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/study-guides' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Study Guides</a>
-            <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Active Engines</a>
-            <a href="#" style={{ color: '#A1A1AA', textDecoration: 'none', transition: 'color 0.2s' }}>Settings</a>
-          </nav>
-        </aside>
+      <div className="flex flex-col h-full w-full">
+        
 
-        <main className="main-content" style={{ padding: '2rem', overflowY: 'auto' }}>
+        <div className="flex-1 flex flex-col h-full overflow-hidden p-6" style={{ padding: '2rem', overflowY: 'auto' }}>
           <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
             <h1 style={{ fontSize: '2rem', margin: 0 }}>Global Study Guides</h1>
           </header>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-            {studyGuides.map(guide => (
-              <div key={guide.id} className="w-full overflow-hidden px-4 sm:px-6 py-4 sm:py-6 break-words whitespace-normal hover:border-orange-500 hover:-translate-y-1" style={{ backgroundColor: '#18181B', borderRadius: '0.75rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem', cursor: 'pointer', transition: 'transform 0.2s, border-color 0.2s' }} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }}>
-                <div className="min-w-0 w-full">
-                  <h3 className="break-words whitespace-normal min-w-0" style={{ margin: 0, color: 'white', fontSize: '1.1rem', marginBottom: '0.25rem' }}>{guide.sectionConstraint}</h3>
-                  <span className="break-words whitespace-normal min-w-0 block" style={{ color: '#71717A', fontSize: '0.85rem' }}>{guide.sourceDocumentName}</span>
+            {Array.isArray(studyGuides) && studyGuides.length > 0 ? (
+              studyGuides.map(guide => (
+                <div key={guide.id} className="w-full overflow-hidden px-4 sm:px-6 py-4 sm:py-6 break-words whitespace-normal hover:border-orange-500 hover:-translate-y-1" style={{ backgroundColor: '#18181B', borderRadius: '0.75rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem', cursor: 'pointer', transition: 'transform 0.2s, border-color 0.2s' }} onClick={() => { setActiveStudyGuide(guide); setIsStudyGuideViewOpen(true); }}>
+                  <div className="flex justify-between items-start">
+                    <div className="min-w-0 w-full pr-4">
+                      <h3 className="break-words whitespace-normal min-w-0" style={{ margin: 0, color: 'white', fontSize: '1.1rem', marginBottom: '0.25rem' }}>{guide.sectionConstraint}</h3>
+                      <span className="break-words whitespace-normal min-w-0 block" style={{ color: '#71717A', fontSize: '0.85rem' }}>{guide.sourceDocumentName}</span>
+                    </div>
+                    <button 
+                      onClick={(e) => handleDelete(e, guide.id)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex-shrink-0 ${deleteConfirmId === guide.id ? 'bg-red-500/20 text-red-500 border border-red-500/50' : 'bg-zinc-800/50 text-zinc-500 hover:text-red-400 hover:bg-zinc-800'}`}
+                    >
+                      {deleteConfirmId === guide.id ? 'Confirm Delete?' : 'Delete'}
+                    </button>
+                  </div>
+                  <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#52525B', fontSize: '0.75rem' }}>
+                      {formatSmartTime(guide.createdAt)}
+                    </span>
+                    <span style={{ color: '#EA580C', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>Read <ChevronRight size={14}/></span>
+                  </div>
                 </div>
-                <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#52525B', fontSize: '0.75rem' }}>
-                    {guide.createdAt?.seconds ? new Date(guide.createdAt.seconds * 1000).toLocaleDateString() : 'Just now'}
-                  </span>
-                  <span style={{ color: '#EA580C', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>Read <ChevronRight size={14}/></span>
-                </div>
-              </div>
-            ))}
-            {studyGuides.length === 0 && (
+              ))
+            ) : (
               <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem 2rem', backgroundColor: '#111111', borderRadius: '1rem', border: '1px dashed #27272A' }}>
-                <p style={{ color: '#A1A1AA' }}>You haven't generated any study guides yet.</p>
+                <p style={{ color: '#A1A1AA' }}>No study guides found or failed to load.</p>
                 <p style={{ color: '#71717A', fontSize: '0.9rem', marginTop: '0.5rem' }}>Go to My Vault, open a document's menu, and click "Generate Study Guide".</p>
               </div>
             )}
           </div>
-        </main>
+        </div>
       </div>
 
       {/* Study Guide View Modal */}
@@ -102,9 +130,13 @@ export default function StudyGuidesPage() {
             </div>
             
             <div className="px-3 sm:px-8 py-3 sm:py-8" style={{ flex: 1, overflowY: 'auto', color: '#E4E4E7', lineHeight: '1.6', fontSize: '0.95rem' }}>
-              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
-                {activeStudyGuide.markdownContent}
-              </pre>
+              {activeStudyGuide.strategyData ? (
+                <StudyEngine guideData={activeStudyGuide.strategyData} guideId={activeStudyGuide.id} />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-zinc-400 text-center p-8">
+                  <p>This guide was generated with an older engine. Please generate a new one for the gamified experience.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

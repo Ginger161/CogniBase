@@ -1,0 +1,34 @@
+---
+description: Core architectural, AI tool-calling, and UI/UX design rules for CogniBase.
+globs: **/*.ts, **/*.tsx, prisma/schema.prisma
+---
+# CogniBase Master System Rules
+
+You must strictly adhere to these rules when modifying or generating code for the CogniBase platform.
+
+## 1. Architecture & Build Constraints (Non-Negotiable)
+- **Tech Stack Lock**: Next.js 16.2.9 (App Router), React 19.2.4, TailwindCSS v4, Prisma 7.8.0, and Supabase. Do not downgrade packages or introduce external state managers (e.g., Zustand, Redux).
+- **Absolute Workspace Isolation**: To prevent data leaks between desks, every single Prisma query targeting documents, chunks, timetables, or study guides MUST explicitly include `where: { workspaceId: currentWorkspaceId }`. 
+- **Parameterized SQL**: Any raw SQL queries executed for `pgvector` semantic search (via `$queryRaw`) must strictly use Prisma's parameterized template tags to completely eliminate SQL injection vulnerabilities. Never use string interpolation (`${}`) inside raw query strings.
+- **Native JSON Columns**: Store complex AI-generated configurations (like flashcard arrays or study guide phases) natively in Prisma `Json` columns (e.g., `strategyData`). Do not stringify JSON into text columns.
+
+## 2. AI & Agentic Logic
+- **Active Model**: Always utilize `gemini-3.5-flash`. Never hardcode deprecated model strings like `gemini-pro`. All generations must route through `lib/ai/model-router.ts`.
+- **Strict JSON Mode**: When generating structured payloads, enforce schema compliance at the SDK level by passing `generationConfig: { responseMimeType: "application/json" }`. Do not rely solely on system prompt prose to strip out markdown backticks.
+- **Agentic Tool Calling**: Prefer native function calling (Tools) over prompt context stuffing for the `>_console`. Implement on-demand database fetching tools (`getUserTimetable`, `getDailyMetrics`, `searchWorkspaceFiles`) so the AI selectively queries data only when asked.
+
+## 3. UI & UX Design Language
+- **Visual Theme**: CogniBase is a premium, distraction-free native-feeling experience. Default to deep dark-mode interfaces (`zinc-950`, `zinc-900`) with precise glowing accents. 
+- **Eradicate Text Walls**: Never render long, scrollable markdown notes for study guides. Convert educational text structures into the Gamified Study Execution Engine: a vertical Quest Log checklist, full-screen Duolingo-style 'Micro-Bites', and swipeable 3D active-recall flashcards.
+- **Progressive Disclosure**: Hide heavy generation tools (Mindmaps, PPT slides, Podcasts) inside contextual menus or trigger them via the `>_console` only after a document is actively open. Keep the initial dashboard entirely clean.
+- **Interaction Physics**: Use `framer-motion` spring animations for high-dopamine visual feedback (e.g., closing analytics rings, flipping cards, or sliding out native-style bottom sheets instead of rigid web dropdowns).
+
+## 4. Development Workflow
+- **Schema Synchronization**: Whenever you modify `schema.prisma`, explicitly append a instruction reminding the user to execute `npx prisma db push` or `npx prisma migrate dev`.
+- **Optimistic UI Updates**: For high-frequency or destructive interactions (such as deleting a study guide or marking a quest phase complete), execute updates optimistically in React state to maintain 0ms perceived latency while database calls resolve in the background.
+
+## 5. Responsive & Anti-Fragile Layouts (Strict UI)
+- **Fluidity over Rigidity**: NEVER use hardcoded pixel widths or heights for layout containers (e.g., avoid `w-[500px]`, `h-[800px]`, `w-96`). Always use fluid, responsive classes (e.g., `w-full max-w-2xl`, `flex-1`, `min-h-screen`) so the UI stretches and compresses safely across ultra-wide monitors and one-handed mobile screens.
+- **Portal Floating Elements**: Any floating component (Dropdowns, Context Menus, Tooltips, Modals) MUST be rendered using React Portals (or Radix UI/shadcn portal equivalents) to attach them to the DOM root. This guarantees they will never be clipped by a parent container's `overflow-hidden` or `overflow-x-hidden` classes.
+- **Inward Anchoring**: Absolute positioned elements on the edges of the screen must anchor inward. If a 3-dot menu is on the far right of the screen, its dropdown must include `right-0` so it expands leftward into the safe area, rather than pushing off the viewport.
+- **Mobile-First Spacing**: Always structure padding and margins mobile-first. Use tight spacing for base classes and expand them for larger breakpoints (e.g., `p-4 md:p-6 lg:p-8`).

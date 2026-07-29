@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { requireUser } from '@/lib/api-auth';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 export async function POST(req: Request) {
   try {
+    const { user, response } = await requireUser();
+    if (!user) return response;
+
     const { prompt } = await req.json();
 
     if (!prompt) {
@@ -12,7 +16,7 @@ export async function POST(req: Request) {
     }
 
     const modelConfig: any = { 
-      model: "gemini-3.1-flash-lite",
+      model: "gemini-3.5-flash",
       systemInstruction: "Generate a short, 3-to-4 word title summarizing the user's prompt. Do not use quotes, punctuation, or special formatting."
     };
     

@@ -31,20 +31,20 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || 
-                           request.nextUrl.pathname.startsWith('/vault') || 
-                           request.nextUrl.pathname.startsWith('/command-center')
-                           
-  const isAuthRoute = request.nextUrl.pathname === '/login' || 
-                      request.nextUrl.pathname === '/'
+  const pathname = request.nextUrl.pathname
 
-  if (!user && isProtectedRoute) {
+  // Pages anyone can see, logged in or not
+  const isPublicPage = pathname === '/' || pathname === '/login' || pathname === '/signup' || pathname.startsWith('/share/')
+
+  // Everything else in the app requires being logged in
+  if (!user && !isPublicPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  if (user && isAuthRoute) {
+  // If already logged in, skip the landing/login/signup pages and go straight in
+  if (user && isPublicPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
