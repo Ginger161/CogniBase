@@ -42,12 +42,12 @@ export default function Sidebar({
           <button className="md:hidden p-2 text-zinc-400 hover:text-white" onClick={() => setIsSidebarOpen(false)}>✕</button>
         </div>
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, marginTop: '3rem' }}>
-          <Link href="/dashboard" style={{ color: pathname === '/dashboard' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/dashboard' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Command Center</Link>
-          <Link href="/vault" style={{ color: pathname === '/vault' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/vault' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>My Vault</Link>
-          <Link href="/study-guides" style={{ color: pathname === '/study-guides' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/study-guides' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Study Guides</Link>
-          <Link href="/studio-assets" style={{ color: pathname === '/studio-assets' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/studio-assets' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Studio Assets</Link>
-          <Link href="/analytics" style={{ color: pathname === '/analytics' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/analytics' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Analytics</Link>
-          <Link href="/settings" style={{ color: pathname === '/settings' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/settings' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Settings</Link>
+          <Link onClick={() => setIsSidebarOpen(false)} href="/dashboard" style={{ color: pathname === '/dashboard' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/dashboard' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Command Center</Link>
+          <Link onClick={() => setIsSidebarOpen(false)} href="/vault" style={{ color: pathname === '/vault' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/vault' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>My Vault</Link>
+          <Link onClick={() => setIsSidebarOpen(false)} href="/study-guides" style={{ color: pathname === '/study-guides' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/study-guides' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Study Guides</Link>
+          <Link onClick={() => setIsSidebarOpen(false)} href="/studio-assets" style={{ color: pathname === '/studio-assets' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/studio-assets' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Studio Assets</Link>
+          <Link onClick={() => setIsSidebarOpen(false)} href="/analytics" style={{ color: pathname === '/analytics' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/analytics' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Analytics</Link>
+          <Link onClick={() => setIsSidebarOpen(false)} href="/settings" style={{ color: pathname === '/settings' ? '#EA580C' : '#A1A1AA', fontWeight: pathname === '/settings' ? 'bold' : 'normal', textDecoration: 'none', transition: 'color 0.2s' }}>Settings</Link>
         </nav>
         
         <div 

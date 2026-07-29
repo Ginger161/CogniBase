@@ -167,10 +167,10 @@ export default function SettingsPage() {
   }, [activeTab, userData.uid]);
 
   const tabs = [
-    { id: 'profile', label: 'Profile', icon: <User size={18} /> },
-    { id: 'preferences', label: 'Preferences', icon: <Sliders size={18} /> },
-    { id: 'account', label: 'Account', icon: <Shield size={18} /> },
-    { id: 'activity', label: 'Activity Log', icon: <Activity size={18} /> },
+    { id: 'profile', label: 'Profile', shortLabel: 'Profile', icon: <User size={18} /> },
+    { id: 'preferences', label: 'Preferences', shortLabel: 'Prefs', icon: <Sliders size={18} /> },
+    { id: 'account', label: 'Account', shortLabel: 'Account', icon: <Shield size={18} /> },
+    { id: 'activity', label: 'Activity Log', shortLabel: 'Activity', icon: <Activity size={18} /> },
   ];
 
   return (
@@ -186,8 +186,8 @@ export default function SettingsPage() {
         .settings-tab.active { background-color: #EA580C; color: white; }
         @media (max-width: 768px) {
           .settings-container { flex-direction: column; }
-          .settings-sidebar { width: 100%; border-right: none; border-bottom: 1px solid #27272A; padding: 1rem; display: flex; flex-direction: row; overflow-x: auto; gap: 0.5rem; }
-          .settings-tab { white-space: nowrap; }
+          .settings-sidebar { width: 100%; border-right: none; border-bottom: 1px solid #27272A; padding: 0.6rem; display: flex; flex-direction: row; background-color: #18181B; gap: 4px; }
+          .settings-tab { white-space: nowrap; padding: 0.5rem 0.25rem; font-size: 0.75rem; justify-content: center; flex: 1; border-radius: 0.4rem; }
           .settings-content { padding: 1.5rem; }
         }
       `}</style>
@@ -196,15 +196,16 @@ export default function SettingsPage() {
         <div className="flex-1 flex flex-col h-full overflow-hidden p-6">
           <div className="settings-container w-full h-full">
             <div className="settings-sidebar pt-16 lg:pt-8">
-              <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4 px-4">User Settings</h2>
+              <h2 className="hidden sm:block text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4 px-4">User Settings</h2>
               {tabs.map((tab) => (
                 <div
                   key={tab.id}
                   className={`settings-tab ${activeTab === tab.id ? 'active' : ''}`}
                   onClick={() => setActiveTab(tab.id as Tab)}
                 >
-                  {tab.icon}
-                  <span>{tab.label}</span>
+                  <span className="hidden sm:inline-flex">{tab.icon}</span>
+                  <span className="sm:hidden">{tab.shortLabel}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
                 </div>
               ))}
             </div>
@@ -308,24 +309,26 @@ export default function SettingsPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-6 border-t border-[#27272A]">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-6 border-t border-[#27272A]">
                         <div>
                           <h3 className="font-semibold text-white">Study Engine Default</h3>
                           <p className="text-sm text-zinc-400 mt-1">Select the default processing mode for new documents.</p>
                         </div>
-                        <CustomSelect
-                          id="guideComplexity"
-                          value={userData.preferences?.guideComplexity || 'standard'}
-                          onChange={(val) => updatePreference('guideComplexity', val)}
-                          options={[
-                            { value: 'cram', label: 'Cram Mode (Micro-bites)' },
-                            { value: 'standard', label: 'Standard' },
-                            { value: 'deep', label: 'Deep Dive' }
-                          ]}
-                        />
+                        <div className="w-full sm:w-auto">
+                          <CustomSelect
+                            id="guideComplexity"
+                            value={userData.preferences?.guideComplexity || 'standard'}
+                            onChange={(val) => updatePreference('guideComplexity', val)}
+                            options={[
+                              { value: 'cram', label: 'Cram Mode (Micro-bites)' },
+                              { value: 'standard', label: 'Standard Depth' },
+                              { value: 'deep', label: 'Deep Dive' },
+                            ]}
+                          />
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-6 border-t border-[#27272A]">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-6 border-t border-[#27272A]">
                         <div>
                           <h3 className="font-semibold text-white">Focus Mode</h3>
                           <p className="text-sm text-zinc-400 mt-1">Automatically collapse sidebars when viewing a document.</p>
@@ -336,12 +339,12 @@ export default function SettingsPage() {
                         </label>
                       </div>
 
-                      <div className="flex items-center justify-between pt-6 border-t border-[#27272A]">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-6 border-t border-[#27272A]">
                         <div className="pr-4">
                           <h3 className="font-semibold text-white">Daily Focus Goal</h3>
                           <p className="text-sm text-zinc-400 mt-1">Target focus minutes per day for the gamification rings.</p>
                         </div>
-                        <input id="dailyFocusGoal" type="number" min="10" max="600" value={userData.preferences?.dailyFocusGoal ?? 120} onChange={(e) => updatePreference('dailyFocusGoal', parseInt(e.target.value) || 0)} className="w-24 bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-2 text-white text-center focus:border-orange-500 outline-none" />
+                        <input id="dailyFocusGoal" type="number" min="10" max="600" value={userData.preferences?.dailyFocusGoal ?? 120} onChange={(e) => updatePreference('dailyFocusGoal', parseInt(e.target.value) || 0)} className="w-full sm:w-24 bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-2 text-white text-center focus:border-orange-500 outline-none" />
                       </div>
 
                       <div className="pt-6 border-t border-[#27272A]">
