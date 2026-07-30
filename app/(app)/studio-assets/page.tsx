@@ -17,16 +17,19 @@ export default function StudioAssetsPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden p-6" style={{ padding: '2rem', overflowY: 'auto' }}>
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', margin: 0 }}>Studio Assets</h1>
+      <header className="mb-8">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-[var(--accent-solid)] text-xl font-bold">&gt;_</span>
+          <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)]">Studio Assets</h1>
+        </div>
       </header>
 
       <div style={{ maxWidth: '1200px' }}>
-        <p className="text-gray-400 mb-8">View and export all AI-generated assets across your workspaces.</p>
+        <p className="text-[var(--text-muted)] mb-8 text-sm font-mono">// every flashcard set, mind map, and deck you've generated</p>
         {userData.uid ? (
           <StudioAssetsPanel userId={userData.uid} />
         ) : (
-          <div className="w-full h-20 bg-gray-900 rounded-xl border border-gray-800 animate-pulse" />
+          <div className="w-full h-20 bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] animate-pulse" />
         )}
       </div>
     </div>

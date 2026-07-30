@@ -23,8 +23,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="flex overflow-hidden bg-[#0A1128] text-white w-full max-w-[100vw]"
-      style={{ height: dynamicHeight }}
+      className="flex overflow-hidden text-white w-full max-w-[100vw]"
+      style={{ height: dynamicHeight, backgroundColor: 'transparent' }}
     >
       <div
         className={`fixed inset-0 bg-black/70 z-40 transition-opacity duration-300 md:hidden ${isSidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}

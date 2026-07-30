@@ -56,11 +56,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleShareWorkspace = (ws: any) => {
-    navigator.clipboard.writeText(`https://cognibase.app/share/${ws.id}`);
-    alert("Share link copied to clipboard!");
-    setActiveDropdownId(null);
-  };
+
 
   const handleYouTubeSubmit = async (url: string) => {
     if (!activeWorkspaceId) {
@@ -353,7 +349,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`/api/workspaces${context?.uid ? `?userId=${context.uid}` : ''}`);
       const ws = await res.json();
-      setWorkspaces(ws);
+      setWorkspaces(Array.isArray(ws) ? ws : []);
       
       // Auto-select removed per user request: The user prefers to see the empty state 
       // showing their desks and the option to create a new workspace on load.
@@ -590,29 +586,74 @@ export default function DashboardPage() {
 
   // --- NEW: Console Query Logic ---
   
-  const handleExtractSource = (type: string, inputTitle: string, rawContent?: string) => {
+  const handleExtractSource = async (type: string, inputTitle: string, rawContent?: string) => {
     setIsExtractingMock(true);
-    setTimeout(() => {
-      let extractedContent = "";
-      if (type === 'pdf') extractedContent = rawContent || "Extracted text from newly uploaded file...";
-      if (type === 'vault') extractedContent = rawContent || "Mock extracted text from vault file.";
-      if (type === 'image') extractedContent = `Mocked OCR text for ${inputTitle}`;
-      if (type === 'website') extractedContent = `Mocked scraped text for ${inputTitle}`;
-      if (type === 'youtube') extractedContent = `Mocked transcript for ${inputTitle}`;
-      if (type === 'text') extractedContent = rawContent || "Manual text input.";
+
+    let targetWorkspaceId = activeWorkspaceId;
+    if (!targetWorkspaceId) {
+      try {
+        const res = await fetch('/api/workspaces', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: context?.uid || null, userEmail: context?.email || 'guest@example.com' })
+        });
+        const ws = await res.json();
+        if (ws.id) {
+          targetWorkspaceId = ws.id;
+          setActiveWorkspaceId(ws.id);
+          setActiveSources([]);
+          setMessages([{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any]);
+        } else {
+          throw new Error('No workspace ID returned');
+        }
+      } catch (e) {
+        console.error("Failed to create workspace", e);
+        setIsExtractingMock(false);
+        return;
+      }
+    }
+
+    try {
+      const payload: any = { workspaceId: targetWorkspaceId };
+
+      if (type === 'text') {
+        payload.name = 'Pasted Text Snippet';
+        payload.url = '';
+        payload.rawText = rawContent;
+      } else {
+        payload.name = inputTitle;
+        payload.url = inputTitle;
+      }
+
+      const res = await fetch('/api/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to add this source.');
+      }
+
+      const newDoc = await res.json();
 
       setActiveSources(prev => [...prev, {
-        id: Date.now().toString(),
-        title: inputTitle,
+        id: newDoc.id,
+        title: type === 'text' ? 'Pasted Text Snippet' : inputTitle,
         type: type,
-        content: extractedContent
+        content: ''
       }]);
-      
+
+    } catch (error: any) {
+      console.error("Add source error:", error);
+      alert(error.message || "Failed to add this source. Please try again.");
+    } finally {
       setIsExtractingMock(false);
       setIsAddSourceModalOpen(false);
       setSourceModalView('options');
       setSourceInputText('');
-    }, 1500);
+    }
   };
 
   const handleRenameDocument = async () => {
@@ -680,7 +721,7 @@ export default function DashboardPage() {
           <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md transition-opacity duration-300">
             <div className="flex flex-col items-center gap-4 p-8 rounded-2xl bg-gray-900 border border-gray-700 shadow-2xl w-full max-w-md">
               <span className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></span>
-              <p className="text-xl font-bold text-white text-center">{assimilationStatus}</p>
+              <p className="text-xl font-bold text-[var(--text-primary)] text-center">{assimilationStatus}</p>
               
               {/* Progress Bar Container */}
               <div className="w-full h-2 bg-gray-800 rounded-full mt-4 overflow-hidden">
@@ -689,7 +730,7 @@ export default function DashboardPage() {
                   style={{ width: `${progressPercentage}%` }}
                 ></div>
               </div>
-              <p className="text-sm text-gray-400 mt-2">{progressPercentage}% Complete</p>
+              <p className="text-sm text-[var(--text-secondary)] mt-2">{progressPercentage}% Complete</p>
             </div>
           </div>
         )}
@@ -700,99 +741,104 @@ export default function DashboardPage() {
           
 
           {activeSources.length === 0 && (
-            <header style={{ borderBottom: '1px solid #27272A', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-              <div style={{ flex: 1 }}>
-                <h1 style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em' }}>Command Center</h1>
-                <p style={{ color: '#A1A1AA', margin: '0.5rem 0 0 0', fontSize: '1rem' }}>Initialize and monitor your study engines.</p>
+            <div className="shrink-0 px-4 pt-6 pb-4 sm:px-8 sm:pt-8 flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="font-mono text-[var(--accent-solid)] text-lg font-bold">&gt;_</span>
+                  <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)]">Your Desks</h1>
+                </div>
+                <p className="text-xs sm:text-sm text-[var(--text-muted)] font-mono">// pick up where you left off, or start something new</p>
               </div>
-            </header>
+              {workspaces.length > 0 && (
+                <button
+                  onClick={() => {
+                    setActiveWorkspaceId(null);
+                    setActiveWorkspaceName("Untitled Workspace");
+                    setMessages([{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any]);
+                    setIsAddSourceModalOpen(true);
+                  }}
+                  className="shrink-0 text-[var(--text-primary)] font-bold text-sm px-4 py-2.5 rounded-lg transition-transform hover:scale-[1.03] whitespace-nowrap"
+                  style={{ background: 'linear-gradient(135deg, #EA580C, #C2410C)', boxShadow: '0 4px 14px -4px rgba(234,88,12,0.5)' }}
+                >
+                  + New Desk
+                </button>
+              )}
+            </div>
           )}
 
-          <div style={{ flex: 1, overflow: 'hidden', padding: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="flex-1 overflow-y-auto px-4 pb-6 sm:px-8">
             {activeSources.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '2rem' }}>
-                <div style={{ textAlign: 'center', maxWidth: '600px' }}>
-                  <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem' }}>Unlock the Command Center</h2>
-                  <p style={{ color: '#A1A1AA', fontSize: '1.1rem', lineHeight: '1.6' }}>Upload a document or select notes from your Vault to unlock the Command Center.</p>
+              isLoadingVault ? (
+                <div className="flex justify-center py-16">
+                  <div className="w-8 h-8 border-[3px] border-orange-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', width: '100%', maxWidth: '800px' }}>
-                  <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Upload New Source</h3>
-                    <div
-                      onClick={() => {
-                        setActiveWorkspaceId(null);
-                        setActiveWorkspaceName("Untitled Workspace");
-                        setMessages([{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any]);
-                        setIsAddSourceModalOpen(true);
-                      }}
-                      style={{ backgroundColor: '#18181B', padding: '2rem', borderRadius: '0.5rem', border: '1px dashed #3F3F46', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s', marginTop: 'auto' }}
-                    >
-                      <span style={{ color: 'white', fontWeight: '500' }}>+ Add Source</span>
-                    </div>
-                  </div>
-
-                  <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Select from Desks</h3>
-                    <div className="file-list-container" style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {isLoadingVault ? (
-                        <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-                          <div style={{ display: 'inline-block', width: '24px', height: '24px', border: '3px solid #EA580C', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+              ) : workspaces.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
+                  <p className="text-[var(--text-secondary)] max-w-sm">You don't have any desks yet. Upload your first document to start one.</p>
+                  <button
+                    onClick={() => {
+                      setActiveWorkspaceId(null);
+                      setActiveWorkspaceName("Untitled Workspace");
+                      setMessages([{ id: '1', role: 'assistant', content: 'Acknowledged. I am >_console. Ask me anything about your uploaded materials.' } as any]);
+                      setIsAddSourceModalOpen(true);
+                    }}
+                    className="shrink-0 text-[var(--text-primary)] font-bold text-sm px-4 py-2.5 rounded-lg transition-transform hover:scale-[1.03] whitespace-nowrap"
+                    style={{ background: 'linear-gradient(135deg, #EA580C, #C2410C)', boxShadow: '0 4px 14px -4px rgba(234,88,12,0.5)' }}
+                  >
+                    + Start Your First Desk
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {workspaces.map(ws => (
+                    <div key={ws.id} className="relative">
+                      {editingDeskId === ws.id ? (
+                        <div className="bg-[var(--bg-surface-alt)] border border-orange-500 p-3 rounded-xl flex flex-col gap-1">
+                          <input
+                            autoFocus
+                            value={editingDeskTitle}
+                            onChange={e => setEditingDeskTitle(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') submitDeskRename(ws.id);
+                              if (e.key === 'Escape') setEditingDeskId(null);
+                            }}
+                            onBlur={() => submitDeskRename(ws.id)}
+                            className="bg-transparent text-[var(--text-primary)] border-none outline-none font-bold w-full"
+                          />
+                          <span className="text-xs text-[var(--text-secondary)]">{ws.documents?.length || 0} documents</span>
                         </div>
-                      ) : workspaces.length > 0 ? (
-                        workspaces.map(ws => (
-                          <div key={ws.id} style={{ position: 'relative' }}>
-                            {editingDeskId === ws.id ? (
-                              <div style={{ backgroundColor: '#18181B', border: '1px solid #EA580C', padding: '0.75rem', borderRadius: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                <input
-                                  autoFocus
-                                  value={editingDeskTitle}
-                                  onChange={e => setEditingDeskTitle(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') submitDeskRename(ws.id);
-                                    if (e.key === 'Escape') setEditingDeskId(null);
-                                  }}
-                                  onBlur={() => submitDeskRename(ws.id)}
-                                  style={{ backgroundColor: 'transparent', color: 'white', border: 'none', outline: 'none', fontWeight: 'bold', width: '100%' }}
-                                />
-                                <span style={{ fontSize: '0.8rem', color: '#A1A1AA' }}>{ws.documents?.length || 0} documents</span>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => handleSelectWorkspace(ws)}
-                                style={{ width: '100%', backgroundColor: '#18181B', color: 'white', border: '1px solid #27272A', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '0.25rem', transition: 'border-color 0.2s' }}
-                                onMouseOver={e => e.currentTarget.style.borderColor = '#EA580C'}
-                                onMouseOut={e => e.currentTarget.style.borderColor = '#27272A'}
-                              >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                  <span style={{ fontWeight: 'bold' }}>🗂️ {ws.title}</span>
-                                  <div
-                                    onClick={(e) => { e.stopPropagation(); setActiveDropdownId(activeDropdownId === ws.id ? null : ws.id); }}
-                                    className="p-1 hover:bg-gray-800 rounded z-10 transition-colors"
-                                  >
-                                    <MoreVertical className="w-5 h-5 text-gray-400 hover:text-white" />
-                                  </div>
-                                </div>
-                                <span style={{ fontSize: '0.8rem', color: '#A1A1AA' }}>{ws.documents?.length || 0} documents</span>
-                              </button>
-                            )}
-                            
-                            {activeDropdownId === ws.id && (
-                              <div style={{ position: 'absolute', top: '2.5rem', right: '0.5rem', backgroundColor: '#18181B', border: '1px solid #27272A', borderRadius: '0.5rem', zIndex: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}>
-                                <button onClick={(e) => { e.stopPropagation(); setEditingDeskId(ws.id); setEditingDeskTitle(ws.title); setActiveDropdownId(null); }} className="px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white text-left transition-colors">Rename</button>
-                                <button onClick={(e) => { e.stopPropagation(); handleShareWorkspace(ws); }} className="px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white text-left transition-colors">Share</button>
-                                <button onClick={(e) => { e.stopPropagation(); setWorkspaceToDelete(ws.id); setActiveDropdownId(null); }} className="px-4 py-2 text-sm text-red-500 hover:bg-red-950/30 hover:text-red-400 text-left transition-colors border-t border-gray-800">Delete</button>
-                              </div>
-                            )}
-                          </div>
-                        ))
                       ) : (
-                        <span style={{ color: '#71717A', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>No saved Desks. Add a new source to start a workspace.</span>
+                        <button
+                          onClick={() => handleSelectWorkspace(ws)}
+                          className="relative w-full overflow-hidden bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-color)] hover:border-orange-500/60 p-4 rounded-2xl text-left flex flex-col gap-2 transition-colors"
+                        >
+                          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, transparent, #EA580C, transparent)' }}></div>
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-8 h-8 shrink-0 rounded-lg bg-orange-500/10 flex items-center justify-center text-sm">🗂️</div>
+                              <span className="font-bold truncate">{ws.title}</span>
+                            </div>
+                            <div
+                              onClick={(e) => { e.stopPropagation(); setActiveDropdownId(activeDropdownId === ws.id ? null : ws.id); }}
+                              className="p-1 hover:bg-gray-800 rounded z-10 transition-colors shrink-0"
+                            >
+                              <MoreVertical className="w-5 h-5 text-[var(--text-secondary)] hover:text-[var(--text-primary)]" />
+                            </div>
+                          </div>
+                          <span className="text-xs text-[var(--text-muted)] font-mono pl-10">{ws.documents?.length || 0} documents</span>
+                        </button>
+                      )}
+
+                      {activeDropdownId === ws.id && (
+                        <div className="absolute top-10 right-2 bg-[var(--bg-surface-alt)] border border-[var(--border-color)] rounded-lg z-20 flex flex-col overflow-hidden shadow-lg">
+                          <button onClick={(e) => { e.stopPropagation(); setEditingDeskId(ws.id); setEditingDeskTitle(ws.title); setActiveDropdownId(null); }} className="px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-[var(--text-primary)] text-left transition-colors">Rename</button>
+                          <button onClick={(e) => { e.stopPropagation(); setWorkspaceToDelete(ws.id); setActiveDropdownId(null); }} className="px-4 py-2 text-sm text-red-500 hover:bg-red-950/30 hover:text-red-400 text-left transition-colors border-t border-gray-800">Delete</button>
+                        </div>
                       )}
                     </div>
-                  </div>
+                  ))}
                 </div>
-              </div>
+              )
             ) : (
               <CommandCenterUI
                 workspaceId={activeWorkspaceId || ''}
@@ -924,11 +970,11 @@ export default function DashboardPage() {
       {workspaceToDelete && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl max-w-sm w-full shadow-2xl">
-            <h3 className="text-xl font-bold text-white mb-2">Delete Workspace?</h3>
-            <p className="text-gray-400 text-sm mb-6">Are you sure? This will delete all documents and chat history permanently.</p>
+            <h3 className="text-xl font-bold text-[var(--text-primary)] mb-2">Delete Workspace?</h3>
+            <p className="text-[var(--text-secondary)] text-sm mb-6">Are you sure? This will delete all documents and chat history permanently.</p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setWorkspaceToDelete(null)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-800 transition-colors">Cancel</button>
-              <button onClick={handleDeleteWorkspace} className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500 transition-colors">Delete</button>
+              <button onClick={handleDeleteWorkspace} className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-[var(--text-primary)] hover:bg-red-500 transition-colors">Delete</button>
             </div>
           </div>
         </div>
@@ -936,3 +982,4 @@ export default function DashboardPage() {
     </PullToRefresh>
   );
 }
+

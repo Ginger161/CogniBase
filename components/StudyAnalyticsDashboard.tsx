@@ -58,7 +58,7 @@ const ActivityRings = ({ rings }: { rings: RingData[] }) => {
       </svg>
       
       <div className="absolute flex flex-col items-center justify-center pointer-events-none">
-        <Target className="w-8 h-8 text-zinc-600 opacity-50" />
+        <Target className="w-8 h-8 text-[var(--text-muted)] opacity-50" />
       </div>
     </div>
   );
@@ -128,22 +128,22 @@ export default function StudyAnalyticsDashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-[var(--bg-base)] flex flex-col items-center justify-center">
         <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-        <p className="text-zinc-500 mt-4 animate-pulse">Syncing Deep Work metrics...</p>
+        <p className="text-[var(--text-muted)] mt-4 animate-pulse">Syncing Deep Work metrics...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-slate-100 flex flex-col items-center py-12 px-4 sm:px-6 font-sans">
+    <div className="min-h-screen bg-[var(--bg-base)] text-slate-100 flex flex-col items-center py-12 px-4 sm:px-6 font-sans">
       
       {/* Header */}
       <div className="w-full max-w-lg mb-10 text-center sm:text-left">
         <motion.h1 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-3xl font-bold text-white tracking-tight"
+          className="text-3xl font-bold text-[var(--text-primary)] tracking-tight"
         >
           Hello {context?.name || 'Student'}.
         </motion.h1>
@@ -151,7 +151,7 @@ export default function StudyAnalyticsDashboard() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="text-zinc-400 mt-2 text-sm sm:text-base"
+          className="text-[var(--text-secondary)] mt-2 text-sm sm:text-base"
         >
           Your daily deep work metrics.
         </motion.p>
@@ -162,7 +162,7 @@ export default function StudyAnalyticsDashboard() {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, delay: 0.1 }}
-        className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800/50 rounded-[2.5rem] p-8 shadow-2xl w-full max-w-lg flex flex-col items-center mb-8 relative overflow-hidden"
+        className="bg-[var(--bg-surface)] backdrop-blur-xl border border-[var(--border-color)] rounded-[2.5rem] p-8 shadow-2xl w-full max-w-lg flex flex-col items-center mb-8 relative overflow-hidden"
       >
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-zinc-800/20 to-transparent pointer-events-none" />
         
@@ -176,11 +176,11 @@ export default function StudyAnalyticsDashboard() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 + (idx * 0.1) }}
-              className="flex flex-col items-center text-center p-3 rounded-2xl bg-zinc-800/30 border border-zinc-700/30"
+              className="flex flex-col items-center text-center p-3 rounded-2xl bg-[var(--bg-surface-alt)] border border-[var(--border-color)]"
             >
               <div className="mb-2">{ring.icon}</div>
-              <span className="text-xl font-bold text-white tracking-tight">{ring.value}</span>
-              <span className="text-[0.65rem] uppercase tracking-wider font-semibold text-zinc-500 mt-1">{ring.label}</span>
+              <span className="text-xl font-bold text-[var(--text-primary)] tracking-tight">{ring.value}</span>
+              <span className="text-[0.65rem] uppercase tracking-wider font-semibold text-[var(--text-muted)] mt-1">{ring.label}</span>
             </motion.div>
           ))}
         </div>
@@ -191,20 +191,20 @@ export default function StudyAnalyticsDashboard() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.3 }}
-        className="w-full max-w-lg bg-zinc-900/50 backdrop-blur-xl border border-zinc-800/50 rounded-3xl p-6 shadow-2xl relative overflow-hidden"
+        className="w-full max-w-lg bg-[var(--bg-surface)] backdrop-blur-xl border border-[var(--border-color)] rounded-3xl p-6 shadow-2xl relative overflow-hidden"
       >
         <div className="absolute right-0 top-0 w-32 h-32 bg-orange-500/10 rounded-full blur-[50px] pointer-events-none" />
         
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <h2 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
               Consistency <Flame className="w-5 h-5 text-orange-500" />
             </h2>
-            <p className="text-sm text-zinc-400">Keep the fire burning.</p>
+            <p className="text-sm text-[var(--text-secondary)]">Keep the fire burning.</p>
           </div>
           <div className="text-right">
-            <span className="text-3xl font-black text-white">{metrics.currentStreak}</span>
-            <span className="text-zinc-500 font-semibold ml-1 uppercase text-xs">Days</span>
+            <span className="text-3xl font-black text-[var(--text-primary)]">{metrics.currentStreak}</span>
+            <span className="text-[var(--text-muted)] font-semibold ml-1 uppercase text-xs">Days</span>
           </div>
         </div>
 
@@ -213,7 +213,7 @@ export default function StudyAnalyticsDashboard() {
             const isActive = metrics.streakData[idx];
             return (
               <div key={idx} className="flex flex-col items-center gap-3">
-                <span className="text-xs font-semibold text-zinc-500">{day}</span>
+                <span className="text-xs font-semibold text-[var(--text-muted)]">{day}</span>
                 <div className="relative">
                   <motion.div 
                     initial={{ scale: 0 }}
@@ -222,7 +222,7 @@ export default function StudyAnalyticsDashboard() {
                     className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
                       isActive 
                         ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.3)]' 
-                        : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-600'
+                        : 'bg-[var(--bg-surface-alt)] border-[var(--border-color)] text-[var(--text-muted)]'
                     }`}
                   >
                     {isActive ? (
@@ -243,15 +243,15 @@ export default function StudyAnalyticsDashboard() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.4 }}
-        className="w-full max-w-lg bg-zinc-900/50 backdrop-blur-xl border border-zinc-800/50 rounded-3xl p-6 shadow-2xl relative overflow-hidden mt-8 mb-12"
+        className="w-full max-w-lg bg-[var(--bg-surface)] backdrop-blur-xl border border-[var(--border-color)] rounded-3xl p-6 shadow-2xl relative overflow-hidden mt-8 mb-12"
       >
         <div className="absolute right-0 top-0 w-32 h-32 bg-[#3B82F6]/10 rounded-full blur-[50px] pointer-events-none" />
         
         <div className="mb-6">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <h2 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
             Historical Data
           </h2>
-          <p className="text-sm text-zinc-400">Deep Work Minutes (Last 7 Days)</p>
+          <p className="text-sm text-[var(--text-secondary)]">Deep Work Minutes (Last 7 Days)</p>
         </div>
 
         <div className="flex justify-between items-end h-40 mt-4 px-2">
@@ -264,11 +264,11 @@ export default function StudyAnalyticsDashboard() {
               <div key={idx} className="flex flex-col items-center gap-3 w-8">
                 <div className="relative w-full h-full flex items-end justify-center group cursor-pointer">
                   {/* Tooltip on hover */}
-                  <div className="absolute -top-8 bg-zinc-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 shadow-lg">
+                  <div className="absolute -top-8 bg-[var(--bg-surface-alt)] text-[var(--text-primary)] text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 shadow-lg">
                     {minutes} min
                   </div>
                   {/* Bar */}
-                  <div className="w-full bg-zinc-800/50 rounded-t-md overflow-hidden relative" style={{ height: '100%' }}>
+                  <div className="w-full bg-[var(--bg-surface-alt)] rounded-t-md overflow-hidden relative" style={{ height: '100%' }}>
                     <motion.div 
                       initial={{ height: 0 }}
                       animate={{ height: `${heightPercentage}%` }}
@@ -277,7 +277,7 @@ export default function StudyAnalyticsDashboard() {
                     />
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-zinc-500">{day}</span>
+                <span className="text-xs font-semibold text-[var(--text-muted)]">{day}</span>
               </div>
             );
           })}
@@ -287,3 +287,4 @@ export default function StudyAnalyticsDashboard() {
     </div>
   );
 }
+

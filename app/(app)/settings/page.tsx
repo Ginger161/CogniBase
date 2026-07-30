@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import { supabase } from '@/utils/supabase/client';
 import { formatSmartTime } from '@/lib/utils/time';
 import { Activity, User, Sliders, Zap, BookOpen, CheckCircle, UploadCloud, Loader2, Shield } from 'lucide-react';
@@ -11,6 +12,7 @@ import { useUserContext } from '@/lib/hooks/useUserContext';
 type Tab = 'profile' | 'preferences' | 'account' | 'activity';
 
 export default function SettingsPage() {
+  const { setTheme } = useTheme();
   const { context: globalContext, mutate } = useUserContext();
   const [userData, setUserData] = useState<any>({
     name: 'Loading...',
@@ -45,6 +47,30 @@ export default function SettingsPage() {
     setUserData((prev: any) => ({ ...prev, preferences: { ...prev.preferences, [field]: value } }));
   };
 
+  const handleThemeChange = async (themeValue: string) => {
+    updatePreference('theme', themeValue);
+    setTheme(themeValue);
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: userData.name,
+          school: userData.school,
+          department: userData.department,
+          preferences: {
+            theme: themeValue,
+            sidebarMode: userData.preferences?.sidebarMode || 'expanded',
+            dailyFocusGoal: userData.preferences?.dailyFocusGoal ?? 120,
+            guideComplexity: userData.preferences?.guideComplexity || 'standard'
+          }
+        })
+      });
+    } catch (e) {
+      console.error("Failed to save theme:", e);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setErrors({});
@@ -64,7 +90,7 @@ export default function SettingsPage() {
           school: userData.school,
           department: userData.department,
           preferences: {
-            theme: userData.preferences?.theme || 'system',
+            theme: userData.preferences?.theme || 'charcoal',
             sidebarMode: userData.preferences?.sidebarMode || 'expanded',
             dailyFocusGoal: userData.preferences?.dailyFocusGoal ?? 120,
             guideComplexity: userData.preferences?.guideComplexity || 'standard'
@@ -183,7 +209,7 @@ export default function SettingsPage() {
         .settings-content { flex: 1; padding: 3rem; overflow-y: auto; background-color: #09090B; }
         .settings-tab { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 0.5rem; cursor: pointer; transition: all 0.2s; color: #A1A1AA; font-weight: 500; }
         .settings-tab:hover { background-color: #18181B; color: #E4E4E7; }
-        .settings-tab.active { background-color: #EA580C; color: white; }
+        .settings-tab.active { background: linear-gradient(135deg, #EA580C, #C2410C); color: white; box-shadow: 0 4px 14px -4px rgba(234,88,12,0.5); }
         @media (max-width: 768px) {
           .settings-container { flex-direction: column; }
           .settings-sidebar { width: 100%; border-right: none; border-bottom: 1px solid #27272A; padding: 0.6rem; display: flex; flex-direction: row; background-color: #18181B; gap: 4px; }
@@ -216,7 +242,10 @@ export default function SettingsPage() {
                 {activeTab === 'profile' && (
                   <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div>
-                      <h1 className="text-3xl font-bold mb-2">My Profile</h1>
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="font-mono text-orange-500 text-xl font-bold">&gt;_</span>
+                        <h1 className="text-3xl font-bold">My Profile</h1>
+                      </div>
                       <p className="text-zinc-400">Manage your identity and basic information.</p>
                     </div>
                     <div className="bg-[#111111] border border-[#27272A] rounded-xl p-6 space-y-6">
@@ -256,7 +285,10 @@ export default function SettingsPage() {
                 {activeTab === 'preferences' && (
                   <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div>
-                      <h1 className="text-3xl font-bold mb-2">Preferences</h1>
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="font-mono text-orange-500 text-xl font-bold">&gt;_</span>
+                        <h1 className="text-3xl font-bold">Preferences</h1>
+                      </div>
                       <p className="text-zinc-400">Configure your study goals and application behavior.</p>
                     </div>
                     <div className="bg-[#111111] border border-[#27272A] rounded-xl p-6 space-y-8">
@@ -268,7 +300,7 @@ export default function SettingsPage() {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <label className="cursor-pointer">
-                            <input type="radio" name="theme" value="system" className="peer sr-only" checked={userData.preferences?.theme === 'system'} onChange={() => updatePreference('theme', 'system')} />
+                            <input type="radio" name="theme" value="charcoal" className="peer sr-only" checked={userData.preferences?.theme === 'charcoal'} onChange={() => handleThemeChange('charcoal')} />
                             <div className="border border-[#27272A] peer-checked:border-orange-500 peer-checked:ring-1 peer-checked:ring-orange-500 rounded-xl p-4 bg-zinc-900 transition-all relative overflow-hidden group">
                               <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 opacity-50"></div>
                               <div className="relative z-10 flex flex-col items-center gap-3">
@@ -281,28 +313,27 @@ export default function SettingsPage() {
                             </div>
                           </label>
                           <label className="cursor-pointer">
-                            <input type="radio" name="theme" value="dark" className="peer sr-only" checked={userData.preferences?.theme === 'dark'} onChange={() => updatePreference('theme', 'dark')} />
-                            <div className="border border-[#27272A] peer-checked:border-orange-500 peer-checked:ring-1 peer-checked:ring-orange-500 rounded-xl p-4 bg-zinc-950 transition-all relative overflow-hidden group">
-                              <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-black opacity-50"></div>
+                            <input type="radio" name="theme" value="dark" className="peer sr-only" checked={userData.preferences?.theme === 'dark'} onChange={() => handleThemeChange('dark')} />
+                            <div className="border border-[#27272A] peer-checked:border-orange-500 peer-checked:ring-1 peer-checked:ring-orange-500 rounded-xl p-4 bg-black transition-all relative overflow-hidden group">
+                              <div className="absolute inset-0 bg-gradient-to-br from-black to-zinc-950 opacity-50"></div>
                               <div className="relative z-10 flex flex-col items-center gap-3">
-                                <div className="w-full h-16 bg-zinc-900 border border-zinc-800 rounded flex gap-2 p-2">
-                                  <div className="w-1/3 bg-zinc-800 rounded"></div>
-                                  <div className="w-2/3 bg-zinc-800 rounded"></div>
+                                <div className="w-full h-16 bg-[#0a0a0a] border border-[#262626] rounded flex gap-2 p-2">
+                                  <div className="w-1/3 bg-[#141414] rounded"></div>
+                                  <div className="w-2/3 bg-[#141414] rounded"></div>
                                 </div>
                                 <span className="font-semibold text-zinc-300 peer-checked:text-white text-sm">Deep Dark</span>
                               </div>
                             </div>
                           </label>
                           <label className="cursor-pointer">
-                            <input type="radio" name="theme" value="midnight" className="peer sr-only" checked={userData.preferences?.theme === 'midnight'} onChange={() => updatePreference('theme', 'midnight')} />
-                            <div className="border border-[#27272A] peer-checked:border-orange-500 peer-checked:ring-1 peer-checked:ring-orange-500 rounded-xl p-4 bg-slate-900 transition-all relative overflow-hidden group">
-                              <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-950 opacity-50"></div>
+                            <input type="radio" name="theme" value="ivory" className="peer sr-only" checked={userData.preferences?.theme === 'ivory'} onChange={() => handleThemeChange('ivory')} />
+                            <div className="border border-[#27272A] peer-checked:border-orange-500 peer-checked:ring-1 peer-checked:ring-orange-500 rounded-xl p-4 bg-[#FAF9F7] transition-all relative overflow-hidden group">
                               <div className="relative z-10 flex flex-col items-center gap-3">
-                                <div className="w-full h-16 bg-slate-800 rounded flex gap-2 p-2">
-                                  <div className="w-1/3 bg-slate-700 rounded"></div>
-                                  <div className="w-2/3 bg-slate-700 rounded"></div>
+                                <div className="w-full h-16 bg-white border border-[#E7E4DE] rounded flex gap-2 p-2">
+                                  <div className="w-1/3 bg-[#F5F4F1] rounded"></div>
+                                  <div className="w-2/3 bg-[#F5F4F1] rounded"></div>
                                 </div>
-                                <span className="font-semibold text-zinc-300 peer-checked:text-white text-sm">Midnight</span>
+                                <span className="font-semibold text-[#57534E] peer-checked:text-[#1C1917] text-sm">Ivory</span>
                               </div>
                             </div>
                           </label>
@@ -359,7 +390,10 @@ export default function SettingsPage() {
                 {activeTab === 'account' && (
                   <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div>
-                      <h1 className="text-3xl font-bold mb-2">Account</h1>
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="font-mono text-orange-500 text-xl font-bold">&gt;_</span>
+                        <h1 className="text-3xl font-bold">Account</h1>
+                      </div>
                       <p className="text-zinc-400">Manage your password, data, and session.</p>
                     </div>
 
@@ -410,7 +444,10 @@ export default function SettingsPage() {
                 {activeTab === 'activity' && (
                   <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div>
-                      <h1 className="text-3xl font-bold mb-2">Activity Log</h1>
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="font-mono text-orange-500 text-xl font-bold">&gt;_</span>
+                        <h1 className="text-3xl font-bold">Activity Log</h1>
+                      </div>
                       <p className="text-zinc-400">A timeline of your actions across the system (Last 20).</p>
                     </div>
                     <div className="bg-[#111111] border border-[#27272A] rounded-xl p-6">

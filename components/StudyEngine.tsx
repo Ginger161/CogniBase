@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, ChevronRight, Layers, BrainCircuit } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Flashcard {
   question: string;
@@ -62,10 +63,10 @@ export function StudyEngine({ guideData, guideId }: StudyEngineProps) {
             }
           } else {
             navigator.clipboard.writeText(shareUrl);
-            alert("Share link copied! Anyone with this link can view a read-only version of this guide.");
+            toast.success("Share link copied! Anyone with this link can view a read-only version of this guide.");
           }
         } else {
-          alert("This guide is no longer shared publicly.");
+          toast.success("This guide is no longer shared publicly.");
         }
       }
     } catch (e) {

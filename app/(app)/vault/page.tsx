@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { db, collection, addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc, getDoc, arrayUnion, deleteDoc } from '../../../lib/firebase';
+import { toast } from 'sonner';
 import { supabase } from '../../../utils/supabase/client';
 import { Pencil, Plus, RefreshCcw, ThumbsUp, ThumbsDown, LayoutGrid, List, Trash2, Calendar, MoreVertical, ChevronLeft, ChevronRight, Save, UploadCloud, File, Play, Loader2, Sparkles, Maximize2 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
 
   // Courses state
   const [isExtracting, setIsExtracting] = useState(false);
@@ -92,11 +93,6 @@ export default function DashboardPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisStatus, setAnalysisStatus] = useState('');
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [rawFiles, setRawFiles] = useState<any[]>([]);
-  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [userData, setUserData] = useState<any>({ name: 'Loading...', email: '', uid: '', profile: null });
   const { context, isLoading: isContextLoading } = useUserContext();
 
@@ -118,11 +114,21 @@ export default function DashboardPage() {
     }
 
     const fetchVaultData = async () => {
+      // Fetch user profile
+      try {
+        const profRes = await fetch('/api/profile');
+        if (profRes.ok) {
+          const profData = await profRes.json();
+          setUserData((prev: any) => ({ ...prev, profile: profData.profile || null }));
+        }
+      } catch (err) { console.error("Error fetching profile", err); }
+
       // Fetch timetables
       try {
-        const timetablesSnap = await getDoc(doc(db, 'timetables', context.uid));
-        if (timetablesSnap.exists()) {
-          const fetchedClasses = (timetablesSnap.data() as any)?.scheduled_classes || [];
+        const timetablesRes = await fetch('/api/timetable');
+        if (timetablesRes.ok) {
+          const tData = await timetablesRes.json();
+          const fetchedClasses = tData.scheduled_classes || [];
           const classesWithIds = fetchedClasses.map((c: any) => c.id ? c : { ...c, id: Date.now().toString(36) + Math.random().toString(36).substring(2) });
           setTimetables(classesWithIds);
         }
@@ -150,9 +156,15 @@ export default function DashboardPage() {
       // Fetch Study Guides
       try {
         const resSq = await fetch('/api/study-guides?userId=' + context.uid);
-        const sGuides = await resSq.json();
-        sGuides.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-        setStudyGuides(sGuides);
+        if (resSq.ok) {
+          const sGuides = await resSq.json();
+          if (Array.isArray(sGuides)) {
+            sGuides.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setStudyGuides(sGuides);
+          } else {
+            setStudyGuides([]);
+          }
+        }
       } catch (e) { console.error(e) }
 
       setIsLoading(false);
@@ -197,7 +209,6 @@ export default function DashboardPage() {
     if (!manualCourseCode.trim() || !manualCourseTitle.trim() || !userData.uid) return;
 
     try {
-      const userRef = doc(db, 'users', userData.uid);
       const newCourse = { courseCode: manualCourseCode.toUpperCase(), courseTitle: manualCourseTitle, semester: manualCourseSemester };
 
       const semesters = [...(userData.profile?.semesters || [])];
@@ -212,7 +223,11 @@ export default function DashboardPage() {
 
       activeSem.courses.push(newCourse);
 
-      await updateDoc(userRef, { semesters });
+      await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: { ...userData.profile, semesters } })
+      });
 
       setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
       setManualCourseCode('');
@@ -231,8 +246,11 @@ export default function DashboardPage() {
 
       semesters[activeSemIdx].courses = semesters[activeSemIdx].courses.filter((c: any) => c.courseCode !== courseCode);
 
-      const userRef = doc(db, 'users', userData.uid);
-      await updateDoc(userRef, { semesters });
+      await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: { ...userData.profile, semesters } })
+      });
       setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
     } catch (err) { console.error(err); }
   };
@@ -260,8 +278,11 @@ export default function DashboardPage() {
 
       semesters[activeSemIdx].courses = semesters[activeSemIdx].courses.filter((c: any) => !selectedCourseCodes.includes(c.courseCode));
 
-      const userRef = doc(db, 'users', userData.uid);
-      await updateDoc(userRef, { semesters });
+      await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: { ...userData.profile, semesters } })
+      });
       setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
       setSelectedCourseCodes([]);
     } catch (err) { console.error(err); }
@@ -296,8 +317,19 @@ export default function DashboardPage() {
       console.log("Vault file successfully uploaded to Supabase:", fileUrl);
 
       const semesters = [...(userData.profile?.semesters || [])];
-      const activeSemIdx = semesters.findIndex((s: any) => s.isActive);
-      if (activeSemIdx === -1) throw new Error("No active semester found.");
+      let activeSemIdx = semesters.findIndex((s: any) => s.isActive);
+      
+      if (activeSemIdx === -1) {
+        semesters.push({
+          semesterId: Date.now().toString(),
+          title: "Current Semester",
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 120).toISOString(),
+          isActive: true,
+          courses: []
+        });
+        activeSemIdx = semesters.length - 1;
+      }
 
       // Step 3 & 4: Send API request with URL, backend fetches and updates Firestore
       const extractRes = await fetch('/api/engine/extract-courses', {
@@ -326,8 +358,11 @@ export default function DashboardPage() {
         const newCourses = extractedData.courses.filter((c: any) => !activeSem.courses.some((ext: any) => ext.courseCode === c.courseCode));
         if (newCourses.length > 0) {
           activeSem.courses = [...activeSem.courses, ...newCourses];
-          const userRef = doc(db, 'users', userData.uid);
-          await updateDoc(userRef, { semesters });
+          await fetch('/api/profile', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile: { ...userData.profile, semesters } })
+          });
           setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
         }
       }
@@ -404,7 +439,14 @@ export default function DashboardPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ imageBase64: base64Data, mimeType: file.type })
             });
-            const data = await res.json();
+            
+            let data: any;
+            try {
+              data = await res.json();
+            } catch (e) {
+              data = {};
+            }
+
             if (!res.ok) {
               console.error('Full API Error Response:', data);
               reject(new Error(data.error || "Failed to extract timetable"));
@@ -449,8 +491,11 @@ export default function DashboardPage() {
 
       if (finalTimetableUrl && activeSemIdx !== -1) {
         semesters[activeSemIdx].timetableUrl = finalTimetableUrl;
-        const userRef = doc(db, 'users', userData.uid);
-        await updateDoc(userRef, { semesters });
+        await fetch('/api/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profile: { ...userData.profile, semesters } })
+        });
         setUserData((prev: any) => ({ ...prev, profile: { ...prev.profile, semesters } }));
       }
 
@@ -482,14 +527,11 @@ export default function DashboardPage() {
         }
 
         if (newClasses.length > 0) {
-          const ttRef = doc(db, 'timetables', userData.uid);
-          const ttSnap = await getDoc(ttRef);
-          if (ttSnap.exists()) {
-            await updateDoc(ttRef, { scheduled_classes: currentTimetables });
-          } else {
-            const { setDoc } = await import('../../../lib/firebase');
-            await setDoc(ttRef, { scheduled_classes: currentTimetables });
-          }
+          await fetch('/api/timetable', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scheduled_classes: currentTimetables })
+          });
           setTimetables(currentTimetables);
         }
 
@@ -525,8 +567,11 @@ export default function DashboardPage() {
         return { ...rest, id: rest.id || Date.now().toString(36) + Math.random().toString(36).substring(2) };
       })];
 
-      const ttRef = doc(db, 'timetables', userData.uid);
-      await updateDoc(ttRef, { scheduled_classes: currentTimetables });
+      await fetch('/api/timetable', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_classes: currentTimetables })
+      });
       setTimetables(currentTimetables);
       setPendingClashes(null);
       setToastMessage("Clashing classes overridden and saved.");
@@ -561,14 +606,11 @@ export default function DashboardPage() {
         newScheduledClasses = [...timetables, newClass];
       }
 
-      const ttRef = doc(db, 'timetables', userData.uid);
-      const ttSnap = await getDoc(ttRef);
-      if (ttSnap.exists()) {
-        await updateDoc(ttRef, { scheduled_classes: newScheduledClasses });
-      } else {
-        const { setDoc } = await import('../../../lib/firebase');
-        await setDoc(ttRef, { scheduled_classes: newScheduledClasses });
-      }
+      await fetch('/api/timetable', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_classes: newScheduledClasses })
+      });
 
       setTimetables(newScheduledClasses);
       setManualTimetableCourseCode('');
@@ -596,8 +638,11 @@ export default function DashboardPage() {
     if (!userData.uid) return;
     try {
       const newScheduledClasses = timetables.filter(c => c.id !== id);
-      const ttRef = doc(db, 'timetables', userData.uid);
-      await updateDoc(ttRef, { scheduled_classes: newScheduledClasses });
+      await fetch('/api/timetable', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_classes: newScheduledClasses })
+      });
       setTimetables(newScheduledClasses);
       setSelectedClasses(prev => prev.filter(selectedId => selectedId !== id));
       setToastMessage("Class deleted successfully.");
@@ -609,11 +654,13 @@ export default function DashboardPage() {
 
   const handleBulkDelete = async () => {
     if (!userData.uid || selectedClasses.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedClasses.length} classes?`)) return;
     try {
       const newScheduledClasses = timetables.filter(c => !selectedClasses.includes(c.id));
-      const ttRef = doc(db, 'timetables', userData.uid);
-      await updateDoc(ttRef, { scheduled_classes: newScheduledClasses });
+      await fetch('/api/timetable', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_classes: newScheduledClasses })
+      });
       setTimetables(newScheduledClasses);
       setSelectedClasses([]);
       setToastMessage(`Deleted ${selectedClasses.length} classes.`);
@@ -621,6 +668,7 @@ export default function DashboardPage() {
       console.error(err);
       setToastMessage("Failed to delete selected classes.");
     }
+    setIsBulkDeleteConfirmOpen(false);
   };
 
   const toggleClassSelection = (id: string) => {
@@ -634,8 +682,11 @@ export default function DashboardPage() {
   const handleClearTimetableConfirm = async () => {
     if (!userData.uid) return;
     try {
-      const ttRef = doc(db, 'timetables', userData.uid);
-      await updateDoc(ttRef, { scheduled_classes: [] });
+      await fetch('/api/timetable', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_classes: [] })
+      });
       setTimetables([]);
       setSelectedClasses([]);
       setEditingClassId(null);
@@ -685,7 +736,7 @@ export default function DashboardPage() {
         sourceDocumentName: file.fileName,
         sectionConstraint: payloadConstraint,
         strategyData: data.studyGuide,
-        createdAt: serverTimestamp()
+        createdAt: new Date().toISOString()
       };
 
       const docRef = await fetch('/api/study-guides', {
@@ -729,11 +780,9 @@ export default function DashboardPage() {
   const handleBulkDeleteMaterials = async () => {
     if (!userData.uid || selectedMaterials.length === 0) return;
     try {
-      // 1. Delete all selected documents from Firebase using the correct collection 'vault_files'
       const deletePromises = selectedMaterials.map(id => fetch('/api/documents?id=' + id, { method: 'DELETE' }));
       await Promise.all(deletePromises);
 
-      // 2. Clear local state only after DB deletion succeeds
       setVaultFiles(prev => prev.filter(m => !selectedMaterials.includes(m.id)));
       setSelectedMaterials([]);
       setToastMessage(`Successfully deleted ${selectedMaterials.length} materials.`);
@@ -747,10 +796,8 @@ export default function DashboardPage() {
     setActiveFileDropdown(null);
     if (!userData.uid) return;
     try {
-      // 1. Delete single document from Firebase using the correct collection 'vault_files'
       await fetch('/api/documents?id=' + id, { method: 'DELETE' });
 
-      // 2. Clear local state only after DB deletion succeeds
       setVaultFiles(prev => prev.filter(m => m.id !== id));
       setToastMessage("File deleted successfully from your Vault.");
     } catch (err) {
@@ -834,7 +881,7 @@ export default function DashboardPage() {
               const errData = JSON.parse(responseText);
               import('sonner').then(mod => mod.toast.error(errData.error || "Failed to save to database."));
             } catch (e) {
-              alert("Failed to save to database. Check console for details.");
+              toast.error("Failed to save to database. Check console for details.");
             }
 
             setUploadStatus('Upload failed.');
@@ -876,100 +923,6 @@ export default function DashboardPage() {
 
   const { throttledFunction: handleUploadToVault, isThrottled: isUploadingThrottled } = useThrottle(handleUploadToVaultCore);
 
-  const handleInitiateAnalysis = async () => {
-    if (!userData.uid) return;
-    setAnalysisStatus('Scanning Vault...');
-
-    try {
-      const q = query(collection(db, 'vault_files'), where('userId', '==', userData.uid), where('status', '==', 'raw'));
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) {
-        setAnalysisStatus('All files in your Vault are already analyzed!');
-        setTimeout(() => setAnalysisStatus(''), 4000);
-        return;
-      }
-
-      const files = querySnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-
-      // NEW: Sort files by newest first (reverse chronological)
-      files.sort((a: any, b: any) => {
-        const timeA = a.uploadedAt?.seconds || 0;
-        const timeB = b.uploadedAt?.seconds || 0;
-        return timeB - timeA;
-      });
-
-      setRawFiles(files);
-      setSelectedFileIds([]);
-      setIsSelectionMode(true);
-      setAnalysisStatus('');
-    } catch (error) {
-      setAnalysisStatus('Error accessing Vault records.');
-      setTimeout(() => setAnalysisStatus(''), 4000);
-    }
-  };
-
-  const toggleFileSelection = (id: string) => {
-    setSelectedFileIds(prev =>
-      prev.includes(id) ? prev.filter(fId => fId !== id) : [...prev, id]
-    );
-  };
-
-  const handleProcessSelected = async () => {
-    if (selectedFileIds.length === 0 || isAnalyzing) return;
-
-    setIsAnalyzing(true);
-    setIsSelectionMode(false);
-
-    const filesToProcess = rawFiles.filter(f => selectedFileIds.includes(f.id));
-    setAnalysisStatus(`Igniting AI Engine for ${filesToProcess.length} file(s)...`);
-
-    let successCount = 0;
-
-    try {
-      for (const file of filesToProcess) {
-        setAnalysisStatus(`Extracting: ${file.fileName}...`);
-
-        const response = await fetch('/api/engine/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileUrl: file.downloadURL,
-            fileName: file.fileName,
-            docId: file.id,
-            userId: userData.uid
-          })
-        });
-
-        const textResponse = await response.text();
-        let result;
-
-        try {
-          result = JSON.parse(textResponse);
-        } catch (parseError) {
-          throw new Error(`The AI Engine experienced a critical failure reading "${file.fileName}". The file might be corrupted or too complex.`);
-        }
-
-        if (response.ok && result.success) {
-          const docRef = doc(db, 'vault_files', file.id);
-          await updateDoc(docRef, { status: 'analyzed' });
-          successCount++;
-        } else {
-          throw new Error(result.error || `Failed to process ${file.fileName}. Please try again.`);
-        }
-      }
-
-      setAnalysisStatus(`Analysis Complete. ${successCount}/${filesToProcess.length} integrated into AI Brain.`);
-      setTimeout(() => setAnalysisStatus(''), 8000);
-      setIsAnalyzing(false);
-
-    } catch (error: any) {
-      setAnalysisStatus(`${error.message}`);
-      setIsAnalyzing(false);
-    }
-  };
-
-
   const extractionPhases = ['Uploading document...', 'Scanning document structure...', 'Analyzing course codes...', 'Optimizing for high traffic...', 'Finalizing extraction...'];
 
   useEffect(() => {
@@ -996,17 +949,18 @@ export default function DashboardPage() {
         <div className="flex-1 flex flex-col h-full overflow-hidden p-6" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1, overflowY: 'auto' }}>
           
 
-          <header style={{ borderBottom: '1px solid #27272A', paddingBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-            <div>
-              <h1 style={{ fontSize: '2rem', margin: 0, letterSpacing: '-0.05em' }}>My Vault</h1>
-              <p style={{ color: '#A1A1AA', margin: '0.5rem 0 0 0', fontSize: '1rem' }}>Your Student Operating System.</p>
+          <header style={{ paddingBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <span style={{ fontFamily: 'monospace', color: '#EA580C', fontSize: '1.1rem', fontWeight: 700 }}>&gt;_</span>
+              <h1 style={{ fontSize: '1.6rem', margin: 0, fontWeight: 700, color: 'white' }}>My Vault</h1>
             </div>
+            <p style={{ color: '#71717A', margin: 0, fontSize: '0.75rem', fontFamily: 'monospace' }}>// your student operating system</p>
           </header>
 
-          <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid #27272A', paddingBottom: '1rem' }}>
-            <button onClick={() => setActiveTab('courses')} style={{ background: 'none', border: 'none', color: activeTab === 'courses' ? 'white' : '#A1A1AA', fontWeight: activeTab === 'courses' ? 'bold' : 'normal', cursor: 'pointer', fontSize: '1rem', padding: '0.5rem 1rem', borderBottom: activeTab === 'courses' ? '2px solid #EA580C' : '2px solid transparent' }}>My Courses</button>
-            <button onClick={() => setActiveTab('timetable')} style={{ background: 'none', border: 'none', color: activeTab === 'timetable' ? 'white' : '#A1A1AA', fontWeight: activeTab === 'timetable' ? 'bold' : 'normal', cursor: 'pointer', fontSize: '1rem', padding: '0.5rem 1rem', borderBottom: activeTab === 'timetable' ? '2px solid #EA580C' : '2px solid transparent' }}>My Timetable</button>
-            <button onClick={() => setActiveTab('materials')} style={{ background: 'none', border: 'none', color: activeTab === 'materials' ? 'white' : '#A1A1AA', fontWeight: activeTab === 'materials' ? 'bold' : 'normal', cursor: 'pointer', fontSize: '1rem', padding: '0.5rem 1rem', borderBottom: activeTab === 'materials' ? '2px solid #EA580C' : '2px solid transparent' }}>Lecture Materials</button>
+          <div style={{ display: 'flex', gap: '6px', paddingBottom: '1rem', flexWrap: 'wrap' }}>
+            <button onClick={() => setActiveTab('courses')} style={activeTab === 'courses' ? { background: 'linear-gradient(135deg, #EA580C, #C2410C)', color: 'white', fontWeight: 700, fontSize: '0.8rem', padding: '0.5rem 0.9rem', borderRadius: '8px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px -4px rgba(234,88,12,0.5)' } : { background: 'none', border: '1px solid #27272A', color: '#A1A1AA', fontWeight: 600, fontSize: '0.8rem', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer' }}>My Courses</button>
+            <button onClick={() => setActiveTab('timetable')} style={activeTab === 'timetable' ? { background: 'linear-gradient(135deg, #EA580C, #C2410C)', color: 'white', fontWeight: 700, fontSize: '0.8rem', padding: '0.5rem 0.9rem', borderRadius: '8px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px -4px rgba(234,88,12,0.5)' } : { background: 'none', border: '1px solid #27272A', color: '#A1A1AA', fontWeight: 600, fontSize: '0.8rem', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer' }}>My Timetable</button>
+            <button onClick={() => setActiveTab('materials')} style={activeTab === 'materials' ? { background: 'linear-gradient(135deg, #EA580C, #C2410C)', color: 'white', fontWeight: 700, fontSize: '0.8rem', padding: '0.5rem 0.9rem', borderRadius: '8px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px -4px rgba(234,88,12,0.5)' } : { background: 'none', border: '1px solid #27272A', color: '#A1A1AA', fontWeight: 600, fontSize: '0.8rem', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer' }}>Lecture Materials</button>
 
 
           </div>
@@ -1370,7 +1324,7 @@ export default function DashboardPage() {
                                 <div style={{ display: 'flex', gap: '1rem' }}>
                                   <button onClick={() => setSelectedClasses(timetables.map(c => c.id))} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>Select All</button>
                                   <button onClick={() => setSelectedClasses([])} style={{ background: 'transparent', color: '#A1A1AA', border: '1px solid #3F3F46', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>Deselect All</button>
-                                  <button onClick={handleBulkDelete} style={{ backgroundColor: '#DC2626', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>Delete Selected</button>
+                                  <button onClick={() => setIsBulkDeleteConfirmOpen(true)} style={{ backgroundColor: '#DC2626', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>Delete Selected</button>
                                 </div>
                               </div>
                             )}
@@ -1467,9 +1421,11 @@ export default function DashboardPage() {
 
             {activeTab === 'materials' && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
-                <div style={{ backgroundColor: '#111111', padding: '2rem', borderRadius: '1rem', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <h3 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Upload Material</h3>
-                  <p style={{ color: '#A1A1AA', fontSize: '0.9rem', margin: 0 }}>Upload lecture slides or PDFs to build your knowledge base.</p>
+                <div style={{ position: 'relative', backgroundColor: '#111111', padding: '1.75rem', borderRadius: '14px', border: '1px solid #27272A', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, transparent, #EA580C, transparent)' }}></div>
+                  <p style={{ fontSize: '0.65rem', fontWeight: 700, color: '#EA580C', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0, fontFamily: 'monospace' }}>01 · Upload</p>
+                  <h3 style={{ color: 'white', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Feed the machine.</h3>
+                  <p style={{ color: '#A1A1AA', fontSize: '0.85rem', margin: 0 }}>Upload lecture slides or PDFs to build your knowledge base.</p>
                   <input type="file" disabled={isUploading} multiple accept=".pdf,.pptx,.docx,.txt" ref={fileInputRef} onChange={handleFileInput} style={{ display: 'none' }} />
                   <div
                     onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
@@ -1863,6 +1819,19 @@ export default function DashboardPage() {
 
             <div className="px-3 sm:px-8 py-3 sm:py-8" style={{ flex: 1, overflowY: 'auto', color: '#E4E4E7', lineHeight: '1.6', fontSize: '0.95rem' }}>
               <StudyEngine guideData={activeStudyGuide.strategyData || activeStudyGuide.markdownContent} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isBulkDeleteConfirmOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl max-w-sm w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">Delete {selectedClasses.length} Classes?</h3>
+            <p className="text-gray-400 text-sm mb-6">This cannot be undone.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setIsBulkDeleteConfirmOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-800 transition-colors">Cancel</button>
+              <button onClick={handleBulkDelete} className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500 transition-colors">Delete</button>
             </div>
           </div>
         </div>

@@ -73,6 +73,7 @@ model User {
   auditLogs        AuditLog[]
   studyGuideProgress StudyGuideProgress[]
   preferences      UserPreferences?
+  profile          Json?
 }
 
 model Timetable {

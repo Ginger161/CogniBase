@@ -84,10 +84,26 @@ export async function POST(req: Request) {
     if (targetDocIds.length > 0 && userQueryText.trim().length > 0) {
       try {
         const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
-        const queryResult = await embeddingModel.embedContent(userQueryText);
-        let queryEmbedding = queryResult.embedding.values;
+        const embedBackoff = [1000, 2000];
+        let queryResult;
+        for (let attempt = 0; attempt <= embedBackoff.length; attempt++) {
+          try {
+            queryResult = await embeddingModel.embedContent(userQueryText);
+            break;
+          } catch (err: any) {
+            const msg = String(err.message || err);
+            if (attempt < embedBackoff.length && (msg.includes('503') || msg.includes('429') || msg.toLowerCase().includes('overloaded'))) {
+              await new Promise(res => setTimeout(res, embedBackoff[attempt]));
+            } else {
+              throw err;
+            }
+          }
+        }
+        let queryEmbedding = queryResult!.embedding.values;
         if (queryEmbedding.length > 768) {
           queryEmbedding = queryEmbedding.slice(0, 768);
+          const norm = Math.sqrt(queryEmbedding.reduce((sum, v) => sum + v * v, 0));
+          queryEmbedding = queryEmbedding.map(v => v / norm);
         }
 
         const docIdsParam = targetDocIds.map(id => `'${id}'`).join(',');
@@ -134,16 +150,7 @@ export async function POST(req: Request) {
       }
     }
 
-    let formattedConversationHistory = "";
-    normalizedMessages.slice(0, -1).forEach((msg: any, index: number) => {
-      formattedConversationHistory += `[interaction_id: ${index + 1}]`;
-      if (index > 0) {
-        formattedConversationHistory += ` [previous_interaction_id: ${index}]\n`;
-      } else {
-        formattedConversationHistory += `\n`;
-      }
-      formattedConversationHistory += `Role: ${msg.role}\nMessage: ${msg.content}\n\n`;
-    });
+
 
     const systemPrompt = `CRITICAL CONTEXT: The user is currently inside a workspace that contains the following uploaded study documents: [${docNames}]. You have full access to these materials via the injected chunks below. Never say you do not have access to these files.
 
@@ -161,10 +168,7 @@ ${JSON.stringify(userProfile)}
 
 [VECTOR CHUNKS]
 Extracted Context from Workspace Files:
-${searchContext ? searchContext : "No relevant content found in the files for this specific query."}
-
-[LINKED CONVERSATION HISTORY]
-${formattedConversationHistory ? formattedConversationHistory : "No previous conversation history."}`;
+${searchContext ? searchContext : "No relevant content found in the files for this specific query."}`;
 
     const result = streamText({
       model: google('gemini-3.5-flash'),

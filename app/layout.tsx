@@ -36,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${plusJakartaSans.className} ${spaceGrotesk.variable} antialiased min-h-dvh`}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="charcoal" themes={['charcoal', 'dark', 'ivory']}>
           <UserProvider>
             {children}
             <Toaster position="bottom-right" theme="dark" richColors closeButton />

@@ -126,91 +126,121 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No readable text found. If this is a scanned document, the AI cannot read the images yet." }, { status: 400 });
     }
     
-    const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        function send(event: any) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        }
 
-    // Generate embeddings and insert into Postgres via Prisma
-    let chunksInserted = 0;
-    const batchSize = 5;
-    const allEmbeddings: { id: string; content: string; embeddingStr: string }[] = [];
+        try {
+          const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
-    for (let i = 0; i < validChunks.length; i += batchSize) {
-      const batchChunks = validChunks.slice(i, i + batchSize);
-      try {
-        const batchResults = await Promise.all(
-          batchChunks.map(async (chunk, batchIdx) => {
-            const result = await embeddingModel.embedContent(chunk);
-            let embedding = result.embedding.values;
-            if (embedding.length > 768) embedding = embedding.slice(0, 768);
-            return {
-              id: `${docId}-chunk-${i + batchIdx}`,
-              content: chunk,
-              embeddingStr: `[${embedding.join(',')}]`
-            };
-          })
-        );
-        allEmbeddings.push(...batchResults);
-      } catch (e) {
-        console.error(`Failed to process embedding batch starting at ${i}:`, e);
+          let chunksInserted = 0;
+          const batchSize = 5;
+          const allEmbeddings: { id: string; content: string; embeddingStr: string }[] = [];
+          const totalBatches = Math.ceil(validChunks.length / batchSize);
+
+          for (let i = 0; i < validChunks.length; i += batchSize) {
+            const batchNumber = Math.floor(i / batchSize) + 1;
+            send({ type: 'progress', message: `Analyzing section ${batchNumber} of ${totalBatches}...`, percent: Math.round((batchNumber / totalBatches) * 90) });
+
+            const batchChunks = validChunks.slice(i, i + batchSize);
+            try {
+              const batchResults = await Promise.all(
+                batchChunks.map(async (chunk, batchIdx) => {
+                  const result = await embeddingModel.embedContent(chunk);
+                  let embedding = result.embedding.values;
+                  if (embedding.length > 768) {
+                    embedding = embedding.slice(0, 768);
+                    const norm = Math.sqrt(embedding.reduce((sum: number, v: number) => sum + v * v, 0));
+                    embedding = embedding.map((v: number) => v / norm);
+                  }
+                  return {
+                    id: `${docId}-chunk-${i + batchIdx}`,
+                    content: chunk,
+                    embeddingStr: `[${embedding.join(',')}]`
+                  };
+                })
+              );
+              allEmbeddings.push(...batchResults);
+            } catch (e) {
+              console.error(`Failed to process embedding batch starting at ${i}:`, e);
+            }
+          }
+
+          if (allEmbeddings.length > 0) {
+            send({ type: 'progress', message: 'Saving to your vault...', percent: 92 });
+
+            const values: string[] = [];
+            const parameters: any[] = [];
+            let paramIndex = 1;
+
+            for (const item of allEmbeddings) {
+              values.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}::vector)`);
+              parameters.push(item.id, docId, item.content, item.embeddingStr);
+              paramIndex += 4;
+            }
+
+            const query = `INSERT INTO "DocumentChunk" ("id", "documentId", "content", "embedding") VALUES ${values.join(', ')}`;
+
+            try {
+              await prisma.$executeRawUnsafe(query, ...parameters);
+              chunksInserted = allEmbeddings.length;
+            } catch (e) {
+              console.error("Bulk insert failed:", e);
+            }
+          }
+
+          if (chunksInserted === 0) {
+            send({ type: 'error', error: "Failed to generate AI data from this file." });
+            controller.close();
+            return;
+          }
+
+          let generatedTitle = null;
+
+          if (workspaceId && (!workspaceName || workspaceName.toLowerCase().includes('untitled') || workspaceName.toLowerCase().includes('optimizing academic'))) {
+            try {
+              send({ type: 'progress', message: 'Naming your study desk...', percent: 97 });
+              const titleModel = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+              const titlePrompt = `Based on the following academic text, generate a short, highly relevant title (3 to 5 words maximum) for a study workspace. Do not use quotes or special characters. Text excerpt: ${extractedText.substring(0, 1500)}`;
+              const titleResult = await titleModel.generateContent(titlePrompt);
+              generatedTitle = titleResult.response.text().trim().replace(/^["'](.*)["']$/, '$1');
+
+              await prisma.workspace.update({
+                where: { id: workspaceId },
+                data: { title: generatedTitle }
+              });
+            } catch (titleErr) {
+              console.error("Failed to generate workspace title:", titleErr);
+            }
+          }
+
+          send({ type: 'done', success: true, chunksProcessed: chunksInserted, workspaceTitle: generatedTitle, percent: 100 });
+          controller.close();
+
+        } catch (error: any) {
+          console.error("Engine Error:", error);
+          let errorMessage = error.message || "Failed to process document.";
+          if (error.message?.includes("503") || error.message?.includes("high demand") || error.message?.includes("Service Unavailable")) {
+            errorMessage = "The AI servers are currently experiencing high demand from students. Please try again in a few minutes.";
+          }
+          send({ type: 'error', error: errorMessage });
+          controller.close();
+        }
       }
-    }
+    });
 
-    if (allEmbeddings.length > 0) {
-      // Build a single bulk insert query
-      const values: string[] = [];
-      const parameters: any[] = [];
-      let paramIndex = 1;
-
-      for (const item of allEmbeddings) {
-        values.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}::vector)`);
-        parameters.push(item.id, docId, item.content, item.embeddingStr);
-        paramIndex += 4;
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
       }
-
-      const query = `INSERT INTO "DocumentChunk" ("id", "documentId", "content", "embedding") VALUES ${values.join(', ')}`;
-      
-      try {
-        await prisma.$executeRawUnsafe(query, ...parameters);
-        chunksInserted = allEmbeddings.length;
-      } catch (e) {
-        console.error("Bulk insert failed:", e);
-      }
-    }
-
-    if (chunksInserted === 0) {
-       return NextResponse.json({ error: "Failed to generate AI data from this file." }, { status: 400 });
-    }
-
-    let generatedTitle = null;
-    
-    // Only generate a title if it's the default or generic name, or if we want to auto-update
-    if (workspaceId && (!workspaceName || workspaceName.toLowerCase().includes('untitled') || workspaceName.toLowerCase().includes('optimizing academic'))) {
-      try {
-        const titleModel = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
-        const titlePrompt = `Based on the following academic text, generate a short, highly relevant title (3 to 5 words maximum) for a study workspace. Do not use quotes or special characters. Text excerpt: ${extractedText.substring(0, 1500)}`;
-        const titleResult = await titleModel.generateContent(titlePrompt);
-        generatedTitle = titleResult.response.text().trim().replace(/^["'](.*)["']$/, '$1');
-        
-        await prisma.workspace.update({
-          where: { id: workspaceId },
-          data: { title: generatedTitle }
-        });
-      } catch (titleErr) {
-        console.error("Failed to generate workspace title:", titleErr);
-      }
-    }
-
-    return NextResponse.json({ success: true, chunksProcessed: chunksInserted, workspaceTitle: generatedTitle });
-
+    });
   } catch (error: any) {
-    console.error("Engine Error:", error);
-    
-    if (error.message?.includes("503") || error.message?.includes("high demand") || error.message?.includes("Service Unavailable")) {
-      return NextResponse.json({ 
-        error: "The AI servers are currently experiencing high demand from students. Please try again in a few minutes.",
-        isCongested: true
-      }, { status: 503 });
-    }
-
+    console.error("Engine Error (pre-stream):", error);
     return NextResponse.json({ error: error.message || "Failed to process document." }, { status: 500 });
   }
 }

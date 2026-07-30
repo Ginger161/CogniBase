@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     const { user, response } = await requireUser();
     if (!user) return response;
 
-    const { name, url, workspaceId, fileSize } = await req.json();
+    const { name, url, workspaceId, fileSize, rawText } = await req.json();
 
     let targetWorkspaceId = workspaceId;
 
@@ -39,6 +39,11 @@ export async function POST(req: Request) {
 
     let extractedText = "";
     let sourceType = "file";
+
+    if (rawText && rawText.trim().length > 0) {
+      extractedText = rawText.trim();
+      sourceType = 'text';
+    } else {
 
     const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
     const isWebsite = url.startsWith('http') && !url.includes('supabase.co');
@@ -135,6 +140,8 @@ export async function POST(req: Request) {
           console.error("Gemini Vision Error:", err);
         }
       }
+    }
+
     }
 
     if (!extractedText) extractedText = "";
