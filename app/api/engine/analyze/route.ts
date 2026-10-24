@@ -8,6 +8,8 @@ import { readStoredFile } from '@/lib/storage';
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireDocumentOwnership, requireWorkspaceOwnership, isTrustedStorageUrl, badFileUrlResponse } from '@/lib/api-auth';
 
+export const maxDuration = 60;
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 function chunkText(text: string, maxChunkSize: number = 1000, overlapSize: number = 200) {

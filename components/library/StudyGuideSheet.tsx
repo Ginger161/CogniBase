@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Sheet from '@/components/ui/Sheet';
+import { UserError, friendlyError, readApiError } from '@/lib/client-errors';
 
 const FORMATS = ['Multiple Choice', 'Written Essay', 'General Knowledge'];
 const TIMEFRAMES = ['Cramming (<24h)', 'Standard', 'Deep Study'];
@@ -59,12 +60,13 @@ export default function StudyGuideSheet({ source, onClose }: { source: { id: str
           sectionConstraint: `Format: ${format} | Timeframe: ${timeframe} | Level: ${level}`,
         }),
       });
+      if (!res.ok) throw await readApiError(res, 'Could not generate the study guide.');
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.guide?.id) throw new Error(data.error || 'Could not generate the study guide.');
+      if (!data.guide?.id) throw new UserError('Could not generate the study guide.');
       onClose();
       router.push(`/study-guides?open=${encodeURIComponent(data.guide.id)}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not generate the study guide.');
+      toast.error(friendlyError(e, 'Could not generate the study guide.'));
     } finally {
       setBusy(false);
     }

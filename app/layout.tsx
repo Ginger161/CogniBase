@@ -28,6 +28,7 @@ import { cookies } from 'next/headers';
 import { UserProvider } from '@/lib/hooks/useUserContext';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ThemedToaster } from '@/components/ThemedToaster';
+import { NetworkStatus } from '@/components/NetworkStatus';
 import { THEMES, THEME_COOKIE, isAppTheme } from '@/lib/theme-cookie';
 
 export default async function RootLayout({
@@ -46,6 +47,7 @@ export default async function RootLayout({
           <UserProvider>
             {children}
             <ThemedToaster />
+            <NetworkStatus />
           </UserProvider>
         </ThemeProvider>
       </body>

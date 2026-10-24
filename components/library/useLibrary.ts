@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/utils/supabase/client';
+import { UserError, friendlyError, readApiError, storageUploadMessage } from '@/lib/client-errors';
 import {
   ACCEPTED_EXTENSIONS,
   MAX_FILES_AT_ONCE,
@@ -18,9 +19,9 @@ type AnalyzeEvent =
   | { type: 'error'; error: string };
 
 async function errorFrom(res: Response, fallback: string): Promise<string> {
-  const data = await res.json().catch(() => null);
-  return (data && typeof data.error === 'string' && data.error) || fallback;
+  return (await readApiError(res, fallback)).message;
 }
+
 
 export function useLibrary() {
   const [sources, setSources] = useState<LibrarySource[]>([]);
@@ -87,7 +88,7 @@ export function useLibrary() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ docId: src.id, fileUrl: src.url, fileName: src.name }),
         });
-        if (!res.ok || !res.body) throw new Error(await errorFrom(res, 'Indexing failed.'));
+        if (!res.ok || !res.body) throw new UserError(await errorFrom(res, 'Indexing failed.'));
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -104,14 +105,14 @@ export function useLibrary() {
             if (!line) continue;
             const event = JSON.parse(line.slice(6)) as AnalyzeEvent;
             if (event.type === 'progress') setState({ percent: event.percent, message: event.message });
-            else if (event.type === 'error') throw new Error(event.error);
+            else if (event.type === 'error') throw new UserError(event.error);
             else if (event.type === 'done') finished = true;
           }
         }
-        if (!finished) throw new Error('Indexing was interrupted. Try again.');
+        if (!finished) throw new UserError('Indexing was interrupted. Try again.');
         await refresh();
       } catch (e) {
-        toast.error(`${src.name}: ${e instanceof Error ? e.message : 'Indexing failed.'}`);
+        toast.error(`${src.name}: ${friendlyError(e, 'Indexing failed.')}`);
       } finally {
         setState(null);
       }
@@ -135,7 +136,7 @@ export function useLibrary() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await errorFrom(res, 'Could not add this source.'));
+      if (!res.ok) throw new UserError(await errorFrom(res, 'Could not add this source.'));
       const doc = (await res.json()) as LibrarySource;
       setSources((prev) => [{ ...doc, indexed: false, chunkCount: 0 }, ...prev.filter((s) => s.id !== doc.id)]);
       enqueueIndex(doc);
@@ -175,15 +176,15 @@ export function useLibrary() {
         try {
           const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '-');
           const { data: auth } = await supabase.auth.getUser();
-          if (!auth.user) throw new Error('Please sign in again.');
+          if (!auth.user) throw new UserError('Please sign in again.');
           // First folder is the user id, so storage policies can restrict each user to their own files.
           const path = `${auth.user.id}/${crypto.randomUUID().slice(0, 8)}-${cleanName}`;
           const { error } = await supabase.storage.from('workspace-files').upload(path, file);
-          if (error) throw new Error(error.message || 'Upload failed.');
+          if (error) throw new UserError(storageUploadMessage(error.message));
           const { data } = supabase.storage.from('workspace-files').getPublicUrl(path);
           await createDocument({ name: file.name, url: data.publicUrl, fileSize: file.size, category });
         } catch (e) {
-          toast.error(`${file.name}: ${e instanceof Error ? e.message : 'Upload failed.'}`);
+          toast.error(`${file.name}: ${friendlyError(e, 'Upload failed.')}`);
         }
       }
       setUploadStatus(null);
@@ -197,7 +198,7 @@ export function useLibrary() {
       try {
         await createDocument({ url });
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not add this link.');
+        toast.error(friendlyError(e, 'Could not add this link.'));
         throw e;
       } finally {
         setUploadStatus(null);
@@ -212,7 +213,7 @@ export function useLibrary() {
       try {
         await createDocument({ name: title || 'Pasted notes', rawText: text });
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not save these notes.');
+        toast.error(friendlyError(e, 'Could not save these notes.'));
         throw e;
       } finally {
         setUploadStatus(null);
@@ -226,7 +227,7 @@ export function useLibrary() {
       const results = await Promise.allSettled(
         ids.map(async (id) => {
           const res = await fetch('/api/documents?id=' + encodeURIComponent(id), { method: 'DELETE' });
-          if (!res.ok) throw new Error(await errorFrom(res, 'Delete failed.'));
+          if (!res.ok) throw new UserError(await errorFrom(res, 'Delete failed.'));
           return id;
         })
       );

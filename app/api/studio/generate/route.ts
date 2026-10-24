@@ -9,8 +9,13 @@ import { recordMetric } from '@/lib/metrics';
 import { logActivity } from '@/lib/audit-log';
 import { classifyAiError } from '@/lib/ai-errors';
 
+export const maxDuration = 60;
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 const MAX_SOURCE_CHARS = 50000;
+// Each attempt gives up well before maxDuration so the user gets a clear message, not a platform 504.
+const ATTEMPT_TIMEOUT_MS = 40_000;
+const RETRY_ONLY_BEFORE_MS = 15_000;
 
 type Kind = 'flashcards' | 'mindmap' | 'slides';
 
@@ -66,11 +71,15 @@ function normalise(kind: Kind, raw: unknown): Prisma.InputJsonValue | null {
 }
 
 async function generateJson(prompt: string): Promise<unknown> {
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-3.5-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  });
+  const model = genAI.getGenerativeModel(
+    {
+      model: 'gemini-3.5-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    },
+    { timeout: ATTEMPT_TIMEOUT_MS }
+  );
   const backoff = [1000, 2000, 4000];
+  const startedAt = Date.now();
   for (let attempt = 0; ; attempt++) {
     try {
       const text = (await model.generateContent(prompt)).response.text();
@@ -78,7 +87,8 @@ async function generateJson(prompt: string): Promise<unknown> {
     } catch (err) {
       const msg = String(err instanceof Error ? err.message : err);
       const transient = msg.includes('503') || msg.includes('429') || msg.toLowerCase().includes('overloaded');
-      if (!transient || attempt >= backoff.length) throw err;
+      // Don't retry once a slow attempt has used up the time budget.
+      if (!transient || attempt >= backoff.length || Date.now() - startedAt > RETRY_ONLY_BEFORE_MS) throw err;
       await new Promise((r) => setTimeout(r, backoff[attempt]));
     }
   }

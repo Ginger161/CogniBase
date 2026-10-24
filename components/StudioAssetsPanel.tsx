@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Layers, Network, Presentation, Trash2, Sparkles, type LucideIcon } from 'lucide-react';
 import AssetViewer, { type StudioAsset } from '@/components/studio/AssetViewer';
 import ConfirmSheet from '@/components/ui/ConfirmSheet';
+import { friendlyError, readApiError } from '@/lib/client-errors';
 
 const META: Record<string, { label: string; icon: LucideIcon }> = {
   FLASHCARD: { label: 'Flashcards', icon: Layers },
@@ -25,11 +26,11 @@ export default function StudioAssetsPanel() {
     let cancelled = false;
     fetch('/api/studio/assets')
       .then(async (res) => {
-        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Could not load your items.');
+        if (!res.ok) throw await readApiError(res, 'Could not load your items.');
         return res.json();
       })
       .then((d) => !cancelled && setAssets(Array.isArray(d.assets) ? d.assets : []))
-      .catch((e: Error) => !cancelled && setError(e.message));
+      .catch((e: unknown) => !cancelled && setError(friendlyError(e, 'Could not load your items.')));
     return () => {
       cancelled = true;
     };
@@ -40,11 +41,11 @@ export default function StudioAssetsPanel() {
     setBusy(true);
     try {
       const res = await fetch('/api/studio/assets?id=' + encodeURIComponent(deleting.id), { method: 'DELETE' });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Could not delete this item.');
+      if (!res.ok) throw await readApiError(res, 'Could not delete this item.');
       setAssets((prev) => prev?.filter((a) => a.id !== deleting.id) ?? prev);
       setDeleting(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not delete this item.');
+      toast.error(friendlyError(e, 'Could not delete this item.'));
     } finally {
       setBusy(false);
     }

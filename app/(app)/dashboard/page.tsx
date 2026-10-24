@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Clock, FileText, Film, Globe, StickyNote, UploadCloud } from 'lucide-react';
 import { findNextClass, formatClassTime, type TimetableClass } from '@/lib/utils/schedule';
 import { formatSmartTime } from '@/lib/utils/time';
+import { friendlyError, readApiError } from '@/lib/client-errors';
 
 type HomeData = {
   name: string;
@@ -65,11 +66,11 @@ export default function HomePage() {
     let cancelled = false;
     fetch('/api/home')
       .then(async (res) => {
-        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Could not load Home.');
+        if (!res.ok) throw await readApiError(res, 'Could not load Home.');
         return res.json();
       })
       .then((d: HomeData) => !cancelled && setData(d))
-      .catch((e: Error) => !cancelled && setError(e.message));
+      .catch((e: unknown) => !cancelled && setError(friendlyError(e, 'Could not load Home.')));
     return () => {
       cancelled = true;
     };

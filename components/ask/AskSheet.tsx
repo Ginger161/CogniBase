@@ -51,6 +51,7 @@ function friendlyError(error: Error): string {
   if (msg.includes('503') || msg.includes('demand') || msg.includes('overloaded') || msg.includes('unavailable')) {
     return 'The AI servers are busy. Try again in a few moments.';
   }
+  if (msg.includes('too long') || msg.includes('504') || msg.includes('timeout')) return 'That took too long. Try a shorter question or fewer sources.';
   if (msg.includes('network') || msg.includes('fetch')) return 'Network problem. Check your connection and try again.';
   return 'Something went wrong generating that answer.';
 }

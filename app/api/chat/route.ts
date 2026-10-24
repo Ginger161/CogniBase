@@ -8,6 +8,8 @@ import { resolveScopedDocs } from '@/lib/scope';
 import { classifyAiError } from '@/lib/ai-errors';
 import { z } from 'zod';
 
+export const maxDuration = 60;
+
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY || '',
 });

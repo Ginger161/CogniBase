@@ -5,8 +5,13 @@ import crypto from "crypto";
 import { requireUser, isTrustedStorageUrl, badFileUrlResponse } from '@/lib/api-auth';
 import { readStoredFile } from '@/lib/storage';
 import { rateLimit, LIMITS } from '@/lib/rate-limit';
+import { classifyAiError } from '@/lib/ai-errors';
+
+export const maxDuration = 60;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+// Retries stop once the next wait would push past this, leaving room inside maxDuration to reply.
+const RETRY_DEADLINE_MS = 48_000;
 
 export async function POST(req: Request) {
   try {
@@ -41,7 +46,8 @@ export async function POST(req: Request) {
       console.error("Cache read error:", e);
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" }, { timeout: 25_000 });
+    const startedAt = Date.now();
     const prompt = `First, verify if this document is a university course registration form or student schedule. If it is NOT, do not extract any courses. Instead, return a JSON object containing strictly: { "error": "invalid_document" }.\n\nIf it IS a valid form, you are analyzing a university course registration form. This form may contain multiple semesters. Please extract the courses and the semester they belong to. Return ONLY a raw JSON array of objects with keys "courseCode", "courseTitle", and "semester" (strictly string values of either 'First' or 'Second').\n\nCRITICAL: Do NOT wrap the response in markdown code blocks (e.g., no \`\`\`json). Return ONLY the raw array bracket structure or the error JSON object.`;
     const imageParts = [{ inlineData: { data: imageBase64, mimeType } }];
 
@@ -81,6 +87,7 @@ export async function POST(req: Request) {
         // Retry on rate limits (429), server overloads (503), or network issues
         if (errMsg.includes('503') || errMsg.includes('429') || errMsg.includes('fetch failed')) {
           const delay = backoffDelays[attempt - 1];
+          if (Date.now() - startedAt + delay > RETRY_DEADLINE_MS) throw err;
           console.log(`Retrying in ${delay}ms...`);
           await new Promise(res => setTimeout(res, delay));
         } else {
@@ -110,6 +117,10 @@ export async function POST(req: Request) {
     console.error('Extraction Error:', error);
     const raw = String(error instanceof Error ? error.message : error);
     const busy = raw.includes('503') || raw.includes('429') || raw.includes('fetch failed');
+    const failure = classifyAiError(error);
+    if (failure.kind === 'timeout') {
+      return NextResponse.json({ error: failure.message, code: failure.kind }, { status: failure.status });
+    }
     return NextResponse.json(
       { error: busy ? "The AI is busy reading other forms. Try again in a few seconds." : "We could not read that form. Try a clearer image or add courses by hand." },
       { status: busy ? 503 : 500 }

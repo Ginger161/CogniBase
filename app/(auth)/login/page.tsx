@@ -4,6 +4,7 @@ import React, { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
+import { authErrorMessage } from '@/lib/client-errors';
 import { AuthShell, AuthError, AuthField, OrDivider, authInput, authPrimary, authSecondary } from '@/components/auth/AuthShell';
 
 // Reads ?error=... left by a failed OAuth callback. Isolated so the form itself renders without waiting on it.
@@ -23,14 +24,19 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    if (authError) {
-      setError(authError.message || 'Could not sign in.');
+    try {
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) {
+        setError(authErrorMessage(authError, 'Could not sign in. Please try again.'));
+        setIsLoading(false);
+        return;
+      }
+      router.push('/dashboard');
+      router.refresh();
+    } catch {
+      setError(authErrorMessage(null, 'Could not sign in. Please try again.'));
       setIsLoading(false);
-      return;
     }
-    router.push('/dashboard');
-    router.refresh();
   };
 
   const handleGoogle = async () => {

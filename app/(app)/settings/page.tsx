@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { writeThemeCookie } from '@/lib/theme-cookie';
+import { authErrorMessage, friendlyError, readApiError } from '@/lib/client-errors';
 import { Download, Loader2, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/utils/supabase/client';
@@ -130,7 +131,7 @@ export default function SettingsPage() {
       setNewPassword('');
       setConfirmPassword('');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not update your password.');
+      toast.error(authErrorMessage(err as { message?: string; status?: number }, 'Could not update your password.'));
     } finally {
       setChangingPassword(false);
     }
@@ -170,11 +171,11 @@ export default function SettingsPage() {
     setDeleting(true);
     try {
       const res = await fetch('/api/settings/account', { method: 'DELETE' });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Deletion failed.');
+      if (!res.ok) throw await readApiError(res, 'Could not delete your account.');
       await supabase.auth.signOut();
       window.location.href = '/';
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not delete your account.');
+      toast.error(friendlyError(err, 'Could not delete your account.'));
       setDeleting(false);
     }
   };

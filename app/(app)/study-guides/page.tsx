@@ -9,6 +9,7 @@ import { StudyEngine } from '@/components/StudyEngine';
 import StudioAssetsPanel from '@/components/StudioAssetsPanel';
 import ConfirmSheet from '@/components/ui/ConfirmSheet';
 import { formatSmartTime } from '@/lib/utils/time';
+import { friendlyError, readApiError } from '@/lib/client-errors';
 
 type Guide = {
   id: string;
@@ -38,12 +39,12 @@ function StudyInner() {
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/study-guides');
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Could not load your study guides.');
+      if (!res.ok) throw await readApiError(res, 'Could not load your study guides.');
       const data = await res.json();
       setGuides(Array.isArray(data) ? data : []);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load your study guides.');
+      setError(friendlyError(e, 'Could not load your study guides.'));
     }
   }, []);
 
@@ -51,11 +52,11 @@ function StudyInner() {
     let cancelled = false;
     fetch('/api/study-guides')
       .then(async (res) => {
-        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Could not load your study guides.');
+        if (!res.ok) throw await readApiError(res, 'Could not load your study guides.');
         return res.json();
       })
       .then((data) => !cancelled && setGuides(Array.isArray(data) ? data : []))
-      .catch((e: Error) => !cancelled && setError(e.message));
+      .catch((e: unknown) => !cancelled && setError(friendlyError(e, 'Could not load your study guides.')));
     return () => {
       cancelled = true;
     };
@@ -66,12 +67,12 @@ function StudyInner() {
     setDeleting(true);
     try {
       const res = await fetch(`/api/study-guides/${deleteTarget.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Could not delete this guide.');
+      if (!res.ok) throw await readApiError(res, 'Could not delete this guide.');
       setGuides((prev) => prev?.filter((g) => g.id !== deleteTarget.id) ?? prev);
       toast.success('Study guide deleted.');
       setDeleteTarget(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not delete this guide.');
+      toast.error(friendlyError(e, 'Could not delete this guide.'));
     } finally {
       setDeleting(false);
     }

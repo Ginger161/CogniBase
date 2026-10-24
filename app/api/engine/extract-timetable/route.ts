@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { parseOffice } from "officeparser";
 import { createClient } from '@/utils/supabase/server';
+import { classifyAiError } from '@/lib/ai-errors';
+
+export const maxDuration = 60;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
@@ -20,7 +23,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing image or mimeType." }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" }, { timeout: 50_000 });
 
     const prompt = `First, evaluate the document. If it does not contain a recognizable timetable or schedule, immediately return a JSON object exactly like this: { "error": "NOT_A_TIMETABLE" }. Do not attempt to guess.\n\nRegardless of the input format (handwritten photo, Excel sheet, plain text), extract all detected classes into this standardized JSON format. Return ONLY a clean JSON array of objects. Each object must have the following exact keys: "courseCode" (e.g. "CSC 101"), "day" (e.g. "Monday", "Tuesday"), "startTime" (e.g. "10:00 AM"), "endTime" (e.g. "11:30 AM"), and "location" (e.g. "Room 404"). If the location is missing, set it to an empty string. Do not include any markdown backticks. Return the raw JSON array or the error object.`;
 
@@ -82,6 +85,10 @@ export async function POST(req: Request) {
 
   } catch (error) {
     console.error("Course extraction error:", error);
-    return NextResponse.json({ error: "Internal error processing the image." }, { status: 500 });
+    const failure = classifyAiError(error);
+    if (failure.kind === 'timeout' || failure.kind === 'busy' || failure.kind === 'quota') {
+      return NextResponse.json({ error: failure.message, code: failure.kind }, { status: failure.status });
+    }
+    return NextResponse.json({ error: "We couldn't read that file. Try again, or enter classes by hand." }, { status: 500 });
   }
 }

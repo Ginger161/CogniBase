@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Flame } from 'lucide-react';
+import { friendlyError, readApiError } from '@/lib/client-errors';
 
 type Day = { date: string; minutes: number; tasks: number };
 type Metrics = { focusGoal: number; taskGoal: number; today: Day; week: Day[]; streak: number };
@@ -114,11 +115,11 @@ export default function StudyAnalyticsDashboard() {
     let cancelled = false;
     fetch('/api/metrics')
       .then(async (res) => {
-        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Could not load your progress.');
+        if (!res.ok) throw await readApiError(res, 'Could not load your progress.');
         return res.json();
       })
       .then((d: Metrics) => !cancelled && setMetrics(d))
-      .catch((e: Error) => !cancelled && setError(e.message));
+      .catch((e: unknown) => !cancelled && setError(friendlyError(e, 'Could not load your progress.')));
     return () => {
       cancelled = true;
     };

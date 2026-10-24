@@ -10,6 +10,8 @@ import { requireUser, requireWorkspaceOwnership, requireDocumentOwnership, getOr
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as cheerio from 'cheerio';
 
+export const maxDuration = 60;
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 export async function POST(req: Request) {

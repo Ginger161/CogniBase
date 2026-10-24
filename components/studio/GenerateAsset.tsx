@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { UserError, friendlyError, readApiError } from '@/lib/client-errors';
 import AssetViewer, { type StudioAsset } from './AssetViewer';
 
 export type AssetKind = 'flashcards' | 'mindmap' | 'slides';
@@ -34,13 +35,14 @@ export default function GenerateAsset({ kind, workspaceId, documentIds, onClose 
       signal: controller.signal,
     })
       .then(async (res) => {
+        if (!res.ok) throw await readApiError(res, 'Could not generate this. Please try again.');
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.asset) throw new Error(data.error || 'Could not generate this.');
+        if (!data.asset) throw new UserError('Could not generate this. Please try again.');
         setAsset(data.asset);
       })
       .catch((e: Error) => {
         if (e.name === 'AbortError') return;
-        toast.error(e.message);
+        toast.error(friendlyError(e, 'Could not generate this. Please try again.'));
         onClose();
       });
     return () => controller.abort();

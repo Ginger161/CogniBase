@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/utils/supabase/client';
+import { UserError, friendlyError, readApiError, storageUploadMessage } from '@/lib/client-errors';
 import { checkClash } from '@/lib/utils/timetable';
 import type { TimetableClass } from '@/lib/utils/schedule';
 
@@ -15,11 +16,15 @@ type Profile = { courses?: Course[]; [key: string]: unknown } | null;
 const newId = () => crypto.randomUUID();
 
 async function readError(res: Response, fallback: string) {
-  const data = await res.json().catch(() => null);
-  return (data && typeof data.error === 'string' && data.error) || fallback;
+  return (await readApiError(res, fallback)).message;
 }
 
-function friendlyExtractionError(message: string): string {
+const EXTRACTION_FALLBACK = 'Something went wrong. Try again or enter it by hand.';
+
+function friendlyExtractionError(e: unknown): string {
+  // Anything that did not come from our own API (network, parsing) gets a generic, safe message.
+  if (!(e instanceof UserError)) return friendlyError(e, EXTRACTION_FALLBACK);
+  const message = e.message;
   const m = message.toLowerCase();
   if (m.includes('503') || m.includes('unavailable') || m.includes('fetch failed') || m.includes('busy')) {
     return 'The AI is busy reading other forms. Wait a few seconds and try again.';
@@ -27,7 +32,7 @@ function friendlyExtractionError(message: string): string {
   if (m.includes('valid course form')) return message;
   if (m.includes('timetable')) return "We couldn't find a timetable in that file. Try a clearer image or enter classes by hand.";
   if (m.includes('json') || m.includes('unexpected token')) return "We couldn't read that file. Try a clearer image or enter it by hand.";
-  return message || 'Something went wrong. Try again or enter it by hand.';
+  return message || EXTRACTION_FALLBACK;
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -50,14 +55,14 @@ export function useSchedule() {
   const load = useCallback(async () => {
     try {
       const [profRes, ttRes] = await Promise.all([fetch('/api/profile'), fetch('/api/timetable')]);
-      if (!profRes.ok || !ttRes.ok) throw new Error(await readError(profRes.ok ? ttRes : profRes, 'Could not load your schedule.'));
+      if (!profRes.ok || !ttRes.ok) throw new UserError(await readError(profRes.ok ? ttRes : profRes, 'Could not load your schedule.'));
       const prof = await profRes.json();
       const tt = await ttRes.json();
       setProfile(prof.profile ?? {});
       setClasses((tt.scheduled_classes ?? []).map((c: ClassItem) => (c.id ? c : { ...c, id: newId() })));
       setLoadError(null);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Could not load your schedule.');
+      setLoadError(friendlyError(e, 'Could not load your schedule.'));
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +72,7 @@ export function useSchedule() {
     let cancelled = false;
     Promise.all([fetch('/api/profile'), fetch('/api/timetable')])
       .then(async ([profRes, ttRes]) => {
-        if (!profRes.ok || !ttRes.ok) throw new Error(await readError(profRes.ok ? ttRes : profRes, 'Could not load your schedule.'));
+        if (!profRes.ok || !ttRes.ok) throw new UserError(await readError(profRes.ok ? ttRes : profRes, 'Could not load your schedule.'));
         return [await profRes.json(), await ttRes.json()] as const;
       })
       .then(([prof, tt]) => {
@@ -75,7 +80,7 @@ export function useSchedule() {
         setProfile(prof.profile ?? {});
         setClasses((tt.scheduled_classes ?? []).map((c: ClassItem) => (c.id ? c : { ...c, id: newId() })));
       })
-      .catch((e: Error) => !cancelled && setLoadError(e.message))
+      .catch((e: unknown) => !cancelled && setLoadError(friendlyError(e, 'Could not load your schedule.')))
       .finally(() => !cancelled && setIsLoading(false));
     return () => {
       cancelled = true;
@@ -95,11 +100,11 @@ export function useSchedule() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ profile: nextProfile, activityLabel: label }),
         });
-        if (!res.ok) throw new Error(await readError(res, 'Could not save your courses.'));
+        if (!res.ok) throw new UserError(await readError(res, 'Could not save your courses.'));
         return true;
       } catch (e) {
         setProfile(previous);
-        toast.error(e instanceof Error ? e.message : 'Could not save your courses.');
+        toast.error(friendlyError(e, 'Could not save your courses.'));
         return false;
       }
     },
@@ -116,11 +121,11 @@ export function useSchedule() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ scheduled_classes: next, activityLabel: label }),
         });
-        if (!res.ok) throw new Error(await readError(res, 'Could not save your timetable.'));
+        if (!res.ok) throw new UserError(await readError(res, 'Could not save your timetable.'));
         return true;
       } catch (e) {
         setClasses(previous);
-        toast.error(e instanceof Error ? e.message : 'Could not save your timetable.');
+        toast.error(friendlyError(e, 'Could not save your timetable.'));
         return false;
       }
     },
@@ -150,10 +155,10 @@ export function useSchedule() {
     setBusy('Uploading your form…');
     try {
       const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) throw new Error('Please sign in again.');
+      if (!auth.user) throw new UserError('Please sign in again.');
       const path = `${auth.user.id}/${crypto.randomUUID()}.${file.name.split('.').pop() ?? 'bin'}`;
       const { error } = await supabase.storage.from('workspace-files').upload(path, file);
-      if (error) throw new Error(error.message);
+      if (error) throw new UserError(storageUploadMessage(error.message));
       const { data } = supabase.storage.from('workspace-files').getPublicUrl(path);
 
       setBusy('Reading your courses…');
@@ -162,7 +167,7 @@ export function useSchedule() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileUrl: data.publicUrl }),
       });
-      if (!res.ok) throw new Error(await readError(res, `Extraction failed (${res.status}).`));
+      if (!res.ok) throw new UserError(await readError(res, 'We could not read that form. Try a clearer image or add courses by hand.'));
       const found: Course[] = (await res.json()).courses ?? [];
       const fresh = found.filter((c) => c?.courseCode && !courses.some((e) => e.courseCode === c.courseCode));
       if (fresh.length === 0) {
@@ -173,7 +178,7 @@ export function useSchedule() {
         toast.success(`Added ${fresh.length} course${fresh.length === 1 ? '' : 's'}`);
       }
     } catch (e) {
-      toast.error(friendlyExtractionError(e instanceof Error ? e.message : ''));
+      toast.error(friendlyExtractionError(e));
     } finally {
       setBusy(null);
     }
@@ -191,7 +196,7 @@ export function useSchedule() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64: await fileToBase64(file), mimeType: file.type }),
       });
-      if (!res.ok) throw new Error(await readError(res, 'Could not read that timetable.'));
+      if (!res.ok) throw new UserError(await readError(res, 'Could not read that timetable.'));
       const extracted: Partial<ClassItem & { time: string; venue: string }>[] = (await res.json()).timetable ?? [];
 
       const merged = [...classes];
@@ -223,7 +228,7 @@ export function useSchedule() {
       }
       if (clashes.length > 0) setPendingClashes(clashes);
     } catch (e) {
-      toast.error(friendlyExtractionError(e instanceof Error ? e.message : ''));
+      toast.error(friendlyExtractionError(e));
     } finally {
       setBusy(null);
     }

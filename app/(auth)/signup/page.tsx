@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
+import { authErrorMessage } from '@/lib/client-errors';
 import { AuthShell, AuthError, AuthField, OrDivider, authInput, authPrimary, authSecondary } from '@/components/auth/AuthShell';
 
 export default function SignUpPage() {
@@ -27,9 +28,17 @@ export default function SignUpPage() {
     if (password !== confirmPassword) return setError('The passwords do not match.');
 
     setIsLoading(true);
-    const { data, error: authError } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+    let result: Awaited<ReturnType<typeof supabase.auth.signUp>>;
+    try {
+      result = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+    } catch {
+      setError(authErrorMessage(null, 'Could not create your account. Please try again.'));
+      setIsLoading(false);
+      return;
+    }
+    const { data, error: authError } = result;
     if (authError) {
-      setError(authError.message || 'Could not create your account.');
+      setError(authErrorMessage(authError, 'Could not create your account. Please try again.'));
       setIsLoading(false);
       return;
     }

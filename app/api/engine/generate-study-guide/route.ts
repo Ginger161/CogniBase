@@ -9,6 +9,7 @@ import { recordMetric } from '@/lib/metrics';
 import { classifyAiError } from '@/lib/ai-errors';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const MAX_SOURCE_CHARS = 40000;
 
