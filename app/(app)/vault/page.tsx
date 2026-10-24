@@ -111,7 +111,7 @@ export default function LibraryPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/schedule"
-            className="h-11 px-3 rounded-full border border-[var(--border-strong)] text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-2"
+            className="h-11 min-w-11 px-3 justify-center rounded-full border border-[var(--border-strong)] text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-2"
           >
             <CalendarDays size={16} aria-hidden />
             <span className="hidden sm:inline">Schedule</span>
@@ -147,7 +147,7 @@ export default function LibraryPage() {
             role="radio"
             aria-checked={filter === f.id}
             onClick={() => setFilter(f.id)}
-            className={`h-9 px-3.5 rounded-full text-[13px] font-semibold border whitespace-nowrap shrink-0 ${
+            className={`h-11 px-4 rounded-full text-[13px] font-semibold border whitespace-nowrap shrink-0 ${
               filter === f.id
                 ? 'bg-[var(--accent-solid)] border-[var(--accent-solid)] text-[var(--on-accent)]'
                 : 'border-[var(--border-strong)] text-[var(--text-secondary)]'

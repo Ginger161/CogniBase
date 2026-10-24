@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { supabase } from '@/utils/supabase/client';
 import { useTheme } from 'next-themes';
+import { writeThemeCookie } from '@/lib/theme-cookie';
 
 export interface UserContext {
   uid: string; // Supabase UID
@@ -70,7 +71,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
             profile: settings.profile ?? null,
             preferences: { ...DEFAULT_PREFERENCES, ...(settings.preferences ?? {}) },
           });
-          if (settings.preferences?.theme) setTheme(settings.preferences.theme);
+          if (settings.preferences?.theme) {
+            setTheme(settings.preferences.theme);
+            writeThemeCookie(settings.preferences.theme);
+          }
         } else if (res.status === 401) {
           setContext(null);
         } else {

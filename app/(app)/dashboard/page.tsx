@@ -228,7 +228,7 @@ export default function HomePage() {
         <section aria-label="Recent sources" className="flex flex-col">
           <div className="flex items-center justify-between min-h-11">
             <h2 className="text-sm font-semibold">Recent sources</h2>
-            <Link href="/vault" className="min-h-11 flex items-center text-[13px] font-semibold text-[var(--accent-text)]">
+            <Link href="/vault" className="min-h-11 min-w-11 justify-end flex items-center text-[13px] font-semibold text-[var(--accent-text)]">
               See all
             </Link>
           </div>

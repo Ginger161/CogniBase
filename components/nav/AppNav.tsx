@@ -83,7 +83,12 @@ export function SideNav({ userName }: { userName: string }) {
           </button>
           <Link
             href="/settings"
-            className="h-11 px-2 flex-1 min-w-0 flex items-center text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] truncate"
+            aria-current={isActive('/settings') ? 'page' : undefined}
+            className={`h-11 px-2 flex-1 min-w-0 flex items-center text-sm truncate ${
+              isActive('/settings')
+                ? 'text-[var(--accent-text)] font-semibold'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
           >
             {userName} · Settings
           </Link>
@@ -123,6 +128,8 @@ export function TabBar() {
 
 // Compact top bar for phones: wordmark and the avatar that leads to Settings.
 export function MobileHeader({ userName }: { userName: string }) {
+  const isActive = useIsActive();
+  const onSettings = isActive('/settings');
   return (
     <header className="md:hidden shrink-0 flex items-center justify-between px-5 h-14">
       <span className="text-lg font-bold tracking-tight">
@@ -131,7 +138,10 @@ export function MobileHeader({ userName }: { userName: string }) {
       <Link
         href="/settings"
         aria-label="Account and settings"
-        className="w-11 h-11 rounded-full bg-[var(--bg-surface-alt)] border border-[var(--border-color)] flex items-center justify-center text-sm font-semibold"
+        aria-current={onSettings ? 'page' : undefined}
+        className={`w-11 h-11 rounded-full bg-[var(--bg-surface-alt)] border flex items-center justify-center text-sm font-semibold ${
+          onSettings ? 'border-[var(--accent-solid)] text-[var(--accent-text)]' : 'border-[var(--border-color)]'
+        }`}
       >
         {initials(userName)}
       </Link>

@@ -24,22 +24,28 @@ export const viewport: Viewport = {
   interactiveWidget: 'resizes-content',
 };
 
-import { Toaster } from 'sonner';
+import { cookies } from 'next/headers';
 import { UserProvider } from '@/lib/hooks/useUserContext';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { ThemedToaster } from '@/components/ThemedToaster';
+import { THEMES, THEME_COOKIE, isAppTheme } from '@/lib/theme-cookie';
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // The saved theme is mirrored into a cookie, so the first paint matches it.
+  const saved = (await cookies()).get(THEME_COOKIE)?.value;
+  const theme = isAppTheme(saved) ? saved : 'charcoal';
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={theme} style={{ colorScheme: theme === 'ivory' ? 'light' : 'dark' }} suppressHydrationWarning>
       <body className={`${instrumentSans.variable} ${jetbrainsMono.variable} antialiased min-h-dvh`}>
-        <ThemeProvider attribute="class" defaultTheme="charcoal" themes={['charcoal', 'dark', 'ivory']}>
+        <ThemeProvider attribute="class" defaultTheme={theme} themes={[...THEMES]}>
           <UserProvider>
             {children}
-            <Toaster position="bottom-right" theme="dark" richColors closeButton />
+            <ThemedToaster />
           </UserProvider>
         </ThemeProvider>
       </body>

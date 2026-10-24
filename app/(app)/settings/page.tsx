@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
+import { writeThemeCookie } from '@/lib/theme-cookie';
 import { Download, Loader2, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/utils/supabase/client';
@@ -104,6 +105,7 @@ export default function SettingsPage() {
 
   const chooseTheme = (id: string) => {
     setTheme(id);
+    writeThemeCookie(id);
     fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -249,11 +251,11 @@ export default function SettingsPage() {
         </form>
         <hr className="border-[var(--border-color)]" />
         <div className="flex flex-col sm:flex-row gap-3">
-          <button type="button" onClick={exportData} disabled={exporting} className={`${ghostBtn} flex-1`}>
+          <button type="button" onClick={exportData} disabled={exporting} className={`${ghostBtn} sm:flex-1`}>
             {exporting ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Download size={16} aria-hidden />}
             Export my data
           </button>
-          <button type="button" onClick={signOut} className={`${ghostBtn} flex-1`}>
+          <button type="button" onClick={signOut} className={`${ghostBtn} sm:flex-1`}>
             <LogOut size={16} aria-hidden /> Sign out
           </button>
         </div>
