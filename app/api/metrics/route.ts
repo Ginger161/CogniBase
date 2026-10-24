@@ -2,14 +2,11 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createClient } from '@/utils/supabase/server';
 import { ensurePrismaUser } from '@/lib/auth-sync';
+import { logActivity } from '@/lib/audit-log';
+import { getMidnightDate, isMetricAction, recordMetric } from '@/lib/metrics';
 
-function getMidnightDate(date: Date) {
-  const d = new Date(date);
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
-}
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -21,72 +18,43 @@ export async function GET(req: Request) {
     await ensurePrismaUser(user);
 
     const today = getMidnightDate(new Date());
-    const sevenDaysAgo = new Date(today);
-    sevenDaysAgo.setDate(today.getDate() - 6);
+    const start = new Date(today);
+    start.setUTCDate(today.getUTCDate() - 6);
 
-    let metrics: any[] = [];
-    try {
-      metrics = await prisma.dailyMetric.findMany({
-        where: {
-          userId: user.id,
-          date: {
-            gte: sevenDaysAgo,
-            lte: today,
-          }
-        },
-        orderBy: {
-          date: 'asc'
-        }
-      });
-    } catch (e) {
-      console.warn("Database error in metrics GET, returning empty metrics:", e);
-      // Proceed with empty metrics array
-    }
+    const [rows, prefs] = await Promise.all([
+      prisma.dailyMetric.findMany({
+        where: { userId: user.id, date: { gte: start, lte: today } },
+        select: { date: true, focusMinutes: true, tasksCompleted: true },
+      }),
+      prisma.userPreferences.findUnique({ where: { userId: user.id }, select: { dailyFocusGoal: true } }),
+    ]);
 
-    const todayMetric = metrics.find(m => m.date.getTime() === today.getTime()) || {
-      focusMinutes: 0,
-      tasksCompleted: 0,
-      averageAccuracy: 0,
-    };
+    const byDay = new Map(rows.map((r) => [r.date.getTime(), r]));
+    const week = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setUTCDate(start.getUTCDate() + i);
+      const r = byDay.get(d.getTime());
+      return { date: d.toISOString(), minutes: r?.focusMinutes ?? 0, tasks: r?.tasksCompleted ?? 0 };
+    });
 
-    // Build the 7-day array
-    const weekDays = [];
-    const streakData = [];
-    const historicalFocusMinutes = [];
-    const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-    
-    let currentStreak = 0;
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(sevenDaysAgo);
-      d.setDate(sevenDaysAgo.getDate() + i);
-      weekDays.push(dayNames[d.getDay()]);
-      
-      const metricForDay = metrics.find(m => m.date.getTime() === d.getTime());
-      const isActive = metricForDay ? metricForDay.focusMinutes > 0 : false;
-      streakData.push(isActive);
-      historicalFocusMinutes.push(metricForDay ? metricForDay.focusMinutes : 0);
-    }
-    
-    // Reverse count from today for streak
-    for (let i = 6; i >= 0; i--) {
-      if (streakData[i]) {
-        currentStreak++;
-      } else {
-        break; // Streak broken
-      }
+    // A streak is consecutive active days ending today, or yesterday if today has not started yet.
+    let streak = 0;
+    for (let i = week.length - 1; i >= 0; i--) {
+      if (week[i].minutes > 0) streak++;
+      else if (i === week.length - 1) continue;
+      else break;
     }
 
     return NextResponse.json({
-      today: todayMetric,
-      weekDays,
-      streakData,
-      historicalFocusMinutes,
-      currentStreak
+      focusGoal: prefs?.dailyFocusGoal ?? 120,
+      taskGoal: 5,
+      today: week[week.length - 1],
+      week,
+      streak,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Metrics GET Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Could not load your progress." }, { status: 500 });
   }
 }
 
@@ -101,71 +69,31 @@ export async function POST(req: Request) {
 
     await ensurePrismaUser(user);
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { action } = body;
 
-    const today = getMidnightDate(new Date());
-
-    let updateData: any = {};
-    let createData: any = {
-      date: today,
-      userId: user.id,
-      focusMinutes: 0,
-      tasksCompleted: 0,
-      averageAccuracy: 0,
+    const actionLabels: Record<string, string> = {
+      upload_document: 'Uploaded a document',
+      chat_message: 'Sent a message to the Tutor',
+      read_document: 'Opened a document in the reader',
+      generate_guide: 'Generated a study guide',
+      flashcard_review: 'Reviewed a flashcard',
+      complete_phase: 'Completed a study guide phase',
+      generate_asset: 'Generated a studio asset',
     };
+    if (actionLabels[action]) {
+      logActivity(user.id, action, actionLabels[action], req).catch(console.error);
+    }
 
-    if (action === 'generate_guide') {
-      updateData.focusMinutes = { increment: 15 };
-      updateData.tasksCompleted = { increment: 1 };
-      createData.focusMinutes = 15;
-      createData.tasksCompleted = 1;
-    } else if (action === 'upload_document') {
-      updateData.focusMinutes = { increment: 5 };
-      updateData.tasksCompleted = { increment: 1 };
-      createData.focusMinutes = 5;
-      createData.tasksCompleted = 1;
-    } else if (action === 'flashcard_review') {
-      updateData.focusMinutes = { increment: 10 };
-      updateData.tasksCompleted = { increment: 1 };
-      createData.focusMinutes = 10;
-      createData.tasksCompleted = 1;
-    } else if (action === 'chat_message') {
-      updateData.focusMinutes = { increment: 1 };
-      createData.focusMinutes = 1;
-    } else if (action === 'generate_asset') {
-      updateData.focusMinutes = { increment: 10 };
-      updateData.tasksCompleted = { increment: 1 };
-      createData.focusMinutes = 10;
-      createData.tasksCompleted = 1;
-    } else if (action === 'read_document') {
-      updateData.focusMinutes = { increment: 20 };
-      updateData.tasksCompleted = { increment: 1 };
-      createData.focusMinutes = 20;
-      createData.tasksCompleted = 1;
-    } else if (action === 'complete_phase') {
-      updateData.focusMinutes = { increment: 25 };
-      updateData.tasksCompleted = { increment: 1 };
-      createData.focusMinutes = 25;
-      createData.tasksCompleted = 1;
-    } else {
+    if (!isMetricAction(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const metric = await prisma.dailyMetric.upsert({
-      where: {
-        date_userId: {
-          date: today,
-          userId: user.id
-        }
-      },
-      update: updateData,
-      create: createData,
-    });
+    const metric = await recordMetric(user.id, action);
 
     return NextResponse.json({ success: true, metric });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Metrics POST Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Something went wrong on our side. Please try again." }, { status: 500 });
   }
 }

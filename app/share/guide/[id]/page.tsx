@@ -1,84 +1,83 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 
+type Card = { question?: string; answer?: string };
+type Phase = { phaseId?: string; title?: string; microBites?: unknown; flashcards?: unknown };
+
 export default async function SharedGuidePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const guide = await prisma.studyGuide.findFirst({
-    where: { id, isPublic: true }
+    where: { id, isPublic: true },
+    select: { title: true, strategyData: true },
   });
 
   if (!guide) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-center px-4">
-        <h1 className="text-2xl font-bold text-white mb-3">This guide isn't available</h1>
-        <p className="text-zinc-400 mb-6">It may have been unshared, or the link is incorrect.</p>
-        <Link href="/" className="text-orange-500 hover:underline">Go to CogniBase</Link>
-      </div>
+      <main className="min-h-dvh flex flex-col items-center justify-center gap-3 px-5 text-center bg-[var(--bg-base)] text-[var(--text-primary)]">
+        <h1 className="text-2xl font-bold">This guide isn&apos;t available</h1>
+        <p className="text-[var(--text-secondary)]">It may have been unshared, or the link is incorrect.</p>
+        <Link href="/" className="h-12 px-6 rounded-xl bg-[var(--accent-solid)] text-[var(--on-accent)] font-bold flex items-center">
+          Go to CogniBase
+        </Link>
+      </main>
     );
   }
 
-  let data: any = null;
-  try {
-    data = typeof guide.strategyData === 'string' ? JSON.parse(guide.strategyData as any) : guide.strategyData;
-  } catch (e) {
-    data = null;
-  }
+  const data = guide.strategyData as { guideTitle?: string; phases?: Phase[] } | null;
+  const phases = Array.isArray(data?.phases) ? data!.phases! : [];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-slate-100">
-      <div className="bg-[#EA580C] text-white text-sm font-medium px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-2 text-center">
-        <span>You're viewing a study guide made with CogniBase.</span>
-        <Link href="/signup" className="underline font-bold">Sign up free to make your own & unlock the full interactive version →</Link>
+    <main className="min-h-dvh bg-[var(--bg-base)] text-[var(--text-primary)]">
+      <div className="bg-[var(--accent-solid)] text-[var(--on-accent)] text-sm font-medium px-4 py-3 text-center">
+        You&apos;re reading a study guide made with CogniBase.{' '}
+        <Link href="/signup" className="underline font-bold">
+          Sign up free to make your own and unlock the interactive version
+        </Link>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-10">
-        <h1 className="text-3xl font-bold mb-2">{data?.guideTitle || guide.title || 'Study Guide'}</h1>
-        <p className="text-zinc-500 mb-10">Shared from CogniBase</p>
+      <div className="max-w-2xl mx-auto px-5 py-10 flex flex-col gap-8">
+        <header className="flex flex-col gap-1">
+          <h1 className="text-3xl font-bold tracking-tight">{data?.guideTitle || guide.title || 'Study guide'}</h1>
+          <p className="text-[var(--text-muted)]">Shared from CogniBase</p>
+        </header>
 
-        {!data?.phases ? (
-          <p className="text-zinc-400">This guide couldn't be displayed.</p>
+        {phases.length === 0 ? (
+          <p className="text-[var(--text-secondary)]">This guide couldn&apos;t be displayed.</p>
         ) : (
-          <div className="flex flex-col gap-10">
-            {data.phases.map((phase: any, i: number) => (
-              <div key={phase.phaseId || i} className="border border-zinc-800 rounded-2xl p-6 bg-zinc-900/40">
-                <h2 className="text-xl font-bold text-white mb-4">{phase.title}</h2>
-
-                {Array.isArray(phase.microBites) && phase.microBites.length > 0 && (
-                  <div className="flex flex-col gap-3 mb-6">
-                    {phase.microBites.map((bite: string, bIdx: number) => (
-                      <p key={bIdx} className="text-zinc-300 leading-relaxed">{bite}</p>
-                    ))}
-                  </div>
-                )}
-
-                {Array.isArray(phase.flashcards) && phase.flashcards.length > 0 && (
+          phases.map((phase, i) => {
+            const bites = Array.isArray(phase.microBites) ? (phase.microBites as string[]) : [];
+            const cards = Array.isArray(phase.flashcards) ? (phase.flashcards as Card[]) : [];
+            return (
+              <section key={phase.phaseId || i} className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-6 flex flex-col gap-4">
+                <h2 className="text-xl font-bold">{phase.title}</h2>
+                {bites.map((bite, b) => (
+                  <p key={b} className="text-[var(--text-secondary)] leading-relaxed">
+                    {bite}
+                  </p>
+                ))}
+                {cards.length > 0 && (
                   <div className="flex flex-col gap-3">
-                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Knowledge check</p>
-                    {phase.flashcards.map((card: any, cIdx: number) => (
-                      <div key={cIdx} className="bg-black border border-zinc-800 rounded-xl p-4">
-                        <p className="text-white font-medium mb-2">{card.question}</p>
-                        <div className="relative">
-                          <p className="text-zinc-600 blur-sm select-none">{card.answer}</p>
-                          <Link href="/signup" className="absolute inset-0 flex items-center justify-center text-xs font-bold text-orange-500 hover:text-orange-400 bg-zinc-900/60 rounded">
-                            Sign up free to reveal
-                          </Link>
-                        </div>
+                    <h3 className="text-xs font-semibold tracking-wider uppercase text-[var(--text-muted)]">Knowledge check</h3>
+                    {cards.map((card, c) => (
+                      <div key={c} className="bg-[var(--bg-base)] border border-[var(--border-color)] rounded-xl p-4 flex flex-col gap-2">
+                        <p className="font-medium">{card.question}</p>
+                        <Link href="/signup" className="min-h-11 flex items-center text-sm font-semibold text-[var(--accent-text)]">
+                          Sign up free to reveal the answer
+                        </Link>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            ))}
-          </div>
+              </section>
+            );
+          })
         )}
 
-        <div className="mt-12 text-center">
-          <Link href="/signup" className="inline-block bg-[#EA580C] hover:bg-[#c2410c] text-white font-bold px-8 py-4 rounded-xl transition-colors">
-            Get the full interactive experience — sign up free
-          </Link>
-        </div>
+        <Link href="/signup" className="self-center h-12 px-8 rounded-xl bg-[var(--accent-solid)] text-[var(--on-accent)] font-bold flex items-center">
+          Get the full experience, free
+        </Link>
       </div>
-    </div>
+    </main>
   );
 }

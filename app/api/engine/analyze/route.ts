@@ -1,22 +1,14 @@
 import { NextResponse } from "next/server";
+import { rateLimit, LIMITS } from '@/lib/rate-limit';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { randomUUID } from "crypto";
+import { classifyAiError } from '@/lib/ai-errors';
+import { extractOfficeText, extractPDFText } from '@/lib/parse';
+import { readStoredFile } from '@/lib/storage';
 import { prisma } from "@/lib/prisma";
-import { requireUser, requireDocumentOwnership, requireWorkspaceOwnership } from '@/lib/api-auth';
+import { requireUser, requireDocumentOwnership, requireWorkspaceOwnership, isTrustedStorageUrl, badFileUrlResponse } from '@/lib/api-auth';
 
-const PDFParser = require("pdf2json");
-const officeParser = require("officeparser");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-
-function extractPDFText(buffer: Buffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const pdfParser = new PDFParser(null, 1);
-    pdfParser.on("pdfParser_dataError", (errData: any) => reject(errData.parserError));
-    pdfParser.on("pdfParser_dataReady", () => {
-      resolve(pdfParser.getRawTextContent());
-    });
-    pdfParser.parseBuffer(buffer);
-  });
-}
 
 function chunkText(text: string, maxChunkSize: number = 1000, overlapSize: number = 200) {
   const words = text.replace(/\s+/g, " ").split(" ");
@@ -29,7 +21,7 @@ function chunkText(text: string, maxChunkSize: number = 1000, overlapSize: numbe
     if (currentLength + word.length > maxChunkSize) {
       chunks.push(currentChunk.join(" "));
       
-      let overlapChunk: string[] = [];
+      const overlapChunk: string[] = [];
       let overlapLength = 0;
       for (let j = currentChunk.length - 1; j >= 0; j--) {
         const overlapWord = currentChunk[j];
@@ -51,71 +43,69 @@ export async function POST(req: Request) {
   try {
     const { user, response: authResponse } = await requireUser();
     if (!user) return authResponse;
+    const limited = rateLimit(user.id, LIMITS.index);
+    if (limited) return limited;
 
-    const { fileUrl, fileName, docId, workspaceId, workspaceName } = await req.json();
 
-    if (!fileUrl || !fileName) {
-      return NextResponse.json({ error: "Missing required file data." }, { status: 400 });
+    const { fileUrl, fileName, docId, workspaceId, workspaceName } = await req.json().catch(() => ({}));
+
+    if (!docId || typeof docId !== 'string') {
+      return NextResponse.json({ error: "Missing docId." }, { status: 400 });
     }
 
-    if (docId) {
-      const { doc: document, response: docResp } = await requireDocumentOwnership(docId, user.id);
-      if (!document) return docResp;
-    }
+    const { doc: document, response: docResp } = await requireDocumentOwnership(docId, user.id);
+    if (!document) return docResp;
 
     if (workspaceId) {
       const { workspace, response: wsResp } = await requireWorkspaceOwnership(workspaceId, user.id);
       if (!workspace) return wsResp;
     }
 
-    const response = await fetch(fileUrl);
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    // Prefer the text stored when the source was added (works for files, videos, web pages and pasted text).
+    let extractedText = (document.textContent || "").trim();
 
-    let extractedText = "";
-    const extension = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() : 'unknown';
+    if (!extractedText) {
+      // Older documents without stored text: fall back to re-reading the file.
+      if (!fileName || typeof fileName !== 'string') {
+        return NextResponse.json({ error: "This source has no readable text." }, { status: 400 });
+      }
+      if (!isTrustedStorageUrl(fileUrl)) return badFileUrlResponse();
 
-    if (extension === "pdf") {
-      extractedText = await extractPDFText(buffer);
-    } else if (["docx", "pptx"].includes(extension as string)) {
-      if (typeof officeParser.parseOffice === 'function') {
-        const ast = await officeParser.parseOffice(buffer, { fileType: extension });
-        extractedText = typeof ast === 'string' ? ast : (ast.toText ? ast.toText() : JSON.stringify(ast));
-      } else if (typeof officeParser.parseOfficeAsync === 'function') {
-        extractedText = await officeParser.parseOfficeAsync(buffer);
+      const stored = await readStoredFile(fileUrl);
+      if (!stored) return NextResponse.json({ error: "Could not read the original file." }, { status: 400 });
+      const buffer = stored.buffer;
+
+      const extension = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() : 'unknown';
+
+      if (extension === "pdf") {
+        extractedText = await extractPDFText(buffer);
+      } else if (extension === "docx" || extension === "pptx") {
+        extractedText = await extractOfficeText(buffer, extension);
+      } else if (extension === "txt") {
+        extractedText = buffer.toString("utf-8");
+      } else if (["png", "jpg", "jpeg", "webp", "heic"].includes(extension as string)) {
+        try {
+          const generativeModel = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+          const prompt = "Please extract all text from this image accurately. If there are diagrams, describe them in text. If there is no text or diagrams, just describe the visual content in detail so a student can study it.";
+          const mimeType = extension === 'jpg' ? 'image/jpeg' : `image/${extension}`;
+          const result = await generativeModel.generateContent([
+            prompt,
+            { inlineData: { data: buffer.toString("base64"), mimeType } }
+          ]);
+          extractedText = result.response.text();
+        } catch (err) {
+          console.error("Gemini Vision Error:", err);
+          return NextResponse.json({ error: "Failed to process image with AI Vision." }, { status: 500 });
+        }
       } else {
-        return NextResponse.json({ error: "The server's document parsing engine is missing a valid parsing method." }, { status: 500 });
+        return NextResponse.json({ error: `Unsupported file extension: .${extension}` }, { status: 400 });
       }
-    } else if (extension === "txt") {
-      extractedText = buffer.toString("utf-8");
-    } else if (["png", "jpg", "jpeg", "webp", "heic"].includes(extension as string)) {
-      try {
-        const generativeModel = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
-        const prompt = "Please extract all text from this image accurately. If there are diagrams, describe them in text. If there is no text or diagrams, just describe the visual content in detail so a student can study it.";
-        const mimeType = extension === 'jpg' ? 'image/jpeg' : `image/${extension}`;
-        
-        const result = await generativeModel.generateContent([
-          prompt,
-          {
-            inlineData: {
-              data: buffer.toString("base64"),
-              mimeType
-            }
-          }
-        ]);
-        extractedText = result.response.text();
-      } catch (err) {
-        console.error("Gemini Vision Error:", err);
-        return NextResponse.json({ error: "Failed to process image with AI Vision." }, { status: 500 });
-      }
-    } else {
-      return NextResponse.json({ error: `Unsupported file extension: .${extension}` }, { status: 400 });
     }
 
     // Clean up the text
     if (!extractedText) extractedText = "";
     // Decode URI components that some parsers leave behind (like %20 for spaces)
-    try { extractedText = decodeURIComponent(extractedText); } catch(e) {}
+    try { extractedText = decodeURIComponent(extractedText); } catch { /* not URI-encoded */ }
 
     const chunks = chunkText(extractedText);
     
@@ -129,7 +119,7 @@ export async function POST(req: Request) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        function send(event: any) {
+        function send(event: Record<string, unknown>) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
         }
 
@@ -137,6 +127,7 @@ export async function POST(req: Request) {
           const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
           let chunksInserted = 0;
+          let failedBatches = 0;
           const batchSize = 5;
           const allEmbeddings: { id: string; content: string; embeddingStr: string }[] = [];
           const totalBatches = Math.ceil(validChunks.length / batchSize);
@@ -157,7 +148,8 @@ export async function POST(req: Request) {
                     embedding = embedding.map((v: number) => v / norm);
                   }
                   return {
-                    id: `${docId}-chunk-${i + batchIdx}`,
+                    // Sortable by position so chunks read back in document order.
+                    id: `${docId}-c${String(i + batchIdx).padStart(5, '0')}-${randomUUID().slice(0, 8)}`,
                     content: chunk,
                     embeddingStr: `[${embedding.join(',')}]`
                   };
@@ -166,14 +158,21 @@ export async function POST(req: Request) {
               allEmbeddings.push(...batchResults);
             } catch (e) {
               console.error(`Failed to process embedding batch starting at ${i}:`, e);
+              failedBatches++;
             }
+          }
+
+          if (failedBatches > 0) {
+            send({ type: 'error', error: `Could not index ${failedBatches} of ${totalBatches} sections. Nothing was saved; please try again.` });
+            controller.close();
+            return;
           }
 
           if (allEmbeddings.length > 0) {
             send({ type: 'progress', message: 'Saving to your vault...', percent: 92 });
 
             const values: string[] = [];
-            const parameters: any[] = [];
+            const parameters: string[] = [];
             let paramIndex = 1;
 
             for (const item of allEmbeddings) {
@@ -185,7 +184,11 @@ export async function POST(req: Request) {
             const query = `INSERT INTO "DocumentChunk" ("id", "documentId", "content", "embedding") VALUES ${values.join(', ')}`;
 
             try {
-              await prisma.$executeRawUnsafe(query, ...parameters);
+              // Re-analysing a document replaces its previous chunks atomically.
+              await prisma.$transaction([
+                prisma.documentChunk.deleteMany({ where: { documentId: docId } }),
+                prisma.$executeRawUnsafe(query, ...parameters),
+              ]);
               chunksInserted = allEmbeddings.length;
             } catch (e) {
               console.error("Bulk insert failed:", e);
@@ -220,12 +223,10 @@ export async function POST(req: Request) {
           send({ type: 'done', success: true, chunksProcessed: chunksInserted, workspaceTitle: generatedTitle, percent: 100 });
           controller.close();
 
-        } catch (error: any) {
+        } catch (error) {
           console.error("Engine Error:", error);
-          let errorMessage = error.message || "Failed to process document.";
-          if (error.message?.includes("503") || error.message?.includes("high demand") || error.message?.includes("Service Unavailable")) {
-            errorMessage = "The AI servers are currently experiencing high demand from students. Please try again in a few minutes.";
-          }
+          const failure = classifyAiError(error);
+          const errorMessage = failure.kind === 'other' ? "Indexing failed. Please try again." : failure.message;
           send({ type: 'error', error: errorMessage });
           controller.close();
         }
@@ -239,8 +240,8 @@ export async function POST(req: Request) {
         'Connection': 'keep-alive'
       }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Engine Error (pre-stream):", error);
-    return NextResponse.json({ error: error.message || "Failed to process document." }, { status: 500 });
+    return NextResponse.json({ error: "Could not process this document. Please try again." }, { status: 500 });
   }
 }

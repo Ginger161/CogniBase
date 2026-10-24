@@ -1,8 +1,8 @@
-export function formatSmartTime(dateInput: any): string {
+export function formatSmartTime(dateInput: string | number | Date | { seconds: number } | null | undefined): string {
   if (!dateInput) return 'Just now';
 
   let date: Date;
-  if (dateInput.seconds) {
+  if (typeof dateInput === 'object' && 'seconds' in dateInput) {
     date = new Date(dateInput.seconds * 1000);
   } else {
     date = new Date(dateInput);

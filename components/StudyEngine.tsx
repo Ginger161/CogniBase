@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, ChevronRight, Layers, BrainCircuit } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { BrainCircuit, Check, ChevronLeft, Share2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Flashcard {
@@ -18,314 +18,348 @@ interface Phase {
 }
 
 interface GuideData {
-  guideTitle: string;
+  guideTitle?: string;
   phases: Phase[];
 }
 
 interface StudyEngineProps {
-  guideData: any;
+  guideData: unknown;
   guideId?: string;
+  initialPublic?: boolean;
+  /** Shown as a back button above the quest log. */
+  onClose?: () => void;
 }
 
-export function StudyEngine({ guideData, guideId }: StudyEngineProps) {
-  const [viewState, setViewState] = useState<'quest_log' | 'micro_bite' | 'flashcards'>('quest_log');
-  const [activePhaseIndex, setActivePhaseIndex] = useState<number>(0);
-  const [currentBiteIndex, setCurrentBiteIndex] = useState<number>(0);
-  const [currentCardIndex, setCurrentCardIndex] = useState<number>(0);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [completedPhases, setCompletedPhases] = useState<Set<string>>(new Set());
-  const [isPublicGuide, setIsPublicGuide] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
+type View = 'quest_log' | 'micro_bite' | 'flashcards';
 
-  const toggleShare = async () => {
-    if (!guideId) return;
-    const nextValue = !isPublicGuide;
-    setIsSharing(true);
-    try {
-      const res = await fetch(`/api/study-guides/${guideId}/share`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isPublic: nextValue })
-      });
-      if (res.ok) {
-        setIsPublicGuide(nextValue);
-        if (nextValue) {
-          const shareUrl = `${window.location.origin}/share/guide/${guideId}`;
-          if (navigator.share) {
-            try {
-              await navigator.share({
-                title: data?.guideTitle || 'My CogniBase Study Guide',
-                text: 'Check out this study guide I made on CogniBase!',
-                url: shareUrl,
-              });
-            } catch (e) {
-              // Person closed the share sheet without picking anything — not an error, do nothing
-            }
-          } else {
-            navigator.clipboard.writeText(shareUrl);
-            toast.success("Share link copied! Anyone with this link can view a read-only version of this guide.");
-          }
-        } else {
-          toast.success("This guide is no longer shared publicly.");
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSharing(false);
-    }
-  };
-
-  let data: GuideData | null = null;
+function parseGuide(raw: unknown): GuideData | null {
   try {
-    data = typeof guideData === 'string' ? JSON.parse(guideData) : guideData;
-  } catch (e) {
-    console.error("Invalid guideData", e);
+    const data = (typeof raw === 'string' ? JSON.parse(raw) : raw) as GuideData | null;
+    if (!data || !Array.isArray(data.phases)) return null;
+    return {
+      ...data,
+      phases: data.phases.map((p, i) => ({
+        phaseId: String(p.phaseId ?? i + 1),
+        title: p.title || `Phase ${i + 1}`,
+        microBites: Array.isArray(p.microBites) ? p.microBites : [],
+        flashcards: Array.isArray(p.flashcards) ? p.flashcards : [],
+      })),
+    };
+  } catch {
+    return null;
   }
+}
 
-  React.useEffect(() => {
-    if (guideId) {
-      fetch(`/api/study-guides/progress?guideId=${guideId}`)
-        .then(res => res.json())
-        .then(resData => {
-          if (resData.completedPhases) {
-            setCompletedPhases(new Set(resData.completedPhases));
-          }
-        })
-        .catch(err => console.error("Failed to fetch progress", err));
-    }
+export function StudyEngine({ guideData, guideId, initialPublic = false, onClose }: StudyEngineProps) {
+  const reduceMotion = useReducedMotion();
+  const data = useMemo(() => parseGuide(guideData), [guideData]);
+
+  const [view, setView] = useState<View>('quest_log');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [biteIndex, setBiteIndex] = useState(0);
+  const [cardIndex, setCardIndex] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
+  const [isPublic, setIsPublic] = useState(initialPublic);
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    if (!guideId) return;
+    let cancelled = false;
+    fetch(`/api/study-guides/progress?guideId=${encodeURIComponent(guideId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.completedPhases) setCompleted(new Set(d.completedPhases));
+      })
+      .catch((err) => console.error('Failed to fetch progress', err));
+    return () => {
+      cancelled = true;
+    };
   }, [guideId]);
 
-  const recordPhaseCompletion = async (phaseId: string) => {
-    setCompletedPhases(prev => new Set(prev).add(phaseId));
-    if (guideId) {
-      fetch('/api/study-guides/progress', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guideId, phaseId })
-      }).catch(err => console.error(err));
-      
-      fetch('/api/metrics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'complete_phase' })
-      }).catch(err => console.error(err));
-    }
-  };
-
-  if (!data || !data.phases) {
+  if (!data || data.phases.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-zinc-400 p-8 text-center bg-[#111111]">
-        <BrainCircuit className="w-16 h-16 text-zinc-600 mb-4" />
-        <p>This study guide is using an older format or failed to generate correctly.</p>
+      <div className="flex flex-col items-center justify-center text-[var(--text-secondary)] p-8 text-center gap-3">
+        <BrainCircuit size={48} className="text-[var(--text-muted)]" aria-hidden />
+        <p>This study guide is in an older format or did not generate correctly. Build a new one from Library.</p>
       </div>
     );
   }
 
-  const activePhase = data.phases[activePhaseIndex];
+  const phases = data.phases;
+  const active = phases[activeIndex];
+  const doneCount = phases.filter((p) => completed.has(p.phaseId)).length;
+  const currentIndex = phases.findIndex((p) => !completed.has(p.phaseId));
 
-  const handleStartPhase = (index: number) => {
-    setActivePhaseIndex(index);
-    setCurrentBiteIndex(0);
-    setCurrentCardIndex(0);
-    setIsFlipped(false);
-    
-    const clickedPhase = data?.phases[index];
-    if (clickedPhase && !completedPhases.has(clickedPhase.phaseId)) {
-        // The Double-Trigger
-        recordPhaseCompletion(clickedPhase.phaseId);
-    }
-    
-    if (clickedPhase?.microBites && clickedPhase.microBites.length > 0) {
-        setViewState('micro_bite');
-    } else if (clickedPhase?.flashcards && clickedPhase.flashcards.length > 0) {
-        setViewState('flashcards');
-    }
-  };
-
-  const advanceMicroBite = () => {
-    if (currentBiteIndex < activePhase.microBites.length - 1) {
-      setCurrentBiteIndex(prev => prev + 1);
-    } else {
-      if (activePhase.flashcards && activePhase.flashcards.length > 0) {
-          setViewState('flashcards');
-      } else {
-          recordPhaseCompletion(activePhase.phaseId);
-          setViewState('quest_log');
-      }
-    }
-  };
-
-  const advanceFlashcard = () => {
+  const markComplete = (phaseId: string) => {
+    if (completed.has(phaseId)) return;
+    setCompleted((prev) => new Set(prev).add(phaseId));
+    if (!guideId) return;
+    fetch('/api/study-guides/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guideId, phaseId }),
+    }).catch((err) => console.error(err));
     fetch('/api/metrics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'flashcard_review' })
-    }).catch(err => console.error(err));
+      body: JSON.stringify({ action: 'complete_phase' }),
+    }).catch((err) => console.error(err));
+  };
 
-    if (currentCardIndex < activePhase.flashcards.length - 1) {
-      setCurrentCardIndex(prev => prev + 1);
-      setIsFlipped(false);
-    } else {
-      recordPhaseCompletion(activePhase.phaseId);
-      setViewState('quest_log');
+  const startPhase = (index: number) => {
+    const phase = phases[index];
+    setActiveIndex(index);
+    setBiteIndex(0);
+    setCardIndex(0);
+    setFlipped(false);
+    if (phase.microBites.length > 0) setView('micro_bite');
+    else if (phase.flashcards.length > 0) setView('flashcards');
+    else markComplete(phase.phaseId);
+  };
+
+  const finishPhase = () => {
+    markComplete(active.phaseId);
+    setView('quest_log');
+    toast.success(`${active.title} complete`);
+  };
+
+  const nextBite = () => {
+    if (biteIndex < active.microBites.length - 1) setBiteIndex(biteIndex + 1);
+    else if (active.flashcards.length > 0) {
+      setCardIndex(0);
+      setFlipped(false);
+      setView('flashcards');
+    } else finishPhase();
+  };
+
+  const nextCard = () => {
+    fetch('/api/metrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'flashcard_review' }),
+    }).catch((err) => console.error(err));
+    if (cardIndex < active.flashcards.length - 1) {
+      setCardIndex(cardIndex + 1);
+      setFlipped(false);
+    } else finishPhase();
+  };
+
+  const toggleShare = async () => {
+    if (!guideId || sharing) return;
+    const next = !isPublic;
+    setSharing(true);
+    try {
+      const res = await fetch(`/api/study-guides/${guideId}/share`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublic: next }),
+      });
+      if (!res.ok) throw new Error();
+      setIsPublic(next);
+      if (next) {
+        const shareUrl = `${window.location.origin}/share/guide/${guideId}`;
+        if (navigator.share) {
+          try {
+            await navigator.share({ title: data.guideTitle || 'My CogniBase Study Guide', url: shareUrl });
+          } catch {
+            /* the share sheet was dismissed */
+          }
+        } else {
+          await navigator.clipboard.writeText(shareUrl);
+          toast.success('Link copied. Anyone with it can read this guide.');
+        }
+      } else {
+        toast.success('This guide is private again.');
+      }
+    } catch {
+      toast.error('Could not change sharing. Try again.');
+    } finally {
+      setSharing(false);
     }
   };
 
+  const itemsInPhase = active.microBites.length + active.flashcards.length;
+  const itemsDone = view === 'micro_bite' ? biteIndex : active.microBites.length + cardIndex;
+  const anim = (props: object) => (reduceMotion ? {} : props);
+
   return (
-    <div className="w-full h-full flex flex-col bg-[#111111] overflow-hidden rounded-lg">
-      <AnimatePresence mode="wait">
-        {viewState === 'quest_log' && (
-          <motion.div 
-            key="quest_log"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="flex-1 overflow-y-auto p-4 sm:p-8"
-          >
-            <div className="mb-8 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-2">{data.guideTitle || 'Study Quest'}</h2>
-                <p className="text-zinc-400">Complete all phases to master this material.</p>
-              </div>
-              {guideId && (
-                <button
-                  onClick={toggleShare}
-                  disabled={isSharing}
-                  className="shrink-0 text-xs font-bold px-3 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-50"
-                >
-                  {isPublicGuide ? 'Shared ✓' : 'Share'}
-                </button>
-              )}
-            </div>
+    <div className="w-full">
+      <section aria-label="Quest log" className="flex flex-col gap-5">
+        {onClose && (
+          <button type="button" onClick={onClose} className="self-start -ml-2 min-h-11 px-2 flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+            <ChevronLeft size={18} aria-hidden /> All guides
+          </button>
+        )}
 
-            <div className="flex flex-col gap-4">
-              {data.phases.map((phase, index) => {
-                const isCompleted = completedPhases.has(phase.phaseId);
-                return (
-                  <button
-                    key={phase.phaseId}
-                    onClick={() => handleStartPhase(index)}
-                    className={`flex items-center justify-between p-5 rounded-xl border text-left transition-all ${
-                      isCompleted 
-                        ? 'bg-green-900/10 border-green-900/50 hover:bg-green-900/20' 
-                        : 'bg-zinc-900/50 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
-                        isCompleted ? 'bg-green-500/20 border-green-500 text-green-500' : 'bg-zinc-800 border-zinc-700 text-zinc-400'
-                      }`}>
-                        {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
-                      </div>
-                      <div>
-                        <h3 className={`font-semibold ${isCompleted ? 'text-green-50' : 'text-zinc-100'}`}>{phase.title}</h3>
-                        <p className="text-sm text-zinc-500 mt-1">{phase.microBites?.length || 0} bites • {phase.flashcards?.length || 0} cards</p>
-                      </div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <span className="text-xs font-semibold tracking-wider uppercase text-[var(--accent-text)]">Study guide</span>
+            <h2 className="text-[26px] leading-tight font-bold tracking-tight">{data.guideTitle || 'Study quest'}</h2>
+          </div>
+          {guideId && (
+            <button
+              type="button"
+              onClick={toggleShare}
+              disabled={sharing}
+              aria-pressed={isPublic}
+              className={`shrink-0 h-11 px-4 rounded-full border text-sm font-semibold flex items-center gap-2 disabled:opacity-50 ${
+                isPublic ? 'border-[var(--accent-solid)] text-[var(--tag-text)] bg-[var(--tag-bg)]' : 'border-[var(--border-strong)] text-[var(--text-secondary)]'
+              }`}
+            >
+              <Share2 size={16} aria-hidden />
+              {isPublic ? 'Shared' : 'Share'}
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div
+            className="flex-1 h-2 rounded bg-[var(--border-color)] overflow-hidden"
+            role="progressbar"
+            aria-label="Guide progress"
+            aria-valuenow={doneCount}
+            aria-valuemin={0}
+            aria-valuemax={phases.length}
+          >
+            <div className="h-full bg-gradient-to-r from-[var(--accent-solid)] to-[var(--accent-text)]" style={{ width: `${(doneCount / phases.length) * 100}%` }} />
+          </div>
+          <span className="text-[13px] font-semibold text-[var(--text-secondary)]">
+            {doneCount} of {phases.length}
+          </span>
+        </div>
+
+        <ol className="relative flex flex-col">
+          <span className="absolute left-[15px] top-5 bottom-5 w-0.5 bg-[var(--border-color)]" aria-hidden />
+          {phases.map((phase, i) => {
+            const done = completed.has(phase.phaseId);
+            const current = i === currentIndex;
+            return (
+              <li key={phase.phaseId} className="relative flex gap-3.5 items-start py-2.5">
+                <span
+                  className={`relative z-10 w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 text-xs font-bold ${
+                    done
+                      ? 'bg-[var(--accent-solid)] border-[var(--accent-solid)] text-[var(--on-accent)]'
+                      : current
+                        ? 'bg-[var(--bg-base)] border-[var(--accent-solid)] text-[var(--accent-text)]'
+                        : 'bg-[var(--bg-surface)] border-[var(--border-strong)] text-[var(--text-muted)]'
+                  }`}
+                  aria-hidden
+                >
+                  {done ? <Check size={16} strokeWidth={3.2} /> : i + 1}
+                </span>
+                <div className="flex-1 min-w-0 flex flex-col gap-2">
+                  <button type="button" onClick={() => startPhase(i)} className="text-left min-h-11 flex flex-col justify-center gap-0.5">
+                    <span className={`text-[15px] font-semibold ${done || current ? '' : 'text-[var(--text-secondary)]'}`}>{phase.title}</span>
+                    <span className="text-xs text-[var(--text-muted)]">
+                      {done ? 'Done · tap to review' : current ? 'Up next' : 'Upcoming'} · {phase.microBites.length} bites · {phase.flashcards.length} cards
+                    </span>
+                  </button>
+                  {current && (
+                    <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--accent-solid)]/50 p-3.5 flex flex-col gap-3 shadow-[0_0_24px_var(--tag-bg)]">
+                      {phase.microBites[0] && <p className="text-sm leading-relaxed text-[var(--text-secondary)] line-clamp-3">{phase.microBites[0]}</p>}
+                      <button
+                        type="button"
+                        onClick={() => startPhase(i)}
+                        className="h-11 rounded-xl bg-[var(--accent-solid)] text-[var(--on-accent)] font-bold"
+                      >
+                        {completed.size === 0 ? 'Start' : 'Continue'}
+                      </button>
                     </div>
-                    <ChevronRight className={`w-5 h-5 ${isCompleted ? 'text-green-600' : 'text-zinc-600'}`} />
-                  </button>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
 
-        {viewState === 'micro_bite' && activePhase && (
-          <motion.div 
-            key="micro_bite"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.05 }}
-            className="flex-1 flex flex-col p-4 sm:p-8"
+      <AnimatePresence>
+        {view !== 'quest_log' && (
+          <motion.div
+            key={view}
+            role="dialog"
+            aria-modal="true"
+            aria-label={view === 'micro_bite' ? 'Micro-bite reader' : 'Flashcards'}
+            {...anim({ initial: { opacity: 0, y: 24 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: 24 } })}
+            className="fixed inset-0 z-[55] bg-[var(--bg-base)] flex flex-col px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]"
           >
-            <div className="flex justify-between items-center mb-8">
-              <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{activePhase.title}</span>
-              <span className="text-xs font-bold text-[#EA580C] bg-[#EA580C]/10 px-3 py-1 rounded-full uppercase tracking-wider">
-                Micro-Bite {currentBiteIndex + 1} of {activePhase.microBites.length}
-              </span>
-            </div>
-            
-            <div className="flex-1 flex items-center justify-center">
-              <motion.p 
-                key={currentBiteIndex}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-2xl sm:text-3xl lg:text-4xl font-medium text-white text-center leading-tight max-w-3xl"
-              >
-                {activePhase.microBites[currentBiteIndex]}
-              </motion.p>
-            </div>
-
-            <div className="mt-8">
-              <button 
-                onClick={advanceMicroBite}
-                className="w-full py-5 rounded-2xl bg-[#EA580C] hover:bg-[#c2410c] text-white font-bold text-xl shadow-[0_0_20px_rgba(234,88,12,0.3)] transition-all active:scale-[0.98]"
-              >
-                Tap to Continue
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setView('quest_log')} aria-label="Back to quest log" className="w-11 h-11 -ml-2 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                <X size={22} aria-hidden />
               </button>
-            </div>
-          </motion.div>
-        )}
-
-        {viewState === 'flashcards' && activePhase && (
-          <motion.div 
-            key="flashcards"
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            className="flex-1 flex flex-col p-4 sm:p-8 perspective-1000"
-          >
-            <div className="flex justify-between items-center mb-8">
-              <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Knowledge Check</span>
-              <span className="text-xs font-bold text-[#3B82F6] bg-[#3B82F6]/10 px-3 py-1 rounded-full uppercase tracking-wider">
-                Card {currentCardIndex + 1} of {activePhase.flashcards.length}
-              </span>
-            </div>
-
-            <div className="flex-1 flex items-center justify-center relative w-full max-w-2xl mx-auto min-h-[300px]" style={{ perspective: '1000px' }}>
-              <motion.div 
-                className="w-full h-full relative min-h-[300px]"
-                animate={{ rotateY: isFlipped ? 180 : 0 }}
-                transition={{ duration: 0.6, type: "spring", stiffness: 260, damping: 20 }}
-                style={{ transformStyle: 'preserve-3d', cursor: 'pointer' }}
-                onClick={() => setIsFlipped(!isFlipped)}
+              <div
+                className="flex-1 h-2 rounded bg-[var(--border-color)] overflow-hidden"
+                role="progressbar"
+                aria-label="Phase progress"
+                aria-valuenow={itemsDone}
+                aria-valuemin={0}
+                aria-valuemax={itemsInPhase}
               >
-                {/* Front */}
-                <div className="absolute inset-0 w-full h-full bg-zinc-900 border border-zinc-800 rounded-3xl p-8 flex flex-col items-center justify-center shadow-2xl" style={{ backfaceVisibility: 'hidden' }}>
-                  <span className="absolute top-6 text-zinc-500 text-sm font-semibold uppercase tracking-widest">Question</span>
-                  <p className="text-2xl sm:text-3xl font-bold text-white text-center leading-relaxed">
-                    {activePhase.flashcards[currentCardIndex].question}
-                  </p>
-                  <span className="absolute bottom-6 text-[#EA580C] text-sm font-semibold animate-pulse">Tap to flip</span>
-                </div>
-
-                {/* Back */}
-                <div className="absolute inset-0 w-full h-full bg-[#EA580C] rounded-3xl p-8 flex flex-col items-center justify-center shadow-2xl shadow-[#EA580C]/20" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
-                  <span className="absolute top-6 text-orange-200 text-sm font-semibold uppercase tracking-widest">Answer</span>
-                  <p className="text-2xl sm:text-3xl font-bold text-white text-center leading-relaxed">
-                    {activePhase.flashcards[currentCardIndex].answer}
-                  </p>
-                </div>
-              </motion.div>
+                <div className="h-full bg-[var(--accent-solid)] transition-[width]" style={{ width: `${(itemsDone / Math.max(1, itemsInPhase)) * 100}%` }} />
+              </div>
             </div>
 
-            <AnimatePresence>
-              {isFlipped && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-8"
-                >
-                  <button 
-                    onClick={advanceFlashcard}
-                    className="w-full py-5 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xl transition-all active:scale-[0.98]"
+            <p className="mt-5 text-xs font-semibold tracking-wider uppercase text-[var(--text-muted)] text-center">
+              {view === 'micro_bite' ? `${active.title} · bite ${biteIndex + 1} of ${active.microBites.length}` : `Knowledge check · card ${cardIndex + 1} of ${active.flashcards.length}`}
+            </p>
+
+            {view === 'micro_bite' ? (
+              <>
+                <div className="flex-1 flex items-center justify-center py-6 overflow-y-auto">
+                  <motion.p
+                    key={biteIndex}
+                    {...anim({ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } })}
+                    className="text-2xl md:text-3xl font-medium leading-snug text-center max-w-2xl"
                   >
-                    Got it. Next!
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                    {active.microBites[biteIndex]}
+                  </motion.p>
+                </div>
+                <button type="button" onClick={nextBite} className="h-14 rounded-2xl bg-[var(--accent-solid)] text-[var(--on-accent)] font-bold text-lg active:scale-[0.99]">
+                  {biteIndex < active.microBites.length - 1 ? 'Continue' : active.flashcards.length > 0 ? 'Check yourself' : 'Finish phase'}
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex-1 flex items-center justify-center py-6" style={{ perspective: '1000px' }}>
+                  <motion.button
+                    type="button"
+                    onClick={() => setFlipped((f) => !f)}
+                    aria-label={flipped ? 'Showing answer. Tap to see the question' : 'Showing question. Tap to reveal the answer'}
+                    animate={{ rotateY: flipped ? 180 : 0 }}
+                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 22 }}
+                    style={{ transformStyle: 'preserve-3d' }}
+                    className="relative w-full max-w-xl min-h-[320px] md:min-h-[380px] text-left"
+                  >
+                    <span
+                      aria-hidden={flipped}
+                      className="absolute inset-0 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-7 flex flex-col items-center justify-center gap-3 shadow-2xl"
+                      style={{ backfaceVisibility: 'hidden' }}
+                    >
+                      <span className="absolute top-5 text-xs font-semibold tracking-widest uppercase text-[var(--text-muted)]">Question</span>
+                      <span className="text-2xl font-bold text-center leading-snug">{active.flashcards[cardIndex].question}</span>
+                      <span className="absolute bottom-5 text-sm font-semibold text-[var(--accent-text)]">Tap to flip</span>
+                    </span>
+                    <span
+                      aria-hidden={!flipped}
+                      className="absolute inset-0 rounded-3xl bg-[var(--accent-solid)] text-[var(--on-accent)] p-7 flex flex-col items-center justify-center shadow-2xl"
+                      style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                    >
+                      <span className="absolute top-5 text-xs font-semibold tracking-widest uppercase opacity-70">Answer</span>
+                      <span className="text-2xl font-bold text-center leading-snug">{active.flashcards[cardIndex].answer}</span>
+                    </span>
+                  </motion.button>
+                </div>
+                <button
+                  type="button"
+                  onClick={nextCard}
+                  disabled={!flipped}
+                  className="h-14 rounded-2xl bg-[var(--bg-surface-alt)] border border-[var(--border-strong)] font-bold text-lg disabled:opacity-40 active:scale-[0.99]"
+                >
+                  {flipped ? (cardIndex < active.flashcards.length - 1 ? 'Got it, next' : 'Finish phase') : 'Flip the card first'}
+                </button>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

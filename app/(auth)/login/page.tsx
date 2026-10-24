@@ -1,14 +1,21 @@
 "use client";
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+
+import React, { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
+import { AuthShell, AuthError, AuthField, OrDivider, authInput, authPrimary, authSecondary } from '@/components/auth/AuthShell';
+
+// Reads ?error=... left by a failed OAuth callback. Isolated so the form itself renders without waiting on it.
+function CallbackError() {
+  const failed = useSearchParams().get('error');
+  return failed ? <AuthError message="Sign-in did not complete. Please try again." /> : null;
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -16,81 +23,52 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-
-    try {
-      const { error: supaError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (supaError) throw supaError;
-      
-      router.push('/dashboard');
-      router.refresh();
-    } catch (err: any) {
-      setError(err.message || 'Failed to login.');
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) {
+      setError(authError.message || 'Could not sign in.');
       setIsLoading(false);
+      return;
     }
+    router.push('/dashboard');
+    router.refresh();
   };
 
-  const handleGoogleLogin = async () => {
-    try {
-      setError('');
-      await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`
-        }
-      });
-    } catch (err: any) {
-      setError('Google Sign-In failed.');
-    }
+  const handleGoogle = async () => {
+    setError('');
+    const { error: authError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (authError) setError('Google sign-in failed. Please try again.');
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#0A1128', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '2rem', color: 'white', fontFamily: 'sans-serif' }}>
-      <div style={{ backgroundColor: '#111111', padding: '3rem', borderRadius: '1rem', border: '1px solid #27272A', width: '100%', maxWidth: '400px' }}>
-        
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ margin: 0, fontSize: '2rem', color: 'white' }}>CogniBase</h1>
-          <p style={{ color: '#A1A1AA', marginTop: '0.5rem' }}>
-            Welcome back. Please log in.
-          </p>
-        </div>
-
-        {error && <div style={{ backgroundColor: '#7F1D1D', color: '#FECACA', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1.5rem', fontSize: '0.85rem', textAlign: 'center' }}>{error}</div>}
-
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#A1A1AA' }}>Email Address</label>
-            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', backgroundColor: '#18181B', border: '1px solid #3F3F46', color: 'white' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#A1A1AA' }}>Password</label>
-            <input 
-              type="password" 
-              required 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', backgroundColor: '#18181B', border: '1px solid #3F3F46', color: 'white' }} 
-            />
-          </div>
-          
-          <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '0.75rem', marginTop: '1rem', backgroundColor: '#EA580C', color: 'white', borderRadius: '0.5rem', border: 'none', fontWeight: 'bold', cursor: isLoading ? 'not-allowed' : 'pointer' }}>
-            {isLoading ? 'Logging in...' : 'Log In'}
-          </button>
-
-          <div style={{ textAlign: 'center', margin: '1.5rem 0', color: '#71717A', fontSize: '0.85rem' }}>OR</div>
-
-          <button type="button" onClick={handleGoogleLogin} style={{ width: '100%', padding: '0.75rem', backgroundColor: 'white', color: 'black', borderRadius: '0.5rem', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>
-            Log in with Google
-          </button>
-
-          <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.85rem', color: '#A1A1AA' }}>
-            Don't have an account? <Link href="/signup" style={{ color: '#EA580C', textDecoration: 'none', fontWeight: 'bold' }}>Sign up</Link>
-          </p>
-        </form>
-      </div>
-    </div>
+    <AuthShell title="Welcome back" subtitle="Sign in to pick up where you left off.">
+      <Suspense fallback={null}>
+        <CallbackError />
+      </Suspense>
+      <AuthError message={error} />
+      <form onSubmit={handleLogin} className="flex flex-col gap-4">
+        <AuthField id="email" label="Email">
+          <input id="email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={authInput} />
+        </AuthField>
+        <AuthField id="password" label="Password">
+          <input id="password" type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={authInput} />
+        </AuthField>
+        <button type="submit" disabled={isLoading} className={authPrimary}>
+          {isLoading ? 'Signing in…' : 'Sign in'}
+        </button>
+      </form>
+      <OrDivider />
+      <button type="button" onClick={handleGoogle} className={authSecondary}>
+        Continue with Google
+      </button>
+      <p className="text-center text-sm text-[var(--text-secondary)]">
+        New here?{' '}
+        <Link href="/signup" className="font-semibold text-[var(--accent-text)]">
+          Create an account
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

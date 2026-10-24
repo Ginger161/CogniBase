@@ -1,9 +1,10 @@
+import { logActivity } from '@/lib/audit-log';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createClient } from '@/utils/supabase/server';
 import { ensurePrismaUser } from '@/lib/auth-sync';
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -33,12 +34,9 @@ export async function GET(req: Request) {
 
       // Return a default object if userPreferences is null so the UI can render
       if (!dbUser.preferences) {
-        (dbUser as any).preferences = {
-          theme: 'system',
-          sidebarMode: 'expanded',
-          dailyFocusGoal: 120,
-          guideComplexity: 'standard'
-        };
+        Object.assign(dbUser, {
+          preferences: { theme: 'charcoal', sidebarMode: 'expanded', dailyFocusGoal: 120, guideComplexity: 'standard' },
+        });
       }
     } catch (e) {
       console.warn("Database error in settings GET, falling back:", e);
@@ -70,8 +68,24 @@ export async function POST(req: Request) {
 
     await ensurePrismaUser(user);
 
-    const data = await req.json();
+    const data = await req.json().catch(() => ({}));
     const { username, school, department, preferences } = data;
+
+    const tooLong = (v: unknown, max: number) => v !== undefined && (typeof v !== 'string' || v.length > max);
+    if (tooLong(username, 80) || tooLong(school, 120) || tooLong(department, 120)) {
+      return NextResponse.json({ error: "Profile fields must be text under 120 characters." }, { status: 400 });
+    }
+    if (preferences !== undefined) {
+      const goal = preferences?.dailyFocusGoal;
+      const goalNumber = goal === undefined ? undefined : Number(goal);
+      if (goalNumber !== undefined && (!Number.isInteger(goalNumber) || goalNumber < 10 || goalNumber > 720)) {
+        return NextResponse.json({ error: "Daily focus goal must be between 10 and 720 minutes." }, { status: 400 });
+      }
+      const theme = preferences?.theme;
+      if (theme !== undefined && !['charcoal', 'dark', 'ivory', 'system'].includes(theme)) {
+        return NextResponse.json({ error: "Unknown theme." }, { status: 400 });
+      }
+    }
 
     // Robust upsert for User profile
     const updatedUser = await prisma.user.upsert({
@@ -112,6 +126,7 @@ export async function POST(req: Request) {
       });
     }
 
+    logActivity(user.id, 'update_settings', 'Updated profile or preferences', req).catch(console.error);
     return NextResponse.json({ user: updatedUser, preferences: updatedPreferences });
   } catch (error) {
     console.error("Settings POST Error:", error);

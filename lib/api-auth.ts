@@ -4,12 +4,18 @@ import { prisma } from '@/lib/prisma';
 
 // Confirms someone is logged in. Use this at the top of every route.
 export async function requireUser() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
+    const user = data?.user;
+    if (!user) {
+      return { user: null, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+    }
+    return { user, response: null };
+  } catch (error) {
+    console.error("requireUser error:", error);
     return { user: null, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
-  return { user, response: null };
 }
 
 // Confirms a specific workspace actually belongs to this logged-in user.
@@ -31,6 +37,43 @@ export async function requireDocumentOwnership(documentId: string, userId: strin
     return { doc: null, response: NextResponse.json({ error: "Not found" }, { status: 404 }) };
   }
   return { doc, response: null };
+}
+
+// Only allow server-side fetches of files that live in our own Supabase storage (blocks SSRF).
+export function isTrustedStorageUrl(raw: unknown): raw is string {
+  if (typeof raw !== 'string') return false;
+  try {
+    const u = new URL(raw);
+    const base = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || '');
+    return u.protocol === 'https:' && u.host === base.host && u.pathname.startsWith('/storage/v1/object/');
+  } catch {
+    return false;
+  }
+}
+
+// For user-supplied website imports: http(s) only, no loopback/private/link-local hosts.
+// Hostname-level check only; it does not resolve DNS.
+export function isPublicWebUrl(raw: unknown): raw is string {
+  if (typeof raw !== 'string') return false;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    const h = u.hostname.toLowerCase();
+    if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return false;
+    if (h.startsWith('[') || h.includes(':')) return false; // IPv6 literals
+    const m = h.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+    if (m) {
+      const a = Number(m[1]), b = Number(m[2]);
+      if (a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function badFileUrlResponse() {
+  return NextResponse.json({ error: "Invalid file URL." }, { status: 400 });
 }
 
 // Every user gets their own personal vault, found or created automatically.

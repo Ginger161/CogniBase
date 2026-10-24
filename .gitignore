@@ -44,3 +44,12 @@ next-env.d.ts
 
 # Firebase service account
 cognibase-4fd12-firebase-adminsdk-fbsvc-c7c13ee143.json
+
+# AI handoff snapshot (generated)
+handoff_document.md
+
+# keep the template for new setups
+!.env.example
+
+# bot test output
+tests/bots/reports/

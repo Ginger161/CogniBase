@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
-import { requireUser } from '@/lib/api-auth';
+import { requireUser, isTrustedStorageUrl, badFileUrlResponse } from '@/lib/api-auth';
+import { readStoredFile } from '@/lib/storage';
+import { rateLimit, LIMITS } from '@/lib/rate-limit';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
@@ -10,23 +12,19 @@ export async function POST(req: Request) {
   try {
     const { user, response } = await requireUser();
     if (!user) return response;
+    const limited = rateLimit(user.id, LIMITS.generate);
+    if (limited) return limited;
 
-    const { fileUrl, semesterId } = await req.json();
+    const { fileUrl } = await req.json().catch(() => ({}));
 
-    if (!fileUrl || !semesterId) {
-      return NextResponse.json({ error: "Missing fileUrl or semesterId." }, { status: 400 });
-    }
+    if (!isTrustedStorageUrl(fileUrl)) return badFileUrlResponse();
 
-    // Step 4: Backend API fetches the file from the URL
-    const fileRes = await fetch(fileUrl);
-    if (!fileRes.ok) throw new Error("Failed to fetch file from URL");
-    const arrayBuffer = await fileRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const file = await readStoredFile(fileUrl);
+    if (!file) return NextResponse.json({ error: "Could not read that file. Please upload it again." }, { status: 400 });
+    const buffer = file.buffer;
     const imageBase64 = buffer.toString('base64');
-    
-    // Extract dynamic MIME type, stripping out any charset directives
-    const rawContentType = fileRes.headers.get('content-type') || 'application/pdf';
-    const mimeType = rawContentType.split(';')[0].trim();
+    // Strip charset directives from the content type
+    const mimeType = file.contentType.split(';')[0].trim() || 'application/pdf';
 
     const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
     // Defense Layer 1: Smart Caching
@@ -71,9 +69,9 @@ export async function POST(req: Request) {
         
         extractedCourses = Array.isArray(parsed) ? parsed : [parsed];
         break; // Success! Break the retry loop
-      } catch (err: any) {
+      } catch (err) {
         attempt++;
-        const errMsg = String(err.message || err);
+        const errMsg = String(err instanceof Error ? err.message : err);
         console.error(`Gemini Attempt ${attempt} failed: ${errMsg}`);
         
         if (attempt >= maxAttempts) {
@@ -108,8 +106,13 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, courses: extractedCourses });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Extraction Error:', error);
-    return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
+    const raw = String(error instanceof Error ? error.message : error);
+    const busy = raw.includes('503') || raw.includes('429') || raw.includes('fetch failed');
+    return NextResponse.json(
+      { error: busy ? "The AI is busy reading other forms. Try again in a few seconds." : "We could not read that form. Try a clearer image or add courses by hand." },
+      { status: busy ? 503 : 500 }
+    );
   }
 }

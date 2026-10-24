@@ -1,15 +1,15 @@
 import type { Metadata, Viewport } from 'next';
-import { Space_Grotesk, Plus_Jakarta_Sans } from 'next/font/google';
+import { Instrument_Sans, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 
-const spaceGrotesk = Space_Grotesk({ 
+const instrumentSans = Instrument_Sans({
   subsets: ['latin'],
-  variable: '--font-space-grotesk',
+  variable: '--font-instrument-sans',
 });
 
-const plusJakartaSans = Plus_Jakarta_Sans({ 
+const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  variable: '--font-plus-jakarta-sans',
+  variable: '--font-jetbrains-mono',
 });
 
 export const metadata: Metadata = {
@@ -35,7 +35,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${plusJakartaSans.className} ${spaceGrotesk.variable} antialiased min-h-dvh`}>
+      <body className={`${instrumentSans.variable} ${jetbrainsMono.variable} antialiased min-h-dvh`}>
         <ThemeProvider attribute="class" defaultTheme="charcoal" themes={['charcoal', 'dark', 'ivory']}>
           <UserProvider>
             {children}

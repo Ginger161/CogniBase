@@ -1,78 +1,50 @@
-# CogniBase Master Architecture Document
+# CogniBase architecture
 
-This document serves as the single source of truth for the CogniBase architecture, outlining the active technology stack, feature modules, database schema, and data workflows. 
+The README covers setup. This is how the pieces fit.
 
-## 1. Core System Tech Stack
+## Stack
 
-CogniBase is built on a modern, edge-ready, and highly interactive stack designed for speed and AI integration.
+Next.js 16 (App Router) · React 19 · Tailwind v4 (+ typography plugin, enabled in `globals.css`) · Framer Motion · Prisma 7 with `@prisma/adapter-pg` · Postgres + pgvector · Supabase auth and storage · Gemini (`gemini-3.5-flash`, `gemini-embedding-001` truncated to 768 dimensions) through `@google/generative-ai` and the Vercel AI SDK.
 
-- **Framework**: Next.js 16.2.9 (App Router)
-- **UI Library**: React 19.2.4
-- **Styling**: TailwindCSS v4 with `@tailwindcss/typography`
-- **Animations**: Framer Motion (for premium, native-feeling interactions like Activity Rings and 3D Flashcards)
-- **Database ORM**: Prisma 7.8.0 with `@prisma/adapter-pg`
-- **Database Engine**: PostgreSQL with `pgvector` extension for semantic search and embeddings
-- **Backend Storage & Auth**: Supabase (`@supabase/supabase-js`, `@supabase/ssr`)
-- **AI Integration**: Google Generative AI SDK (`@google/generative-ai`, `@ai-sdk/google`).
-  - **Active Model String**: `gemini-3.5-flash` (Configured centrally in `lib/ai/model-router.ts`)
-- **Document Parsing**: 
-  - `officeparser`, `mammoth` (Word/Office files)
-  - `pdf2md`, `pdf2json` (PDF files)
-  - `youtube-transcript` (Video processing)
+## Screens
 
-## 2. Every Active App Feature & Module
+| Route | Screen | Notes |
+|---|---|---|
+| `/dashboard` | Home | Next class, resume a guide, focus today, recent sources. Data from `/api/home`. |
+| `/vault` | Library | List, search and filter sources; add files, links or pasted text; select sources for Ask; per-source menu (ask, read, build a guide, retry indexing, delete). |
+| `/study-guides` | Study | Guides list and the guide player (`StudyEngine`); second tab for saved flashcards, mind maps and slides. `/studio-assets` redirects here. |
+| `/analytics` | Progress | Streak, today's goals, 7-day focus chart (with table view). |
+| `/schedule` | Schedule | Courses and timetable. Imports from photos/PDFs. |
+| `/lecture-materials/[id]` | Reader | PDF viewer, or scroll/paged reader for extracted text. |
+| `/settings` | Settings | Profile, daily goal, theme, password, export, delete account. |
+| `/share/guide/[id]` | Public guide | Read-only view of a guide shared by its owner. |
 
-The platform is divided into distinct, purpose-built engines and workspaces under the `app/(app)` directory.
+The `Ask` bar and sheet (`components/ask`) are mounted once in `app/(app)/layout.tsx`, so chat state and the selected sources persist across screens.
 
-### Context Engine (Vault & Data Ingestion)
-- **The Vault (`/vault`)**: The centralized command center for all user data. Users upload files here, which are stored and processed.
-- **The >_console**: An integrated command-line-style AI chat interface within the Vault that allows users to query their uploaded materials directly.
-- **Course & Timetable Extraction**: Specialized API endpoints (`/api/engine/extract-courses`, `/api/engine/extract-timetable`) that use Gemini to autonomously parse messy syllabi/schedules and output structured JSON data for the user's dashboard.
+## Data flow
 
-### Transformation Engine (Studio Assets)
-- **Gamified Study Execution Engine**: A unified component (`StudyEngine.tsx`) replacing static study guides. It features a vertical **Quest Log**, a full-screen **Micro-Bite Reader** (Duolingo-style tap-through learning), and **Swipeable 3D Flashcards**.
-- **Generators**: Dedicated API routes (`/api/engine/...`) for transforming raw documents into high-value assets:
-  - `generate-study-guide` (Outputs strict JSON mapped to the Study Engine)
-  - `generate-flashcards`
-  - *Extensible structure for Podcasts, Mindmaps, and PPTs.*
+1. **Add a source** (`useLibrary`): files go to Supabase storage under `<user id>/…`; `POST /api/documents` extracts text (Gemini for PDFs and images, Mammoth for Word, officeparser for slides, transcripts for YouTube, Cheerio for web pages) and stores it in `Document.textContent`.
+2. **Index** (`POST /api/engine/analyze`, streamed progress): chunks `textContent` (~1000 characters, 200 overlap), embeds each chunk and writes `DocumentChunk` rows in one transaction that replaces the old ones. Chunk ids sort by position so text reads back in order.
+3. **Ask** (`POST /api/chat`): resolves the selected documents with ownership checks (`lib/scope.ts`), then lets the model call `searchSources` (cosine search over the scoped chunks), `getUserTimetable` and `getDailyMetrics`. Answers cite `[•](cite:NAME)`; the client numbers them and lists the sources.
+4. **Generate**: `/api/studio/generate` (flashcards, mind map, slides) and `/api/engine/generate-study-guide` build from the scoped text, validate the JSON shape, save it, and credit a metric.
 
-### Zen Reader (Lecture Materials)
-- **Hybrid Reading Architecture**: A dedicated, distraction-free reading zone (`/lecture-materials/[id]`). 
-  - It utilizes smart conditional rendering based on file type: `.docx` and `.txt` files are parsed and rendered via an aggressively styled `ReactMarkdown` component (Typographic Scale), while `.pdf` files are embedded directly to preserve native visual layouts, wrapped in a premium dark-mode shell.
+## Schema
 
-### Analytics Dashboard
-- **Deep Work Metrics**: A mobile-app inspired dashboard (`components/StudyAnalyticsDashboard.tsx`) featuring Apple Fitness-style concentric SVG Activity Rings (Tasks Completed, Deep Work Minutes, Knowledge Retention) built with Framer Motion. 
-- **Streak Engine**: A visual 7-day consistency tracker that highlights active streaks with spring-animated glows.
+`User` owns `Workspace`s (the user's vault is the workspace titled "My Global Vault"; older "desk" workspaces still exist and their documents appear in Library), `Timetable`, `StudyGuide`, `StudyGoal`, `DailyMetric`, `AuditLog`, `UserPreferences`. A `Workspace` has `Message`s, `Document`s and `StudioAsset`s. A `Document` has `DocumentChunk`s (with `vector(768)`) and `StudyGuide`s. `StudyGuide.strategyData` is native JSON (`{ guideTitle, phases: [{ phaseId, title, microBites, flashcards }] }`).
 
-## 3. Current Prisma Schema Map
+`User.profile` (JSON) holds `courses`. Timetable classes are `{ id, courseCode, courseTitle, day, startTime, endTime, location }`, with times as `HH:MM` or `h:mm AM/PM` (`lib/utils/schedule.ts` reads both).
 
-The PostgreSQL database is fully modeled via Prisma. Here is how the core entities relate:
+## Security model
 
-- **`User`**: The central entity, linked to Supabase Auth UUIDs. Owns Workspaces, Timetables, and Study Guides.
-- **`Workspace`**: A collaborative or isolated environment containing `Messages`, `Documents`, and `StudioAssets`.
-- **`Document`**: Represents an uploaded file or imported URL. Stores raw `textContent` and metadata. One-to-many relationship with `DocumentChunk` and `StudyGuide`.
-- **`DocumentChunk`**: Stores segmented document text along with a `vector(768)` embedding for RAG (Retrieval-Augmented Generation) and semantic search.
-- **`Timetable`**: Stores structured schedule data as JSON.
-- **`StudyGuide`**: Links a user to a generated guide based on a `Document`. The generated payload (Micro-bites, phases, flashcards) is stored as strict JSON in the `strategyData` column.
-- **`StudioAsset`**: A generalized model for generated assets (Flashcards, Mindmaps, Audio, Presentations) stored as JSON.
-- **`StudyGoal` & `DailyMetric`**: Time-series tables tracking user focus hours, task completion, and accuracy for the Analytics Dashboard.
+- Auth: Supabase session cookies, refreshed in `proxy.ts` (`utils/supabase/middleware.ts`). Signed-out API calls get 401; signed-out page requests are redirected to `/login`. `/`, `/login`, `/signup`, `/auth/*` and `/share/*` are public.
+- Authorisation is in application code on every route. The database also has row-level security enabled on every table, so the Supabase REST API with the public anon key returns nothing. Prisma's role bypasses RLS.
+- Inputs: client-supplied file URLs must be this project's storage URLs; website imports reject private and loopback hosts and do not follow redirects.
+- Abuse: per-user rate limits on chat, indexing, generation and ingestion (`lib/rate-limit.ts`).
 
-## 4. Current Operational Workflow
+## Not built
 
-Here is the lifecycle of data as it moves through the platform:
-
-1. **Ingestion & Upload**: 
-   - User uploads a file in the Vault.
-   - The file is pushed to a Supabase public storage bucket.
-   - A `Document` record is created in Prisma referencing the public URL.
-2. **Extraction Pipeline**:
-   - The document is parsed via backend routes (using `officeparser` or `pdf2md` depending on the mime-type) to extract raw `textContent`.
-   - *Future/Background task*: Text is chunked, embedded, and saved to `DocumentChunk` for RAG.
-3. **Feature Generation (e.g., Gamified Study Guide)**:
-   - User triggers a generation via the Vault UI (e.g., Study Brief Configurator).
-   - Frontend sends the `Document` URL and configuration payload to `/api/engine/generate-study-guide`.
-   - The backend fetches the raw file, extracts the text, and feeds it to `gemini-3.5-flash` with a strict JSON schema prompt and `responseMimeType: "application/json"`.
-   - The AI returns structured JSON (Phases, Micro-Bites, Flashcards).
-4. **Storage & Execution**:
-   - The backend parses the JSON and saves it into the `StudyGuide.strategyData` column in Prisma.
-   - The frontend intercepts the new data and mounts the `<StudyEngine>` component, allowing the user to interactively tap through the generated content.
+- Audio overviews / podcasts.
+- Billing: `User.stripeCustomerId` and `planTier` exist but nothing uses them.
+- Per-answer accuracy tracking, so Progress has no "retention" measure.
+- A shared-store rate limiter (the current one is per server instance).
+- Study goals (`StudyGoal` model is unused).

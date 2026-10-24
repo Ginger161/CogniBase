@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { logActivity } from '@/lib/audit-log'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -25,8 +26,11 @@ export async function GET(request: Request) {
       }
     )
     
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      if (data?.user) {
+        logActivity(data.user.id, 'sign_in', 'Signed in', request).catch(console.error);
+      }
       return NextResponse.redirect(`${origin}/dashboard`)
     }
   }

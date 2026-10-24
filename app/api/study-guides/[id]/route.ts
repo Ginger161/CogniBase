@@ -1,3 +1,4 @@
+import { logActivity } from '@/lib/audit-log';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/api-auth';
@@ -23,10 +24,10 @@ export async function DELETE(req: Request, props: { params: Promise<{ id: string
       where: { id: params.id }
     });
 
+    logActivity(user.id, 'delete_study_guide', 'Deleted a study guide', req).catch(console.error);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("API Crash Error on Delete:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown server error";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: "Something went wrong on our side. Please try again." }, { status: 500 });
   }
 }

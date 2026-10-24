@@ -25,11 +25,27 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ assets });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error("Fetch Studio Assets Error:", error);
-    return NextResponse.json({ 
-      error: "Failed to fetch studio assets. Please try again later.",
-      isCongested: true
-    }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch studio assets. Please try again later." }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { user, response } = await requireUser();
+    if (!user) return response;
+
+    const id = new URL(req.url).searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
+    const asset = await prisma.studioAsset.findFirst({ where: { id, workspace: { userId: user.id } }, select: { id: true } });
+    if (!asset) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    await prisma.studioAsset.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Delete studio asset error:', error);
+    return NextResponse.json({ error: 'Could not delete this item.' }, { status: 500 });
   }
 }

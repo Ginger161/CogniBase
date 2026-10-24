@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { supabase } from '@/utils/supabase/client';
 import { useTheme } from 'next-themes';
 
@@ -10,7 +10,8 @@ export interface UserContext {
   email: string;
   school?: string;
   department?: string;
-  profile: any;
+  /** The user's saved profile JSON (courses and so on), not the whole user row. */
+  profile: { courses?: Array<{ courseCode: string; courseTitle: string; semester?: string }>; [key: string]: unknown } | null;
   preferences: {
     theme: string;
     sidebarMode: string;
@@ -27,92 +28,85 @@ interface UserContextValue {
 
 const UserContext = createContext<UserContextValue | undefined>(undefined);
 
+const DEFAULT_PREFERENCES = { theme: 'charcoal', sidebarMode: 'expanded', dailyFocusGoal: 120, guideComplexity: 'standard' };
+
 export function UserProvider({ children }: { children: ReactNode }) {
   const [context, setContext] = useState<UserContext | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { setTheme } = useTheme();
 
-  async function fetchUser() {
-    setIsLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session?.user) {
+  const fetchUser = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        console.warn('Supabase auth session warning:', error);
+        setContext(null);
+        return;
+      }
+
+      const user = data?.session?.user;
+      if (!user) {
+        setContext(null);
+        return;
+      }
+
+      const fallback: UserContext = {
+        uid: user.id,
+        name: user.email?.split('@')[0] || 'Student',
+        email: user.email || '',
+        profile: null,
+        preferences: DEFAULT_PREFERENCES,
+      };
+
       try {
         const res = await fetch('/api/settings');
         if (res.ok) {
-          const profileData = await res.json();
+          const settings = await res.json();
           setContext({
-            uid: session.user.id,
-            name: profileData.username || session.user.email?.split('@')[0] || 'Student',
-            email: session.user.email || '',
-            school: profileData.school || '',
-            department: profileData.department || '',
-            profile: profileData,
-            preferences: profileData.preferences || {
-              theme: 'system',
-              sidebarMode: 'expanded',
-              dailyFocusGoal: 120,
-              guideComplexity: 'standard'
-            }
+            ...fallback,
+            name: settings.username || fallback.name,
+            school: settings.school || '',
+            department: settings.department || '',
+            profile: settings.profile ?? null,
+            preferences: { ...DEFAULT_PREFERENCES, ...(settings.preferences ?? {}) },
           });
-          // Sync Theme
-          if (profileData.preferences?.theme) {
-            setTheme(profileData.preferences.theme);
-          }
+          if (settings.preferences?.theme) setTheme(settings.preferences.theme);
         } else if (res.status === 401) {
           setContext(null);
         } else {
-           setContext({
-             uid: session.user.id,
-             name: session.user.email?.split('@')[0] || 'Student',
-             email: session.user.email || '',
-             profile: {},
-             preferences: {
-               theme: 'system',
-               sidebarMode: 'expanded',
-               dailyFocusGoal: 120,
-               guideComplexity: 'standard'
-             }
-           });
+          setContext(fallback);
         }
-      } catch(e) {
+      } catch {
         setContext(null);
       }
-    } else {
+    } catch (err) {
+      console.warn('Failed to retrieve user session:', err);
       setContext(null);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }
+  }, [setTheme]);
 
   useEffect(() => {
-    let mounted = true;
+    // Load once on mount, then follow sign-in / sign-out.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load of the signed-in user
     fetchUser();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-       if (event === 'SIGNED_OUT') {
-         if (mounted) setContext(null);
-       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-         fetchUser();
-       }
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') setContext(null);
+      else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') fetchUser();
     });
+    return () => authListener?.subscription?.unsubscribe();
+  }, [fetchUser]);
 
-    return () => {
-      mounted = false;
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
+  const value = useMemo(() => ({ context, isLoading, mutate: fetchUser }), [context, isLoading, fetchUser]);
 
-  return (
-    <UserContext.Provider value={{ context, isLoading, mutate: fetchUser }}>
-      {children}
-    </UserContext.Provider>
-  );
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }
 
 export function useUserContext() {
   const context = useContext(UserContext);
   if (context === undefined) {
-    // Fallback if not wrapped in provider (shouldn't happen)
+    // Outside the provider (should not happen)
     return { context: null, isLoading: false, mutate: async () => {} };
   }
   return context;

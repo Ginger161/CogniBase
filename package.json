@@ -3,11 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "typecheck": "tsc --noEmit",
+    "db:deploy": "prisma migrate deploy",
+    "db:baseline": "prisma migrate resolve --applied 20261024000000_baseline"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.83",
@@ -23,6 +26,7 @@
     "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",
     "framer-motion": "^12.41.0",
+    "geoip-lite": "^2.0.3",
     "lucide-react": "^1.18.0",
     "mammoth": "^1.12.0",
     "mermaid": "^11.16.0",
@@ -30,14 +34,12 @@
     "next-themes": "^0.4.6",
     "officeparser": "^7.2.1",
     "pdf2json": "^4.0.3",
-    "pdf2md": "^1.0.2",
     "pg": "^8.22.0",
     "pptxgenjs": "^4.0.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
     "react-zoom-pan-pinch": "^4.0.3",
-    "recharts": "^3.9.1",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tsx": "^4.22.4",
@@ -47,6 +49,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/geoip-lite": "^1.4.4",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",

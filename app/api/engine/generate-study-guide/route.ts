@@ -1,71 +1,57 @@
 import { NextResponse } from "next/server";
+import { rateLimit, LIMITS } from '@/lib/rate-limit';
 import { getAIModel } from "@/lib/ai/model-router";
-import { parseOffice } from "officeparser";
-import { createClient } from '@/utils/supabase/server';
+import { prisma } from "@/lib/prisma";
+import type { Prisma } from '@prisma/client';
+import { requireUser, requireDocumentOwnership } from '@/lib/api-auth';
+import { ensurePrismaUser } from '@/lib/auth-sync';
+import { recordMetric } from '@/lib/metrics';
+import { classifyAiError } from '@/lib/ai-errors';
 
 export const dynamic = 'force-dynamic';
 
+const MAX_SOURCE_CHARS = 40000;
+
+type Phase = { phaseId?: string; title?: string; microBites?: unknown; flashcards?: unknown };
+
+function parseGuideJson(raw: string): { guideTitle?: string; phases: Phase[] } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = JSON.parse(raw.replace(/```json/g, '').replace(/```/g, '').trim());
+  }
+  const phases = (parsed as { phases?: unknown })?.phases;
+  if (!Array.isArray(phases) || phases.length === 0) throw new Error('AI returned a guide with no phases');
+  return parsed as { guideTitle?: string; phases: Phase[] };
+}
+
+// Builds a guide from a stored document's text and saves it. Body: { documentId, sectionConstraint }.
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { user, response: authResponse } = await requireUser();
+    if (!user) return authResponse;
+    const limited = rateLimit(user.id, LIMITS.generate);
+    if (limited) return limited;
 
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized: Please log in." }, { status: 401 });
+
+    const { documentId, sectionConstraint } = await req.json().catch(() => ({}));
+
+    if (!documentId || typeof documentId !== 'string') {
+      return NextResponse.json({ error: "Missing documentId." }, { status: 400 });
     }
-
-    const { fileUrl, sectionConstraint } = await req.json();
-
-    if (!fileUrl || typeof fileUrl !== 'string') {
-      return NextResponse.json({ error: "Missing or invalid fileUrl." }, { status: 400 });
-    }
-
-    if (!sectionConstraint || typeof sectionConstraint !== 'string') {
+    if (!sectionConstraint || typeof sectionConstraint !== 'string' || sectionConstraint.length > 300) {
       return NextResponse.json({ error: "Missing or invalid sectionConstraint." }, { status: 400 });
     }
 
-    console.log("Fetching fileUrl for Study Guide:", fileUrl);
-    const fileRes = await fetch(fileUrl);
-    if (!fileRes.ok) {
-      console.error(`Failed to fetch file. Status: ${fileRes.status} ${fileRes.statusText}`);
-      if (fileRes.status === 404) {
-        return NextResponse.json({ error: "The file could not be found on the storage server. It may have been deleted or expired." }, { status: 404 });
-      }
-      return NextResponse.json({ error: `Failed to fetch file from storage provider. Status: ${fileRes.status}` }, { status: fileRes.status });
-    }
-    
-    const arrayBuffer = await fileRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    const rawContentType = fileRes.headers.get('content-type') || 'application/pdf';
-    const mimeType = rawContentType.split(';')[0].trim();
-    
-    let text = '';
-    let ext: any = mimeType.includes("csv") ? "csv" 
-              : mimeType.includes("spreadsheetml") ? "xlsx" 
-              : mimeType.includes("officedocument.presentationml") ? "pptx"
-              : mimeType.includes("officedocument.wordprocessingml") ? "docx"
-              : mimeType.includes("text/plain") ? "txt"
-              : "pdf";
-              
-    try {
-      if (ext === 'txt') {
-        text = buffer.toString('utf-8');
-      } else {
-        const doc = await parseOffice(buffer, { fileType: ext });
-        text = typeof doc === 'string' ? doc : (doc.toText ? doc.toText() : JSON.stringify(doc));
-      }
-    } catch (err) {
-      console.error("Parser error:", err);
-      text = "Attached document content for extraction.";
+    const { doc, response: ownerResp } = await requireDocumentOwnership(documentId, user.id);
+    if (!doc) return ownerResp;
+
+    const text = (doc.textContent || '').trim();
+    if (!text) {
+      return NextResponse.json({ error: "This source has no readable text, so a guide can't be built from it." }, { status: 400 });
     }
 
-    if (!text || text.trim() === '') {
-      return NextResponse.json({ error: "Document text could not be extracted or downloaded from storage. Please try again." }, { status: 400 });
-    }
-
-    const model = getAIModel('complex');
-    
     const prompt = `You are a master tutor. Create a highly structured JSON study guide based on the following document content, strictly adhering to the user's Study Brief Configuration parameters.
 Study Brief Configuration: ${sectionConstraint}
 
@@ -88,63 +74,46 @@ You MUST return a raw JSON object that EXACTLY matches this schema. Do not inclu
 }
 
 Document Context:
-${text.substring(0, 40000)}
+${text.substring(0, MAX_SOURCE_CHARS)}
 `;
 
-    let contentParts: any[] = [prompt];
-    if (text === "Attached document content for extraction.") {
-       contentParts = [
-         prompt, 
-         { inlineData: { data: buffer.toString('base64'), mimeType } }
-       ];
-    }
-
-    let result;
+    let raw: string;
     try {
-      result = await model.generateContent({
-        contents: [{ role: "user", parts: contentParts.map(p => typeof p === 'string' ? { text: p } : p) }],
+      const result = await getAIModel('complex').generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: { responseMimeType: "application/json" }
       });
-    } catch (aiError: any) {
+      raw = result.response.text();
+    } catch (aiError) {
       console.error("Study Guide Gen Error:", aiError);
-      return NextResponse.json({ error: aiError.message || "Failed to communicate with AI model." }, { status: 500 });
-    }
-    
-    const response = await result.response;
-    const markdownOut = response.text();
-    
-    let parsedJson;
-    try {
-      parsedJson = JSON.parse(markdownOut);
-    } catch (e) {
-      console.error("JSON Parse failed on raw AI output:", e);
-      console.log("--- RAW AI OUTPUT START ---");
-      console.log(markdownOut);
-      console.log("--- RAW AI OUTPUT END ---");
-      try {
-        const cleaned = markdownOut.replace(/```json/g, '').replace(/```/g, '').trim();
-        parsedJson = JSON.parse(cleaned);
-      } catch (cleanError) {
-        console.error("Cleaned JSON Parse failed:", cleanError);
-        throw new Error("AI returned malformed JSON");
-      }
-    }
-    try {
-      const origin = req.headers.get('origin') || new URL(req.url).origin;
-      const cookieHeader = req.headers.get('cookie');
-      await fetch(`${origin}/api/metrics`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(cookieHeader ? { 'cookie': cookieHeader } : {}) },
-        body: JSON.stringify({ action: 'generate_guide' })
-      });
-    } catch (metricErr) {
-      console.error("Failed to update gamification metric:", metricErr);
+      const failure = classifyAiError(aiError);
+      return NextResponse.json({ error: failure.message, code: failure.kind }, { status: failure.status });
     }
 
-    return NextResponse.json({ studyGuide: parsedJson });
+    let studyGuide;
+    try {
+      studyGuide = parseGuideJson(raw);
+    } catch (parseError) {
+      console.error("Study guide JSON parse failed:", parseError);
+      return NextResponse.json({ error: "The AI returned a guide in the wrong format. Please try again." }, { status: 502 });
+    }
 
-  } catch (error: any) {
+    await ensurePrismaUser(user);
+    const guide = await prisma.studyGuide.create({
+      data: {
+        userId: user.id,
+        sourceDocumentId: doc.id,
+        sourceDocumentName: doc.name,
+        sectionConstraint,
+        strategyData: studyGuide as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    recordMetric(user.id, 'generate_guide').catch((e) => console.error("Metric failed:", e));
+
+    return NextResponse.json({ studyGuide, guide });
+  } catch (error) {
     console.error("Study Guide Route Error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "Could not generate the study guide." }, { status: 500 });
   }
 }

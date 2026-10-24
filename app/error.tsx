@@ -2,34 +2,21 @@
 
 import { useEffect } from 'react';
 
-export default function ErrorBoundary({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function ErrorBoundary({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
-    // Log the error to an error reporting service
-    console.error("Global Error Boundary caught an error:", error);
+    console.error("Global error boundary caught:", error);
   }, [error]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-dvh bg-black text-white p-4 text-center">
-      <div className="max-w-md bg-[#18181B] border border-[#27272A] rounded-xl p-8 shadow-lg">
-        <h2 className="text-2xl font-bold text-[#EA580C] mb-4 font-space-grotesk">
-          Oops, this part of CogniBase hit a snag.
-        </h2>
-        <p className="text-[#A1A1AA] mb-6">
-          We encountered an unexpected error while loading this page. Our systems have been notified.
-        </p>
-        <button
-          onClick={() => reset()}
-          className="bg-[#EA580C] hover:bg-[#C2410C] text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-md"
-        >
-          Refresh Page
+    <main className="min-h-dvh flex items-center justify-center p-5 bg-[var(--bg-base)] text-[var(--text-primary)]">
+      <div role="alert" className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-8 text-center flex flex-col gap-3">
+        <h1 className="text-2xl font-bold">Something went wrong</h1>
+        <p className="text-[var(--text-secondary)]">This page hit an unexpected error. Trying again usually fixes it.</p>
+        {error.digest && <p className="font-mono text-xs text-[var(--text-muted)]">Reference: {error.digest}</p>}
+        <button type="button" onClick={() => reset()} className="mt-2 h-12 rounded-xl bg-[var(--accent-solid)] text-[var(--on-accent)] font-bold">
+          Try again
         </button>
       </div>
-    </div>
+    </main>
   );
 }

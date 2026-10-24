@@ -1,3 +1,4 @@
+import { logActivity } from '@/lib/audit-log';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/api-auth';
@@ -23,13 +24,14 @@ export async function GET(req: Request) {
       studyGuides
     };
 
+    logActivity(user.id, 'export_data', 'Exported account data', req).catch(console.error);
     return new NextResponse(JSON.stringify(exportData, null, 2), {
       headers: {
         'Content-Type': 'application/json',
         'Content-Disposition': 'attachment; filename="cognibase-data-export.json"'
       }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Data Export Error:", error);
     return NextResponse.json({ error: "Failed to export data." }, { status: 500 });
   }

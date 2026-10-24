@@ -15,7 +15,7 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
             request,
           })
@@ -27,27 +27,38 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user ?? null;
+  } catch (err) {
+    console.warn('Proxy auth check failed (continuing as unauthenticated):', err);
+    user = null;
+  }
 
   const pathname = request.nextUrl.pathname
 
   // Pages anyone can see, logged in or not
-  const isPublicPage = pathname === '/' || pathname === '/login' || pathname === '/signup' || pathname.startsWith('/share/')
+  const isShared = pathname.startsWith('/share/');
+  // Sign-in screens: signed-in users are sent on to the app
+  const isEntryPage = pathname === '/' || pathname === '/login' || pathname === '/signup';
+  // OAuth/email-link callback must work before a session exists
+  const isAuthCallback = pathname.startsWith('/auth/');
 
-  // Everything else in the app requires being logged in
-  if (!user && !isPublicPage) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+  if (!user && !isShared && !isEntryPage && !isAuthCallback) {
+    // API clients need a status code, not an HTML redirect
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    return NextResponse.redirect(url);
   }
 
-  // If already logged in, skip the landing/login/signup pages and go straight in
-  if (user && isPublicPage) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
+  if (user && isEntryPage) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/dashboard';
+    return NextResponse.redirect(url);
   }
 
   return supabaseResponse

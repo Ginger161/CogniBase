@@ -1,51 +1,30 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Home() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 w-full max-w-4xl mx-auto text-center" style={{ backgroundColor: "#000000" }}>
-      
-      {/* Official Logo */}
-      <img 
-        src="/logo.png" 
-        alt="CogniBase Logo" 
-        style={{ width: "12rem", height: "auto", margin: "0 auto 3rem auto", display: "block", objectFit: "contain" }} 
-      />
+    <main className="min-h-dvh flex flex-col items-center justify-center px-5 py-12 text-center gap-8 bg-[var(--bg-base)] text-[var(--text-primary)]">
+      <Image src="/logo.png" alt="CogniBase" width={192} height={64} priority className="w-44 h-auto object-contain" />
 
-      <h1 style={{ fontSize: "clamp(2.1rem, 7vw, 4.5rem)", fontWeight: "bold", letterSpacing: "-0.05em", lineHeight: "1.1", marginBottom: "2rem" }}>
-        <span style={{ color: "white" }}>Every lecture,</span>
-        <br />
-        <span style={{
-          background: "linear-gradient(to right, #EA580C, #F59E0B, #EAB308)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text",
-          color: "transparent"
-        }}>
-          perfectly synthesized.
-        </span>
-      </h1>
-      
-      <p style={{ color: "#A1A1AA", fontSize: "1.15rem", maxWidth: "36rem", margin: "0 auto 3rem auto", lineHeight: "1.6" }}>
-        CogniBase transforms scattered notes and coursework into a high-performance, intelligent study terminal.
-      </p>
-      
-      <Link href="/login" style={{ textDecoration: "none" }}>
-        <button style={{
-          backgroundColor: "#EA580C",
-          color: "white",
-          padding: "1rem 2.5rem",
-          borderRadius: "0.75rem",
-          fontWeight: "bold",
-          fontSize: "1.125rem",
-          border: "none",
-          cursor: "pointer",
-          boxShadow: "0 0 40px rgba(234,88,12,0.4)",
-          transition: "transform 0.2s"
-        }}>
-          Get Started
-        </button>
-      </Link>
+      <div className="flex flex-col gap-4 max-w-2xl">
+        <h1 className="text-[clamp(2.1rem,7vw,4rem)] font-bold tracking-tight leading-[1.08]">
+          Every lecture,
+          <br />
+          <span className="text-[var(--accent-text)]">perfectly synthesized.</span>
+        </h1>
+        <p className="text-lg text-[var(--text-secondary)] leading-relaxed">
+          Add your notes, slides and videos. Ask questions that cite their sources, and turn any of it into study guides and flashcards.
+        </p>
+      </div>
 
+      <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs sm:max-w-none sm:w-auto">
+        <Link href="/signup" className="h-12 px-8 rounded-xl bg-[var(--accent-solid)] text-[var(--on-accent)] font-bold flex items-center justify-center">
+          Get started
+        </Link>
+        <Link href="/login" className="h-12 px-8 rounded-xl border border-[var(--border-strong)] font-semibold flex items-center justify-center">
+          Sign in
+        </Link>
+      </div>
     </main>
   );
 }

@@ -19,6 +19,8 @@ model Workspace {
   userId       String?
   user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   studioAssets StudioAsset[]
+
+  @@index([userId])
 }
 
 model Message {
@@ -28,6 +30,8 @@ model Message {
   createdAt   DateTime  @default(now())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
 }
 
 model Document {
@@ -38,10 +42,13 @@ model Document {
   textContent String? // Raw text content
   fileSize    Int? // Size in bytes
   createdAt   DateTime        @default(now())
+  category    String?
   workspaceId String
   workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   chunks      DocumentChunk[]
   studyGuides StudyGuide[]
+
+  @@index([workspaceId])
 }
 
 model DocumentChunk {
@@ -52,7 +59,9 @@ model DocumentChunk {
   pageNumber Int?
   document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
-  @@index([embedding], map: "embeddingIndex")
+  // The vector index (HNSW, cosine) is created in SQL: see prisma/migrations/*_security_and_vector_index.
+
+  @@index([documentId])
 }
 
 model User {
@@ -81,6 +90,8 @@ model Timetable {
   userId String
   data   Json // Store the timetable object here
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model StudyGuide {
@@ -97,6 +108,9 @@ model StudyGuide {
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   document           Document @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
   progress           StudyGuideProgress[]
+
+  @@index([userId])
+  @@index([sourceDocumentId])
 }
 
 model ExtractedFormCache {
@@ -113,6 +127,8 @@ model StudioAsset {
   content     Json
   createdAt   DateTime  @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 model StudyGoal {
@@ -142,8 +158,12 @@ model AuditLog {
   action    String
   userId    String
   details   String   @db.Text
+  ipAddress String?
+  location  String?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model StudyGuideProgress {

@@ -8,23 +8,23 @@ You must strictly adhere to these rules when modifying or generating code for th
 
 ## 1. Architecture & Build Constraints (Non-Negotiable)
 - **Tech Stack Lock**: Next.js 16.2.9 (App Router), React 19.2.4, TailwindCSS v4, Prisma 7.8.0, and Supabase. Do not downgrade packages or introduce external state managers (e.g., Zustand, Redux).
-- **Absolute Workspace Isolation**: To prevent data leaks between desks, every single Prisma query targeting documents, chunks, timetables, or study guides MUST explicitly include `where: { workspaceId: currentWorkspaceId }`. 
+- **Ownership on every query**: every route calls `requireUser()` and every Prisma or raw query for documents, chunks, timetables, study guides or assets is constrained to the signed-in user (via `lib/api-auth.ts` and `lib/scope.ts`). Never trust ids or user ids sent by the client.
 - **Parameterized SQL**: Any raw SQL queries executed for `pgvector` semantic search (via `$queryRaw`) must strictly use Prisma's parameterized template tags to completely eliminate SQL injection vulnerabilities. Never use string interpolation (`${}`) inside raw query strings.
 - **Native JSON Columns**: Store complex AI-generated configurations (like flashcard arrays or study guide phases) natively in Prisma `Json` columns (e.g., `strategyData`). Do not stringify JSON into text columns.
 
 ## 2. AI & Agentic Logic
 - **Active Model**: Always utilize `gemini-3.5-flash`. Never hardcode deprecated model strings like `gemini-pro`. All generations must route through `lib/ai/model-router.ts`.
 - **Strict JSON Mode**: When generating structured payloads, enforce schema compliance at the SDK level by passing `generationConfig: { responseMimeType: "application/json" }`. Do not rely solely on system prompt prose to strip out markdown backticks.
-- **Agentic Tool Calling**: Prefer native function calling (Tools) over prompt context stuffing for the `>_console`. Implement on-demand database fetching tools (`getUserTimetable`, `getDailyMetrics`, `searchWorkspaceFiles`) so the AI selectively queries data only when asked.
+- **Agentic Tool Calling**: Ask (`/api/chat`) uses native tools (`searchSources`, `getUserTimetable`, `getDailyMetrics`) instead of stuffing context, scoped to the sources the user selected.
 
 ## 3. UI & UX Design Language
 - **Visual Theme**: CogniBase is a premium, distraction-free native-feeling experience. Default to deep dark-mode interfaces (`zinc-950`, `zinc-900`) with precise glowing accents. 
 - **Eradicate Text Walls**: Never render long, scrollable markdown notes for study guides. Convert educational text structures into the Gamified Study Execution Engine: a vertical Quest Log checklist, full-screen Duolingo-style 'Micro-Bites', and swipeable 3D active-recall flashcards.
-- **Progressive Disclosure**: Hide heavy generation tools (Mindmaps, PPT slides, Podcasts) inside contextual menus or trigger them via the `>_console` only after a document is actively open. Keep the initial dashboard entirely clean.
+- **Progressive Disclosure**: Generation tools (flashcards, mind map, slides, study guide) appear under an Ask answer or in a source's menu, never on Home.
 - **Interaction Physics**: Use `framer-motion` spring animations for high-dopamine visual feedback (e.g., closing analytics rings, flipping cards, or sliding out native-style bottom sheets instead of rigid web dropdowns).
 
 ## 4. Development Workflow
-- **Schema Synchronization**: Whenever you modify `schema.prisma`, explicitly append a instruction reminding the user to execute `npx prisma db push` or `npx prisma migrate dev`.
+- **Schema Synchronization**: Whenever you modify `schema.prisma`, add a migration under `prisma/migrations` and remind the user to run `npm run db:deploy`.
 - **Optimistic UI Updates**: For high-frequency or destructive interactions (such as deleting a study guide or marking a quest phase complete), execute updates optimistically in React state to maintain 0ms perceived latency while database calls resolve in the background.
 
 ## 5. Responsive & Anti-Fragile Layouts (Strict UI)
