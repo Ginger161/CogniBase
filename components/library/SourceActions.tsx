@@ -25,7 +25,7 @@ export default function SourceActions({ source, busy, onClose, onAsk, onStudyGui
         <div className="flex flex-col gap-1">
           {source.indexed && !busy && (
             <button type="button" className={itemClass} onClick={() => onAsk(source)}>
-              <MessageSquare size={18} aria-hidden /> Ask about this source
+              <MessageSquare size={18} aria-hidden /> Open console
             </button>
           )}
           <Link href={`/lecture-materials/${source.id}`} className={itemClass} onClick={onClose}>

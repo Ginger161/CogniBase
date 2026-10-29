@@ -13,8 +13,15 @@ async function viewableUrl(supabase: Awaited<ReturnType<typeof createClient>>, u
   return error || !data?.signedUrl ? url : data.signedUrl;
 }
 
-export default async function LectureMaterialReader({ params }: { params: Promise<{ id: string }> }) {
+export default async function LectureMaterialReader({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ console?: string }>;
+}) {
   const { id } = await params;
+  const { console: consoleParam } = await searchParams;
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -41,5 +48,5 @@ export default async function LectureMaterialReader({ params }: { params: Promis
   const isPdf = document.sourceType === 'file' && document.name.toLowerCase().endsWith('.pdf');
   const fileUrl = isPdf ? await viewableUrl(supabase, document.url) : null;
 
-  return <DocumentReader document={document} pdfUrl={fileUrl} />;
+  return <DocumentReader document={document} pdfUrl={fileUrl} openConsole={consoleParam === '1'} />;
 }

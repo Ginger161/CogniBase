@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Loader2, Plus, Search, UploadCloud } from 'lucide-react';
 import Link from 'next/link';
-import { useAsk } from '@/components/ask/AskProvider';
+import { useRouter } from 'next/navigation';
 import { useLibrary } from '@/components/library/useLibrary';
 import SourceRow from '@/components/library/SourceRow';
 import SourceActions from '@/components/library/SourceActions';
@@ -22,7 +22,7 @@ const FILTERS: { id: 'all' | SourceType; label: string }[] = [
 
 export default function LibraryPage() {
   const library = useLibrary();
-  const ask = useAsk();
+  const router = useRouter();
   const { sources, isLoading, loadError, indexing, uploadStatus } = library;
 
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['id']>('all');
@@ -34,16 +34,18 @@ export default function LibraryPage() {
   const [deleting, setDeleting] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  // Forget selections for sources that no longer exist (deleted elsewhere, or left over from an earlier session).
-  const { sources: selectedSources, setSources: setSelectedSources } = ask;
+  // Selection exists for bulk actions (delete). Chatting happens inside a source, not from here.
+  const [selected, setSelected] = useState<string[]>([]);
+
+  // Forget selections for sources that no longer exist.
   useEffect(() => {
     if (isLoading || loadError) return;
     const alive = new Set(sources.map((s) => s.id));
-    const kept = selectedSources.filter((s) => alive.has(s.id));
-    if (kept.length !== selectedSources.length) setSelectedSources(kept);
-  }, [isLoading, loadError, sources, selectedSources, setSelectedSources]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- prune selection when the library changes
+    setSelected((cur) => (cur.every((id) => alive.has(id)) ? cur : cur.filter((id) => alive.has(id))));
+  }, [isLoading, loadError, sources]);
 
-  const selectedIds = useMemo(() => new Set(selectedSources.map((s) => s.id)), [selectedSources]);
+  const selectedIds = useMemo(() => new Set(selected), [selected]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -53,15 +55,12 @@ export default function LibraryPage() {
   const selectable = visible.filter((s) => s.indexed && !indexing[s.id]);
   const allSelected = selectable.length > 0 && selectable.every((s) => selectedIds.has(s.id));
 
-  const toAskSource = (s: LibrarySource) => ({ id: s.id, name: s.name, workspaceId: s.workspaceId });
-
   const toggleAll = () => {
     if (allSelected) {
       const visibleIds = new Set(selectable.map((s) => s.id));
-      setSelectedSources(selectedSources.filter((s) => !visibleIds.has(s.id)));
+      setSelected((cur) => cur.filter((id) => !visibleIds.has(id)));
     } else {
-      const have = new Set(selectedSources.map((s) => s.id));
-      setSelectedSources([...selectedSources, ...selectable.filter((s) => !have.has(s.id)).map(toAskSource)]);
+      setSelected((cur) => [...new Set([...cur, ...selectable.map((s) => s.id)])]);
     }
   };
 
@@ -69,15 +68,15 @@ export default function LibraryPage() {
     if (!deleteIds) return;
     setDeleting(true);
     const deleted = await library.remove(deleteIds);
-    setSelectedSources(selectedSources.filter((s) => !deleted.includes(s.id)));
+    setSelected((cur) => cur.filter((id) => !deleted.includes(id)));
     setDeleting(false);
     setDeleteIds(null);
   };
 
+  // The console lives inside the source, so asking means opening it in the reader with the console up.
   const askAbout = (s: LibrarySource) => {
-    setSelectedSources([toAskSource(s)]);
     setMenuFor(null);
-    ask.open();
+    router.push(`/lecture-materials/${s.id}?console=1`);
   };
 
   const busy = !!uploadStatus;
@@ -229,7 +228,9 @@ export default function LibraryPage() {
                   source={s}
                   selected={selectedIds.has(s.id)}
                   indexing={indexing[s.id]}
-                  onToggle={() => ask.toggleSource(toAskSource(s))}
+                  onToggle={() =>
+                    setSelected((cur) => (cur.includes(s.id) ? cur.filter((id) => id !== s.id) : [...cur, s.id]))
+                  }
                   onMenu={() => setMenuFor(s)}
                 />
               ))}

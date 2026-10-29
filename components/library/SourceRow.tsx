@@ -39,7 +39,7 @@ export default function SourceRow({ source, selected, indexing, onToggle, onMenu
         type="button"
         role="checkbox"
         aria-checked={selected}
-        aria-label={`Select ${source.name} for Ask`}
+        aria-label={`Select ${source.name}`}
         aria-disabled={!searchable}
         disabled={!searchable}
         onClick={onToggle}

@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowUp, ChevronLeft, FileText, GraduationCap, Layers, Network, Presentation, RotateCcw, Square, X } from 'lucide-react';
+import { ArrowUp, ChevronLeft, GraduationCap, Layers, Network, Presentation, RotateCcw, Square, X } from 'lucide-react';
 import type { UIMessage } from 'ai';
 import { useAsk } from './AskProvider';
 import GenerateAsset, { type AssetKind } from '../studio/GenerateAsset';
@@ -108,9 +107,8 @@ function AssistantBody({ text }: { text: string }) {
 }
 
 export default function AskSheet() {
-  const { isOpen, close, sources, removeSource, clearSources, messages, send, retry, reset, stop, isBusy, error } = useAsk();
+  const { isOpen, close, source, messages, send, retry, reset, stop, isBusy, error } = useAsk();
   const [input, setInput] = useState('');
-  const [showScope, setShowScope] = useState(false);
   const [tool, setTool] = useState<Tool | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -133,14 +131,14 @@ export default function AskSheet() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, isBusy, isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !source) return null;
 
   const last = messages[messages.length - 1];
   const lastText = last?.role === 'assistant' ? messageText(last) : '';
   const waiting = isBusy && (last?.role === 'user' || (last?.role === 'assistant' && !lastText));
-  const showActions = !isBusy && !error && sources.length > 0 && lastText.length > 0;
-  const workspaceId = sources[0]?.workspaceId || '';
-  const documentIds = sources.map((s) => s.id);
+  const showActions = !isBusy && !error && lastText.length > 0;
+  const workspaceId = source.workspaceId;
+  const documentIds = [source.id];
 
   const submit = () => {
     if (!input.trim() || isBusy) return;
@@ -154,24 +152,24 @@ export default function AskSheet() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Ask"
+        aria-label="Source console"
         className="fixed inset-0 z-50 md:inset-y-0 md:left-auto md:right-0 md:w-[440px] flex flex-col bg-[var(--bg-base)] md:border-l md:border-[var(--border-color)] md:shadow-2xl"
       >
         <div className="shrink-0 flex items-center gap-1 pl-2 pr-3 pt-[max(1rem,env(safe-area-inset-top))] pb-3 border-b border-[var(--bg-surface-alt)]">
           <button
             type="button"
             onClick={close}
-            aria-label="Close Ask"
+            aria-label="Close console"
             className="w-11 h-11 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           >
             <ChevronLeft size={22} className="md:hidden" aria-hidden />
             <X size={20} className="hidden md:block" aria-hidden />
           </button>
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-bold leading-tight">Ask</h2>
-            <p className="text-xs text-[var(--text-muted)] truncate">
-              {sources.length > 0 ? sources.map((s) => s.name).join(', ') : 'Searching all your sources'}
-            </p>
+            <h2 className="text-base font-bold leading-tight font-mono">
+              <span className="text-[var(--accent-text)]" aria-hidden>&gt;_</span> console
+            </h2>
+            <p className="text-xs text-[var(--text-muted)] truncate">{source.name}</p>
           </div>
           {messages.length > 0 && (
             <button
@@ -183,61 +181,13 @@ export default function AskSheet() {
               <RotateCcw size={18} aria-hidden />
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setShowScope((v) => !v)}
-            aria-expanded={showScope}
-            className="h-9 px-3 rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--tag-text)] text-[13px] font-semibold flex items-center gap-1.5"
-          >
-            <FileText size={14} aria-hidden />
-            {sources.length > 0 ? `${sources.length} source${sources.length === 1 ? '' : 's'}` : 'All sources'}
-          </button>
         </div>
-
-        {showScope && (
-          <div className="shrink-0 px-4 py-3 border-b border-[var(--border-color)] bg-[var(--bg-surface)] flex flex-col gap-2">
-            {sources.length === 0 ? (
-              <p className="text-sm text-[var(--text-secondary)]">
-                No sources selected, so I search everything you have uploaded.{' '}
-                <Link href="/vault" onClick={close} className="text-[var(--accent-text)] font-semibold">
-                  Choose sources in Library
-                </Link>
-              </p>
-            ) : (
-              <>
-                <ul className="flex flex-col">
-                  {sources.map((s) => (
-                    <li key={s.id} className="flex items-center gap-2 min-h-11">
-                      <span className="flex-1 min-w-0 truncate text-sm">{s.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeSource(s.id)}
-                        aria-label={`Remove ${s.name}`}
-                        className="w-11 h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                      >
-                        <X size={16} aria-hidden />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex items-center justify-between">
-                  <button type="button" onClick={clearSources} className="min-h-11 text-sm text-[var(--text-secondary)] underline">
-                    Search everything instead
-                  </button>
-                  <Link href="/vault" onClick={close} className="min-h-11 flex items-center text-sm font-semibold text-[var(--accent-text)]">
-                    Change in Library
-                  </Link>
-                </div>
-              </>
-            )}
-          </div>
-        )}
 
         <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto px-4 pt-5 pb-4 flex flex-col gap-5" aria-live="polite">
           {messages.length === 0 ? (
             <div className="flex flex-col gap-4 pt-4">
               <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed">
-                Ask anything about {sources.length > 0 ? 'your selected sources' : 'your uploaded materials'}. Answers cite the source they came from.
+                Ask anything about this source. Answers stay inside it and point back to where they came from.
               </p>
               <div className="flex flex-col gap-2">
                 {SUGGESTIONS.map((s) => (
@@ -272,7 +222,7 @@ export default function AskSheet() {
           {waiting && (
             <div className="flex items-center gap-2 text-sm text-[var(--accent-text)] font-mono">
               <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
-              {isSearching(last) ? 'Searching your sources…' : 'Thinking…'}
+              {isSearching(last) ? 'Searching this source…' : 'Thinking…'}
             </div>
           )}
 
@@ -299,9 +249,7 @@ export default function AskSheet() {
                     key={key}
                     type="button"
                     onClick={() => setTool(key)}
-                    disabled={key === 'guide' && sources.length !== 1}
-                    title={key === 'guide' && sources.length !== 1 ? 'Select exactly one source to build a study guide' : undefined}
-                    className="h-11 px-4 disabled:opacity-40 rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[13px] font-semibold flex items-center gap-2 hover:border-[var(--accent-solid)]"
+                    className="h-11 px-4 rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[13px] font-semibold flex items-center gap-2 hover:border-[var(--accent-solid)]"
                   >
                     <Icon size={16} aria-hidden />
                     {label}
@@ -358,7 +306,7 @@ export default function AskSheet() {
         </div>
       </div>
 
-      <StudyGuideSheet source={tool === 'guide' ? sources[0] ?? null : null} onClose={() => setTool(null)} />
+      <StudyGuideSheet source={tool === 'guide' ? source : null} onClose={() => setTool(null)} />
       {tool && tool !== 'guide' && (
         <GenerateAsset key={tool} kind={KIND[tool]} workspaceId={workspaceId} documentIds={documentIds} onClose={() => setTool(null)} />
       )}

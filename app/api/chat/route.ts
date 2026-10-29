@@ -3,7 +3,7 @@ import { rateLimit, LIMITS } from '@/lib/rate-limit';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { prisma } from '@/lib/prisma';
-import { requireUser, requireWorkspaceOwnership } from '@/lib/api-auth';
+import { requireUser } from '@/lib/api-auth';
 import { resolveScopedDocs } from '@/lib/scope';
 import { classifyAiError } from '@/lib/ai-errors';
 import { z } from 'zod';
@@ -18,15 +18,6 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 const MAX_HISTORY = 30;
 
-function lastUserText(messages: UIMessage[]): string {
-  const last = [...messages].reverse().find((m) => m.role === 'user');
-  if (!last) return '';
-  return last.parts
-    .map((p) => (p.type === 'text' ? p.text : ''))
-    .join('')
-    .trim();
-}
-
 export async function POST(req: Request) {
   try {
     const { user, response: authResponse } = await requireUser();
@@ -36,37 +27,33 @@ export async function POST(req: Request) {
 
 
     const body = await req.json().catch(() => ({}));
-    const url = new URL(req.url);
     const { messages, userProfile } = body as { messages?: UIMessage[]; userProfile?: unknown };
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return Response.json({ error: 'Missing messages.' }, { status: 400 });
     }
 
-    const workspaceId: string | undefined =
-      body.data?.workspaceId || url.searchParams.get('workspaceId') || body.workspaceId || undefined;
     const requestedIds: unknown = body.data?.activeSources || body.activeSources;
     const documentIds = Array.isArray(requestedIds)
       ? requestedIds.map((s: unknown) => (typeof s === 'string' ? s : (s as { id?: string })?.id)).filter(Boolean)
       : [];
 
-    if (workspaceId) {
-      const { workspace, response: ownerResp } = await requireWorkspaceOwnership(workspaceId, user.id);
-      if (!workspace) return ownerResp;
-    }
-
-    // What the assistant may read. No scope sent = everything the user owns.
-    const hasScope = documentIds.length > 0 || !!workspaceId;
-    const scopedDocs = hasScope ? await resolveScopedDocs(user.id, { workspaceId, documentIds }) : [];
+    // What the assistant may read: only the source(s) named by id, and only if the user owns them.
+    const scopedDocs = documentIds.length > 0 ? await resolveScopedDocs(user.id, { documentIds }) : [];
     const scopeIds = scopedDocs.map((d) => d.id);
     const scopeNames = scopedDocs.map((d) => d.name);
 
-    const userQueryText = lastUserText(messages);
-    if (workspaceId && userQueryText) {
-      try {
-        await prisma.message.create({ data: { role: 'user', text: userQueryText, workspaceId } });
-      } catch (e) {
-        console.error('Failed to save user message:', e);
+    // The console lives inside a single source. When that source can't be read, the assistant says why
+    // and what to do instead of the request failing with a bare error.
+    let problem: string | null = null;
+    if (documentIds.length === 0) {
+      problem = 'NO_SOURCE: no source is attached to this console, so the request carried no source id. This usually means the page was opened without a source or the connection to it was lost.';
+    } else if (scopeIds.length === 0) {
+      problem = 'SOURCE_NOT_FOUND: the source this console was opened on could not be found in the student’s library. It was most likely deleted, or belongs to another account.';
+    } else {
+      const chunkCount = await prisma.documentChunk.count({ where: { documentId: { in: scopeIds } } });
+      if (chunkCount === 0) {
+        problem = `NOT_INDEXED: "${scopeNames.join(', ')}" exists but has not been indexed yet, so it cannot be searched. Indexing may still be running, or it may have failed.`;
       }
     }
 
@@ -74,16 +61,18 @@ export async function POST(req: Request) {
 
     const systemPrompt = `You are CogniBase, an elite academic tutor and exam strategist for university students. You are empathetic, proactive and highly structured.
 
-${hasScope
-  ? `The student has scoped this conversation to these sources: [${scopeNames.join(', ') || 'none found'}].`
-  : `The student has not narrowed the sources, so you may search all of their uploaded materials.`}
+The student is reading a source and has opened its console: [${scopeNames.join(', ') || 'none'}]. Answer about this source only.
 
-Rule 1: For anything about the student's materials, call searchSources first and answer strictly from what it returns. Mention specific details present in the text rather than generic subject talk.
-Rule 2: If the question needs knowledge beyond the sources, say "This information is not explicitly found in your uploaded materials, but based on general best practices..." before answering. Never present outside knowledge as if it came from the documents.
+Rule 1: For anything about the source, call searchSources first and answer strictly from what it returns. Mention specific details present in the text rather than generic subject talk.
+Rule 2: If the question needs knowledge beyond the source, say "This information is not explicitly found in your uploaded materials, but based on general best practices..." before answering. Never present outside knowledge as if it came from the document.
 Rule 3: Keep continuity with the conversation history; resolve pronouns like "that rule" from earlier turns.
-Rule 4: When a statement is drawn directly from a source, add a citation right after it in exactly this markdown form: [•](cite:EXACT_DOCUMENT_NAME), using the filename from the [Source Document: ...] tag. At most one citation per distinct claim or paragraph. No citations on general-knowledge statements.
-Use getUserTimetable or getDailyMetrics only when the student asks about their schedule or focus.
-
+Rule 4: When a statement is drawn directly from the source, add a citation right after it in exactly this markdown form: [•](cite:EXACT_DOCUMENT_NAME), using the filename from the [Source Document: ...] tag. At most one citation per distinct claim or paragraph. No citations on general-knowledge statements.
+Rule 5: The student's timetable and daily metrics are available across the whole app through getUserTimetable and getDailyMetrics. Use them only when asked about schedule, classes or focus, and always say which resource you used, for example "From your timetable" or "From today's metrics". Never mix them up with what the source says.
+Rule 6: If anything stops you from answering (the situation below, a tool error, or an empty result), tell the student in plain language: what is wrong, why it happened, and what they can do next. Keep it short and kind, never blame them, never show technical jargon or error codes, and never invent source content to fill the gap.
+${problem ? `
+CURRENT SITUATION: ${problem}
+Do not try to answer questions about the source. Explain this to the student using Rule 6. Suggested next steps: for NO_SOURCE, go back to the Library and open the source again; for SOURCE_NOT_FOUND, return to the Library and check the source still exists, or add it again; for NOT_INDEXED, open the source's menu in the Library and choose "Retry indexing", or wait a moment if indexing is still running. You may still help with schedule or focus questions.
+` : ''}
 Student context (use silently to calibrate tone and examples): ${profileText}`;
 
     const result = streamText({
@@ -93,42 +82,37 @@ Student context (use silently to calibrate tone and examples): ${profileText}`;
       stopWhen: stepCountIs(5),
       tools: {
         getUserTimetable: tool({
-          description: "Get the user's timetable/schedule data. Use this when the user asks about their classes or timings.",
+          description: "Get the student's timetable (their classes, days and times). Use this only when they ask about their schedule or classes.",
           inputSchema: z.object({}),
           execute: async () => {
             try {
               const timetable = await prisma.timetable.findFirst({ where: { userId: user.id } });
-              return timetable ? timetable.data : { error: 'No timetable found' };
+              return timetable ? { resource: 'Timetable', data: timetable.data } : { resource: 'Timetable', error: 'No timetable has been added yet. They can add one under Schedule in the Library.' };
             } catch {
-              return { error: 'Failed to fetch timetable' };
+              return { resource: 'Timetable', error: 'The timetable could not be loaded just now. Trying again in a moment should work.' };
             }
           },
         }),
         getDailyMetrics: tool({
-          description: "Get the user's daily performance metrics for today (focus minutes, tasks completed, accuracy). Use this when the user asks for coaching feedback or focus metrics.",
+          description: "Get the student's focus metrics for today (focus minutes, tasks completed, accuracy). Use this only when they ask about focus or coaching feedback.",
           inputSchema: z.object({}),
           execute: async () => {
             try {
               const startOfDay = new Date();
               startOfDay.setHours(0, 0, 0, 0);
-              const metric = await prisma.dailyMetric.findFirst({
-                where: { userId: user.id, date: { gte: startOfDay } },
-              });
-              return metric || { error: 'No metrics recorded for today.' };
+              const metric = await prisma.dailyMetric.findFirst({ where: { userId: user.id, date: { gte: startOfDay } } });
+              return metric ? { resource: 'Daily metrics', data: metric } : { resource: 'Daily metrics', error: 'Nothing has been recorded for today yet. Metrics appear after they study or read.' };
             } catch {
-              return { error: 'Failed to fetch metrics' };
+              return { resource: 'Daily metrics', error: 'Metrics could not be loaded just now. Trying again in a moment should work.' };
             }
           },
         }),
-        searchSources: tool({
-          description: "Search the contents of the student's selected study sources (or all their sources if none are selected). Use this whenever the question is about their documents, notes, videos or lecture materials.",
+        ...(problem ? {} : { searchSources: tool({
+          description: "Search the contents of the student's open study source (the one they have open). Use this whenever the question is about their documents, notes, videos or lecture materials.",
           inputSchema: z.object({
             query: z.string().describe('The specific search query to run against the source contents'),
           }),
           execute: async ({ query }) => {
-            if (hasScope && scopeIds.length === 0) {
-              return { error: 'No readable sources are selected for this conversation.' };
-            }
             try {
               const embeddingModel = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
               const queryResult = await embeddingModel.embedContent(query);
@@ -147,28 +131,19 @@ Student context (use silently to calibrate tone and examples): ${profileText}`;
                 JOIN "Document" d ON c."documentId" = d."id"
                 JOIN "Workspace" w ON d."workspaceId" = w."id"
                 WHERE w."userId" = ${user.id}
-                  AND (cardinality(${scopeIds}::text[]) = 0 OR d."id" = ANY(${scopeIds}::text[]))
+                  AND d."id" = ANY(${scopeIds}::text[])
                 ORDER BY c."embedding" <=> CAST(${embeddingString} AS vector)
                 LIMIT 12
               `;
 
-              if (!matches || matches.length === 0) return { result: 'No matching content found in the sources.' };
+              if (!matches || matches.length === 0) return { error: 'Nothing in this source matched that question. Suggest rephrasing it with words the source uses, or asking about a section it covers.' };
               return matches.map((m) => `[Source Document: ${m.documentName}]\n${m.content}`).join('\n\n---\n\n');
             } catch (e) {
               console.error('Vector search error in tool', e);
-              return { error: 'Search failed. Please try again.' };
+              return { error: 'The search could not run just now, likely a temporary problem reaching the AI service. Suggest trying again in a moment.' };
             }
           },
-        }),
-      },
-      async onFinish({ text }) {
-        if (workspaceId && text) {
-          try {
-            await prisma.message.create({ data: { role: 'assistant', text, workspaceId } });
-          } catch (e) {
-            console.error('Failed to save assistant message:', e);
-          }
-        }
+        }) }),
       },
     });
 

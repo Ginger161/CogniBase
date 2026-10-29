@@ -3,13 +3,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
-import { AlignJustify, BookOpen, ChevronLeft, ChevronRight, Download, MessageSquare } from 'lucide-react';
+import remarkGfm from 'remark-gfm';
+import { AlignJustify, ArrowUp, BookOpen, ChevronLeft, ChevronRight, Download, Wand2 } from 'lucide-react';
+import { formatForReading } from '@/lib/reader/format';
 import { useAsk } from '@/components/ask/AskProvider';
 
 type ReaderDocument = { id: string; name: string; url: string; sourceType: string; textContent: string | null; workspaceId: string };
 
 const WORDS_PER_PAGE = 250;
-const proseClass = 'reader-prose prose max-w-none prose-p:leading-relaxed prose-headings:tracking-tight';
+const proseClass =
+  'reader-prose prose max-w-none text-[17px] prose-p:leading-[1.75] prose-p:my-5 prose-headings:tracking-tight prose-headings:font-bold prose-h1:text-[28px] prose-h1:mb-6 prose-h2:text-[22px] prose-h2:mt-10 prose-h2:mb-3 prose-h3:text-[18px] prose-h3:mt-8 prose-h3:mb-2 prose-li:my-1.5 prose-ul:my-5 prose-ol:my-5 prose-strong:font-semibold prose-hr:my-10';
 
 function paginate(text: string): string[] {
   const pages: string[] = [];
@@ -19,6 +22,14 @@ function paginate(text: string): string[] {
   for (const p of text.split(/\n\n+/)) {
     const count = p.split(/\s+/).length;
     if (words + count > WORDS_PER_PAGE && current.length > 0) {
+      // A heading is never left stranded at the foot of a page: it travels with what follows it.
+      if (/^#{1,6}\s/.test(current[current.length - 1]) && current.length > 1) {
+        const heading = current.pop()!;
+        pages.push(current.join('\n\n'));
+        current = [heading, p];
+        words = heading.split(/\s+/).length + count;
+        continue;
+      }
       pages.push(current.join('\n\n'));
       current = [p];
       words = count;
@@ -31,11 +42,32 @@ function paginate(text: string): string[] {
   return pages;
 }
 
-export default function DocumentReader({ document, pdfUrl }: { document: ReaderDocument; pdfUrl: string | null }) {
-  const ask = useAsk();
+export default function DocumentReader({
+  document,
+  pdfUrl,
+  openConsole = false,
+}: {
+  document: ReaderDocument;
+  pdfUrl: string | null;
+  openConsole?: boolean;
+}) {
+  const { attach, detach, open } = useAsk();
+  const [formatted, setFormatted] = useState(true);
   const [mode, setMode] = useState<'scroll' | 'pages'>('scroll');
   const [page, setPage] = useState(0);
-  const pages = useMemo(() => (document.textContent ? paginate(document.textContent) : []), [document.textContent]);
+  const pages = useMemo(() => {
+    if (!document.textContent) return [];
+    return paginate(formatted ? formatForReading(document.textContent) : document.textContent);
+  }, [document.textContent, formatted]);
+
+  // The console belongs to this source: attach on entry, drop its conversation on exit.
+  const { id: docId, name: docName, workspaceId } = document;
+  useEffect(() => {
+    attach({ id: docId, name: docName, workspaceId });
+    if (openConsole) open();
+    return detach;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docId, docName, workspaceId]);
 
   useEffect(() => {
     fetch('/api/metrics', { method: 'POST', body: JSON.stringify({ action: 'read_document' }) }).catch(() => {});
@@ -66,11 +98,6 @@ export default function DocumentReader({ document, pdfUrl }: { document: ReaderD
     }
   };
 
-  const askAbout = () => {
-    ask.setSources([{ id: document.id, name: document.name, workspaceId: document.workspaceId }]);
-    ask.open();
-  };
-
   const toggle = (active: boolean) =>
     `w-11 h-11 rounded-full flex items-center justify-center ${active ? 'bg-[var(--accent-solid)] text-[var(--on-accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`;
 
@@ -91,14 +118,18 @@ export default function DocumentReader({ document, pdfUrl }: { document: ReaderD
             </button>
           </div>
         )}
-        <button
-          type="button"
-          onClick={askAbout}
-          className="h-11 px-4 rounded-full bg-[var(--accent-solid)] text-[var(--on-accent)] text-sm font-bold flex items-center gap-2"
-        >
-          <MessageSquare size={16} aria-hidden /> <span className="hidden sm:inline">Ask</span>
-          <span className="sm:hidden sr-only">Ask about this</span>
-        </button>
+        {!pdfUrl && pages.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setFormatted((f) => !f)}
+            aria-pressed={formatted}
+            aria-label={formatted ? 'Showing formatted text. Switch to original' : 'Showing original text. Switch to formatted'}
+            title={formatted ? 'Formatted for reading' : 'Original text'}
+            className={toggle(formatted)}
+          >
+            <Wand2 size={18} aria-hidden />
+          </button>
+        )}
       </div>
 
       {pdfUrl ? (
@@ -120,7 +151,7 @@ export default function DocumentReader({ document, pdfUrl }: { document: ReaderD
           {pages.map((text, i) => (
             <section key={i} aria-label={`Page ${i + 1}`}>
               <div className={proseClass}>
-                <ReactMarkdown>{text}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
               </div>
             </section>
           ))}
@@ -139,7 +170,7 @@ export default function DocumentReader({ document, pdfUrl }: { document: ReaderD
           </div>
           <article className="flex-1 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 overflow-y-auto">
             <div className={proseClass}>
-              <ReactMarkdown>{pages[page]}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{pages[page]}</ReactMarkdown>
             </div>
           </article>
           <div className="flex items-center justify-between">
@@ -167,6 +198,21 @@ export default function DocumentReader({ document, pdfUrl }: { document: ReaderD
           </div>
         </div>
       )}
+
+      <div className="shrink-0 sticky bottom-0 z-20 px-4 pb-3 pt-2 bg-gradient-to-t from-[var(--bg-base)] via-[var(--bg-base)]/95 to-transparent md:flex md:justify-center">
+        <button
+          type="button"
+          onClick={open}
+          aria-haspopup="dialog"
+          className="w-full md:max-w-xl h-12 rounded-full bg-[var(--bg-surface-alt)] border border-[var(--border-strong)] flex items-center gap-2.5 pl-4 pr-1.5 text-left shadow-[0_8px_24px_rgba(0,0,0,0.5)] hover:border-[var(--accent-solid)] transition-colors"
+        >
+          <span className="font-mono text-[13px] text-[var(--accent-text)]" aria-hidden>&gt;_</span>
+          <span className="flex-1 min-w-0 truncate text-sm text-[var(--text-muted)]">Ask this source</span>
+          <span className="w-9 h-9 rounded-full bg-[var(--accent-solid)] text-[var(--on-accent)] flex items-center justify-center shrink-0" aria-hidden>
+            <ArrowUp size={18} strokeWidth={2.4} />
+          </span>
+        </button>
+      </div>
     </div>
   );
 }

@@ -249,11 +249,21 @@ async function main() {
     assert(answer.includes('1847'), `missed the date: "${answer.slice(0, 120)}"`);
     assert(/\]\(cite:/.test(answer), 'no [•](cite:NAME) citation in the answer');
   });
-  await test('with no selection, Ask still finds the user’s own sources', async () => {
+  await test('with no source open, the console explains what is wrong instead of failing', async () => {
     const r = await bot1.call('POST', '/api/chat', { messages: [ask('What does Zorblax export?')] });
+    assert(r.status === 200, `status ${r.status}: ${r.text.slice(0, 160)}`);
+    const { answer, tools, error } = chatText(r.text);
+    needsAI(r, error);
+    assert(!tools.includes('searchSources'), 'search tool offered with no source');
+    assert(!/glassfern|lumicloth/i.test(answer), 'answered from sources even though none was open');
+    assert(/source|library|open/i.test(answer), `no guidance in the reply: "${answer.slice(0, 160)}"`);
+  });
+  await test('a source id that does not exist gets a plain-language explanation', async () => {
+    const r = await bot1.call('POST', '/api/chat', { messages: [ask('Summarise this source')], activeSources: ['does-not-exist'] });
+    assert(r.status === 200, `status ${r.status}: ${r.text.slice(0, 160)}`);
     const { answer, error } = chatText(r.text);
     needsAI(r, error);
-    assert(/glassfern|lumicloth/i.test(answer), `answer: "${answer.slice(0, 140)}"`);
+    assert(/library|deleted|find|found|add/i.test(answer), `no explanation in the reply: "${answer.slice(0, 160)}"`);
   });
   await test('another user cannot read it by passing the source id', async () => {
     const r = await bot2.call('POST', '/api/chat', { messages: [ask('What is the capital city of Zorblax?')], activeSources: [textDoc] });
@@ -266,10 +276,11 @@ async function main() {
     const { answer } = chatText(r.text);
     assert(!answer.includes(MARKER_FACT), `LEAK: bot2 got "${MARKER_FACT}" without any selection`);
   });
-  await test('another user cannot scope to someone else’s workspace', async () => {
+  await test('a workspaceId sent to the console grants no access to its sources', async () => {
     const mine = (await listDocs(bot1)).find((x) => x.id === textDoc);
-    const r = await bot2.call('POST', '/api/chat', { messages: [ask('hello')], workspaceId: mine.workspaceId });
-    assert(r.status === 404, `got ${r.status}`);
+    const r = await bot2.call('POST', '/api/chat', { messages: [ask('What is the capital city of Zorblax?')], workspaceId: mine.workspaceId });
+    const { answer } = chatText(r.text);
+    assert(!answer.includes(MARKER_FACT), `LEAK: bot2 got "${MARKER_FACT}" through a workspaceId`);
   });
   await test('empty or malformed messages are a 400', async () => {
     const a = await bot1.call('POST', '/api/chat', { messages: [] });
