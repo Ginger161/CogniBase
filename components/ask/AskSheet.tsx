@@ -1,16 +1,17 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowUp, ChevronLeft, GraduationCap, Layers, Network, Presentation, RotateCcw, Square, X } from 'lucide-react';
+import { ArrowUp, ChevronLeft, GraduationCap, HelpCircle, Layers, Network, Presentation, RotateCcw, Square, X } from 'lucide-react';
 import type { UIMessage } from 'ai';
 import { useAsk } from './AskProvider';
 import GenerateAsset, { type AssetKind } from '../studio/GenerateAsset';
 import StudyGuideSheet from '../library/StudyGuideSheet';
 
-type Tool = 'cards' | 'map' | 'slides' | 'guide';
-const KIND: Record<Exclude<Tool, 'guide'>, AssetKind> = { cards: 'flashcards', map: 'mindmap', slides: 'slides' };
+type Tool = 'cards' | 'quiz' | 'map' | 'slides' | 'guide';
+const KIND: Record<Exclude<Tool, 'guide'>, AssetKind> = { cards: 'flashcards', quiz: 'quiz', map: 'mindmap', slides: 'slides' };
 
 const SUGGESTIONS = [
   'Summarise the key ideas',
@@ -30,17 +31,44 @@ function isSearching(m: UIMessage | undefined): boolean {
   );
 }
 
+// A citation link is cite:NAME#N, where N is the passage the claim came from.
+function parseCite(href: string): { name: string; n: number | null } {
+  let raw = href.slice(5);
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+    /* keep it as written */
+  }
+  const m = raw.match(/^(.*)#(\d+)$/);
+  return m ? { name: m[1], n: Number(m[2]) } : { name: raw, n: null };
+}
+
 // Distinct cited document names, in order of first appearance.
 function citedNames(text: string): string[] {
   const names: string[] = [];
   for (const match of text.matchAll(/\]\(cite:([^)]+)\)/g)) {
-    const name = decodeURIComponent(match[1]);
+    const { name } = parseCite(`cite:${match[1]}`);
     if (!names.includes(name)) names.push(name);
   }
   return names;
 }
 
+// The passages the search returned for this answer, keyed by the number the AI cites.
+function passagesOf(m: UIMessage): Map<number, string> {
+  const found = new Map<number, string>();
+  for (const part of m.parts) {
+    const output = part.type.startsWith('tool-') ? (part as { output?: unknown }).output : null;
+    if (typeof output !== 'string') continue;
+    for (const hit of output.matchAll(/\[Source Document: .+? \| passage (\d+)\]\n([\s\S]*?)(?=\n\n---\n\n\[Source Document:|$)/g)) {
+      found.set(Number(hit[1]), hit[2]);
+    }
+  }
+  return found;
+}
+
 function friendlyError(error: Error): string {
+  // A plan-limit message is already written for the student, with what to do next.
+  if ((error.message || '').includes('Plan & credits')) return error.message;
   const msg = (error.message || '').toLowerCase();
   if (msg.includes('daily usage limit') || msg.includes('quota')) return "The AI's daily usage limit has been reached. Try again later.";
   if (msg.includes('429') || msg.includes('too fast') || msg.includes('rate limit')) {
@@ -55,7 +83,8 @@ function friendlyError(error: Error): string {
   return 'Something went wrong generating that answer.';
 }
 
-function AssistantBody({ text }: { text: string }) {
+function AssistantBody({ text, passages }: { text: string; passages: Map<number, string> }) {
+  const { jumpToPassage, close } = useAsk();
   const names = useMemo(() => citedNames(text), [text]);
   return (
     <div className="flex flex-col gap-3">
@@ -65,13 +94,28 @@ function AssistantBody({ text }: { text: string }) {
           components={{
             a: ({ href, children }) => {
               if (href?.startsWith('cite:')) {
-                const name = decodeURIComponent(href.slice(5));
+                const { name, n: passageNo } = parseCite(href);
                 const n = names.indexOf(name) + 1;
-                return (
-                  <sup
-                    title={name}
-                    className="inline-flex items-center justify-center min-w-[18px] h-[18px] ml-1 rounded-full bg-[var(--tag-bg)] text-[var(--tag-text)] text-[11px] font-bold not-italic align-[2px]"
+                const passage = passageNo !== null ? passages.get(passageNo) : undefined;
+                const badge =
+                  'inline-flex items-center justify-center min-w-[18px] h-[18px] ml-1 rounded-full bg-[var(--tag-bg)] text-[var(--tag-text)] text-[11px] font-bold not-italic align-[2px]';
+                // With a passage to point at, the number becomes a button that opens the source at that spot.
+                return passage ? (
+                  <button
+                    type="button"
+                    title={`Show this in ${name}`}
+                    aria-label={`Show source ${n} in the text`}
+                    onClick={() => {
+                      jumpToPassage(passage);
+                      // On a phone the console covers the page, so step aside to reveal it.
+                      if (window.matchMedia('(max-width: 767px)').matches) close();
+                    }}
+                    className={`${badge} hover:bg-[var(--accent-solid)] hover:text-[var(--on-accent)]`}
                   >
+                    {n}
+                  </button>
+                ) : (
+                  <sup title={name} className={badge}>
                     {n}
                   </sup>
                 );
@@ -214,7 +258,7 @@ export default function AskSheet() {
                   {text}
                 </div>
               ) : (
-                <AssistantBody key={m.id} text={text} />
+                <AssistantBody key={m.id} text={text} passages={passagesOf(m)} />
               );
             })
           )}
@@ -229,9 +273,15 @@ export default function AskSheet() {
           {error && !isBusy && (
             <div role="alert" className="flex items-start gap-3 p-3 rounded-xl border border-[var(--danger)]/30 bg-[var(--danger)]/10">
               <p className="flex-1 text-sm text-[var(--danger)]">{friendlyError(error)}</p>
-              <button type="button" onClick={retry} className="min-h-11 px-3 text-sm font-semibold underline text-[var(--text-primary)]">
-                Retry
-              </button>
+              {error.message.includes('Plan & credits') ? (
+                <Link href="/billing" onClick={close} className="min-h-11 px-3 flex items-center text-sm font-semibold underline text-[var(--text-primary)]">
+                  Top up
+                </Link>
+              ) : (
+                <button type="button" onClick={retry} className="min-h-11 px-3 text-sm font-semibold underline text-[var(--text-primary)]">
+                  Retry
+                </button>
+              )}
             </div>
           )}
 
@@ -241,6 +291,7 @@ export default function AskSheet() {
               <div className="flex flex-wrap gap-2">
                 {([
                   ['cards', 'Flashcards', Layers],
+                  ['quiz', 'Quiz', HelpCircle],
                   ['map', 'Mind map', Network],
                   ['slides', 'Slides', Presentation],
                   ['guide', 'Study guide', GraduationCap],

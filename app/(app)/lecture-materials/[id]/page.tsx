@@ -18,10 +18,10 @@ export default async function LectureMaterialReader({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ console?: string }>;
+  searchParams: Promise<{ console?: string; audio?: string }>;
 }) {
   const { id } = await params;
-  const { console: consoleParam } = await searchParams;
+  const { console: consoleParam, audio: audioParam } = await searchParams;
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -45,8 +45,13 @@ export default async function LectureMaterialReader({
     );
   }
 
+  // Where the reader left off. Optional: the reader opens at the top if this cannot be loaded.
+  const saved = user
+    ? await prisma.readingProgress.findUnique({ where: { userId_documentId: { userId: user.id, documentId: id } }, select: { progress: true } }).catch(() => null)
+    : null;
+
   const isPdf = document.sourceType === 'file' && document.name.toLowerCase().endsWith('.pdf');
   const fileUrl = isPdf ? await viewableUrl(supabase, document.url) : null;
 
-  return <DocumentReader document={document} pdfUrl={fileUrl} openConsole={consoleParam === '1'} />;
+  return <DocumentReader document={document} pdfUrl={fileUrl} openConsole={consoleParam === '1'} openAudio={audioParam === '1'} initialProgress={saved?.progress ?? 0} />;
 }

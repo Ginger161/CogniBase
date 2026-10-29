@@ -45,7 +45,12 @@ export async function updateSession(request: NextRequest) {
   // OAuth/email-link callback must work before a session exists
   const isAuthCallback = pathname.startsWith('/auth/');
 
-  if (!user && !isShared && !isEntryPage && !isAuthCallback) {
+  // Files the browser fetches before anyone signs in, and the payment provider's webhook (it has no session;
+  // the route itself rejects anything without a valid signature).
+  const isPublicAsset = pathname === '/sw.js' || pathname === '/manifest.webmanifest';
+  const isPaymentWebhook = pathname === '/api/billing/webhook';
+
+  if (!user && !isShared && !isEntryPage && !isAuthCallback && !isPublicAsset && !isPaymentWebhook) {
     // API clients need a status code, not an HTML redirect
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

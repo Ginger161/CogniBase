@@ -47,6 +47,8 @@ model Document {
   workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   chunks      DocumentChunk[]
   studyGuides StudyGuide[]
+  highlights  Highlight[]
+  readingProgress ReadingProgress[]
 
   @@index([workspaceId])
 }
@@ -72,6 +74,10 @@ model User {
   department       String?
   stripeCustomerId String?       @unique
   planTier         String        @default("FREE")
+  // When a paid plan lapses back to Free. Null means it does not expire (for example a plan you granted by hand).
+  planExpiresAt    DateTime?
+  // Set when staff pause an account. A paused account can still read, but cannot use AI, uploads or audio.
+  suspendedAt      DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   workspaces       Workspace[]
@@ -81,6 +87,16 @@ model User {
   dailyMetrics     DailyMetric[]
   auditLogs        AuditLog[]
   studyGuideProgress StudyGuideProgress[]
+  highlights       Highlight[]
+  readingProgress  ReadingProgress[]
+  cardStates       CardState[]
+  quizAttempts     QuizAttempt[]
+  exams            Exam[]
+  usageEvents      UsageEvent[]
+  creditEntries    CreditLedger[]
+  staff            StaffMember?
+  payments         Payment[]
+  redemptions      InviteRedemption[]
   preferences      UserPreferences?
   profile          Json?
 }
@@ -127,6 +143,8 @@ model StudioAsset {
   content     Json
   createdAt   DateTime  @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cardStates  CardState[]
+  quizAttempts QuizAttempt[]
 
   @@index([workspaceId])
 }
@@ -191,3 +209,184 @@ model UserPreferences {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// A passage the reader saved while studying a source, with an optional note.
+model Highlight {
+  id         String   @id @default(cuid())
+  userId     String
+  documentId String
+  quote      String   @db.Text
+  note       String?  @db.Text
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, documentId])
+}
+
+// How far through a source the reader got (0 to 1), so it can resume and the Library can show it.
+model ReadingProgress {
+  id         String   @id @default(cuid())
+  userId     String
+  documentId String
+  progress   Float    @default(0)
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, documentId])
+}
+
+// Spaced-repetition state for one card of a saved flashcard set. Cards with no row are new.
+model CardState {
+  id             String      @id @default(cuid())
+  userId         String
+  assetId        String
+  cardIndex      Int
+  ease           Float       @default(2.5)
+  intervalDays   Int         @default(0)
+  reps           Int         @default(0)
+  lapses         Int         @default(0)
+  correct        Int         @default(0)
+  total          Int         @default(0)
+  dueAt          DateTime
+  lastReviewedAt DateTime?
+  createdAt      DateTime    @default(now())
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset          StudioAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, assetId, cardIndex])
+  @@index([userId, dueAt])
+}
+
+// One finished run of a quiz. Keeps its score if the quiz itself is later deleted.
+model QuizAttempt {
+  id        String       @id @default(cuid())
+  userId    String
+  assetId   String?
+  title     String
+  score     Int
+  total     Int
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset     StudioAsset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
+// An upcoming exam and the sources it covers. Study plans are worked out from this.
+model Exam {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  examDate    DateTime
+  documentIds String[]
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, examDate])
+}
+
+// One metered action (a chat message, a generated item, minutes of voiced audio...).
+// includedUnits came out of the plan's monthly allowance; credits were spent for the rest.
+model UsageEvent {
+  id            String   @id @default(cuid())
+  userId        String
+  kind          String
+  units         Int      @default(1)
+  includedUnits Int      @default(0)
+  credits       Int      @default(0)
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
+}
+
+// Every change to a user's credit balance: purchases and grants are positive, spending is negative.
+// The balance is the sum of amount. ref is unique so a payment or grant can never be applied twice.
+model CreditLedger {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    String // PURCHASE, GRANT, USAGE, PLAN, REFUND
+  ref       String?  @unique
+  note      String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// A moderator or other team member. The owner is not a row here: owners come from ADMIN_EMAILS.
+// permissions holds the keys from lib/staff.ts that this person may use; anything not listed is hidden from them.
+model StaffMember {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  permissions String[]
+  addedById   String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// A real payment from Paystack, kept for finance reporting even if the user is later deleted.
+model Payment {
+  id         String   @id @default(cuid())
+  userId     String?
+  reference  String   @unique
+  product    String
+  amountNgn  Int
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+// A code that gives a tester credits and/or a plan when they redeem it.
+model Invite {
+  id          String             @id @default(cuid())
+  code        String             @unique
+  note        String?
+  credits     Int                @default(0)
+  planTier    String?
+  planDays    Int?
+  maxUses     Int                @default(1)
+  uses        Int                @default(0)
+  expiresAt   DateTime?
+  active      Boolean            @default(true)
+  createdById String?
+  createdAt   DateTime           @default(now())
+  redemptions InviteRedemption[]
+}
+
+model InviteRedemption {
+  id        String   @id @default(cuid())
+  inviteId  String
+  userId    String
+  createdAt DateTime @default(now())
+  invite    Invite   @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([inviteId, userId])
+}
+
+// What it costs to run the business, entered by hand: hosting, domains, services. Feeds the funds and runway view.
+model Expense {
+  id          String   @id @default(cuid())
+  label       String
+  category    String
+  amountNgn   Int
+  incurredOn  DateTime
+  recurring   String? // "monthly", "yearly" or empty for a one-off
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([incurredOn])
+}
+
+// Live switches and settings the owner can change without a deploy (kill switches, maintenance message).
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}

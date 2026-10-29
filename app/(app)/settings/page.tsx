@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { writeThemeCookie } from '@/lib/theme-cookie';
 import { authErrorMessage, friendlyError, readApiError } from '@/lib/client-errors';
-import { Download, Loader2, LogOut } from 'lucide-react';
+import { clearOfflineData } from '@/lib/offline';
+import { ChevronRight, Coins, Download, Loader2, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/utils/supabase/client';
 import { useUserContext } from '@/lib/hooks/useUserContext';
@@ -143,6 +145,7 @@ export default function SettingsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'sign_out', details: 'Signed out' }),
     }).catch(() => {});
+    await clearOfflineData();
     await supabase.auth.signOut();
     window.location.href = '/login';
   };
@@ -172,6 +175,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/settings/account', { method: 'DELETE' });
       if (!res.ok) throw await readApiError(res, 'Could not delete your account.');
+      await clearOfflineData();
       await supabase.auth.signOut();
       window.location.href = '/';
     } catch (err) {
@@ -185,6 +189,17 @@ export default function SettingsPage() {
   return (
     <div className="max-w-xl mx-auto px-5 pt-2 md:pt-8 pb-10 flex flex-col gap-5">
       <h1 className="text-[28px] font-bold tracking-tight">Settings</h1>
+
+      <Link href="/billing" className={`${card} !flex-row items-center gap-3 hover:border-[var(--accent-solid)]`}>
+        <span className="w-11 h-11 rounded-xl bg-[var(--tag-bg)] flex items-center justify-center shrink-0">
+          <Coins size={22} className="text-[var(--accent-text)]" aria-hidden />
+        </span>
+        <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+          <span className="text-base font-bold">Plan &amp; credits</span>
+          <span className="text-sm text-[var(--text-secondary)]">See what you have used, top up or upgrade</span>
+        </span>
+        <ChevronRight size={20} className="text-[var(--text-muted)]" aria-hidden />
+      </Link>
 
       <form onSubmit={save} className={card} aria-labelledby="profile-h">
         <h2 id="profile-h" className="text-base font-bold">

@@ -6,6 +6,7 @@ import { recordMetric } from '@/lib/metrics';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createClient } from '@/utils/supabase/server';
+import { checkUsage, recordUsage } from '@/lib/usage';
 import { requireUser, requireWorkspaceOwnership, requireDocumentOwnership, getOrCreateUserVault, isTrustedStorageUrl, isPublicWebUrl, badFileUrlResponse } from '@/lib/api-auth';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as cheerio from 'cheerio';
@@ -42,6 +43,13 @@ export async function POST(req: Request) {
     } else {
       const { workspace, response: ownerResp } = await requireWorkspaceOwnership(targetWorkspaceId, user.id);
       if (!workspace) return ownerResp;
+    }
+
+    // Pasted text needs no AI to read, so it is free. Files and links are checked before the work and counted after.
+    const metered = !(typeof rawText === 'string' && rawText.trim());
+    if (metered) {
+      const allowed = await checkUsage(user.id, 'upload');
+      if (!allowed.ok) return NextResponse.json({ error: allowed.message }, { status: allowed.status });
     }
 
     let extractedText = "";
@@ -175,6 +183,7 @@ export async function POST(req: Request) {
       data: { name: docName, url: url || 'text://pasted', workspaceId: targetWorkspaceId, fileSize, textContent: extractedText, sourceType, category: category || 'Note' }
     });
 
+    if (metered) await recordUsage(user.id, 'upload');
     recordMetric(user.id, 'upload_document').catch((e) => console.error("Failed to update gamification metric:", e));
 
     logActivity(user.id, 'upload_document', `Uploaded "${name}"`, req).catch(console.error);
@@ -216,8 +225,14 @@ export async function GET(req: Request) {
       },
     });
 
+    // How far through each source the student has read. Optional: the list still works if this fails.
+    const progress = await prisma.readingProgress
+      .findMany({ where: { userId: user.id }, select: { documentId: true, progress: true } })
+      .catch(() => []);
+    const read = new Map(progress.map((p) => [p.documentId, p.progress]));
+
     return NextResponse.json(
-      docs.map(({ _count, ...d }) => ({ ...d, chunkCount: _count.chunks, indexed: _count.chunks > 0 }))
+      docs.map(({ _count, ...d }) => ({ ...d, chunkCount: _count.chunks, indexed: _count.chunks > 0, readProgress: read.get(d.id) ?? 0 }))
     );
   } catch (error) {
     console.error("API Crash Error:", error);

@@ -45,7 +45,30 @@ export async function GET() {
       else break;
     }
 
+    // Retention: how well quizzes and flashcards are going. Optional, so Progress still loads without it.
+    const retention = await (async () => {
+      const [attempts, cards] = await Promise.all([
+        prisma.quizAttempt.findMany({
+          where: { userId: user.id, createdAt: { gte: start } },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { title: true, score: true, total: true, createdAt: true },
+        }),
+        prisma.cardState.aggregate({ where: { userId: user.id }, _sum: { correct: true, total: true }, _count: true }),
+      ]);
+      const cardTotal = cards._sum.total ?? 0;
+      return {
+        quizPercent: attempts.length
+          ? Math.round((attempts.reduce((n, a) => n + a.score / a.total, 0) / attempts.length) * 100)
+          : null,
+        recentQuizzes: attempts.slice(0, 5),
+        recallPercent: cardTotal > 0 ? Math.round(((cards._sum.correct ?? 0) / cardTotal) * 100) : null,
+        cardsLearning: cards._count,
+      };
+    })().catch(() => null);
+
     return NextResponse.json({
+      retention,
       focusGoal: prefs?.dailyFocusGoal ?? 120,
       taskGoal: 5,
       today: week[week.length - 1],
@@ -80,6 +103,8 @@ export async function POST(req: Request) {
       flashcard_review: 'Reviewed a flashcard',
       complete_phase: 'Completed a study guide phase',
       generate_asset: 'Generated a studio asset',
+      complete_quiz: 'Finished a quiz',
+      listen_audio: 'Listened to an audio overview',
     };
     if (actionLabels[action]) {
       logActivity(user.id, action, actionLabels[action], req).catch(console.error);

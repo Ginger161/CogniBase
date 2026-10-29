@@ -8,6 +8,7 @@ import { getScopedText, resolveScopedDocs } from '@/lib/scope';
 import { recordMetric } from '@/lib/metrics';
 import { logActivity } from '@/lib/audit-log';
 import { classifyAiError } from '@/lib/ai-errors';
+import { checkUsage, recordUsage } from '@/lib/usage';
 
 export const maxDuration = 60;
 
@@ -17,7 +18,7 @@ const MAX_SOURCE_CHARS = 50000;
 const ATTEMPT_TIMEOUT_MS = 40_000;
 const RETRY_ONLY_BEFORE_MS = 15_000;
 
-type Kind = 'flashcards' | 'mindmap' | 'slides';
+type Kind = 'flashcards' | 'mindmap' | 'slides' | 'quiz';
 
 const SPECS: Record<Kind, { assetType: string; label: string; prompt: string }> = {
   flashcards: {
@@ -32,6 +33,12 @@ const SPECS: Record<Kind, { assetType: string; label: string; prompt: string }> 
     prompt:
       'You are an expert visual educator. Analyze the provided text and map out the core concepts and their relationships using standard Mermaid.js flowchart syntax. You MUST use graph TD. You MUST create a deep, vertical, hierarchical tree with a single root node at the top, branching downwards into sub-topics. Do NOT create a flat horizontal list of disconnected nodes. Keep the node text concise. Output strictly as a JSON object with a single key "mermaidCode" containing the raw Mermaid syntax string. No markdown backticks, HTML or commentary.',
   },
+  quiz: {
+    assetType: 'QUIZ',
+    label: 'Quiz',
+    prompt:
+      'You are an expert examiner. Analyze the provided text and write 8 multiple-choice questions that test understanding of its most examinable ideas, not trivia. Each question has exactly 4 options, only one correct, with plausible wrong answers. Output strictly as a JSON array of objects with the keys "question" (string), "options" (array of 4 strings), "answerIndex" (integer 0 to 3, the correct option) and "explanation" (one or two sentences on why that answer is right). No markdown, no commentary.',
+  },
   slides: {
     assetType: 'PRESENTATION',
     label: 'Slides',
@@ -41,7 +48,7 @@ const SPECS: Record<Kind, { assetType: string; label: string; prompt: string }> 
 };
 
 function isKind(x: unknown): x is Kind {
-  return x === 'flashcards' || x === 'mindmap' || x === 'slides';
+  return x === 'flashcards' || x === 'mindmap' || x === 'slides' || x === 'quiz';
 }
 
 // Accepts the shape we asked for plus the near-misses models tend to produce.
@@ -54,6 +61,28 @@ function normalise(kind: Kind, raw: unknown): Prisma.InputJsonValue | null {
       .filter((c) => typeof c?.question === 'string' && typeof c?.answer === 'string')
       .map((c) => ({ question: c.question as string, answer: c.answer as string }));
     return cards.length > 0 ? cards : null;
+  }
+  if (kind === 'quiz') {
+    const list = Array.isArray(raw) ? raw : Array.isArray(asObj.questions) ? asObj.questions : null;
+    const questions = (list ?? [])
+      .map((q) => q as Record<string, unknown>)
+      .filter(
+        (q) =>
+          typeof q?.question === 'string' &&
+          Array.isArray(q.options) &&
+          q.options.length === 4 &&
+          q.options.every((o) => typeof o === 'string') &&
+          Number.isInteger(q.answerIndex) &&
+          (q.answerIndex as number) >= 0 &&
+          (q.answerIndex as number) <= 3
+      )
+      .map((q) => ({
+        question: q.question as string,
+        options: q.options as string[],
+        answerIndex: q.answerIndex as number,
+        explanation: typeof q.explanation === 'string' ? q.explanation : '',
+      }));
+    return questions.length > 0 ? questions : null;
   }
   if (kind === 'mindmap') {
     const code = typeof asObj.mermaidCode === 'string' ? asObj.mermaidCode.replace(/```(mermaid)?/g, '').trim() : '';
@@ -118,6 +147,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'There is no readable text in the selected sources.' }, { status: 400 });
     }
 
+    const allowed = await checkUsage(user.id, 'generate');
+    if (!allowed.ok) return NextResponse.json({ error: allowed.message }, { status: allowed.status });
+
     const spec = SPECS[kind];
     let content: Prisma.InputJsonValue | null;
     try {
@@ -137,6 +169,7 @@ export async function POST(req: Request) {
       data: { workspaceId: saveWorkspaceId, title, type: spec.assetType, content },
     });
 
+    await recordUsage(user.id, 'generate');
     recordMetric(user.id, 'generate_asset').catch((e) => console.error('Metric failed:', e));
     logActivity(user.id, 'save_studio_asset', `Saved a ${spec.assetType} to Studio Assets`, req).catch(console.error);
 

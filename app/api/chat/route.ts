@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/api-auth';
 import { resolveScopedDocs } from '@/lib/scope';
 import { classifyAiError } from '@/lib/ai-errors';
+import { checkUsage, recordUsage } from '@/lib/usage';
 import { z } from 'zod';
 
 export const maxDuration = 60;
@@ -57,6 +58,13 @@ export async function POST(req: Request) {
       }
     }
 
+    // A real question counts against the plan. Explaining a missing source is free, so it is not metered.
+    if (!problem) {
+      const allowed = await checkUsage(user.id, 'chat');
+      if (!allowed.ok) return new Response(allowed.message, { status: allowed.status });
+      await recordUsage(user.id, 'chat');
+    }
+
     const profileText = JSON.stringify(userProfile ?? {}).slice(0, 2000);
 
     const systemPrompt = `You are CogniBase, an elite academic tutor and exam strategist for university students. You are empathetic, proactive and highly structured.
@@ -66,7 +74,7 @@ The student is reading a source and has opened its console: [${scopeNames.join('
 Rule 1: For anything about the source, call searchSources first and answer strictly from what it returns. Mention specific details present in the text rather than generic subject talk.
 Rule 2: If the question needs knowledge beyond the source, say "This information is not explicitly found in your uploaded materials, but based on general best practices..." before answering. Never present outside knowledge as if it came from the document.
 Rule 3: Keep continuity with the conversation history; resolve pronouns like "that rule" from earlier turns.
-Rule 4: When a statement is drawn directly from the source, add a citation right after it in exactly this markdown form: [•](cite:EXACT_DOCUMENT_NAME), using the filename from the [Source Document: ...] tag. At most one citation per distinct claim or paragraph. No citations on general-knowledge statements.
+Rule 4: When a statement is drawn directly from the source, add a citation right after it in exactly this markdown form: [•](cite:EXACT_DOCUMENT_NAME#N), using the filename and the passage number N from the [Source Document: NAME | passage N] tag the statement came from. At most one citation per distinct claim or paragraph. No citations on general-knowledge statements.
 Rule 5: The student's timetable and daily metrics are available across the whole app through getUserTimetable and getDailyMetrics. Use them only when asked about schedule, classes or focus, and always say which resource you used, for example "From your timetable" or "From today's metrics". Never mix them up with what the source says.
 Rule 6: If anything stops you from answering (the situation below, a tool error, or an empty result), tell the student in plain language: what is wrong, why it happened, and what they can do next. Keep it short and kind, never blame them, never show technical jargon or error codes, and never invent source content to fill the gap.
 ${problem ? `
@@ -74,6 +82,9 @@ CURRENT SITUATION: ${problem}
 Do not try to answer questions about the source. Explain this to the student using Rule 6. Suggested next steps: for NO_SOURCE, go back to the Library and open the source again; for SOURCE_NOT_FOUND, return to the Library and check the source still exists, or add it again; for NOT_INDEXED, open the source's menu in the Library and choose "Retry indexing", or wait a moment if indexing is still running. You may still help with schedule or focus questions.
 ` : ''}
 Student context (use silently to calibrate tone and examples): ${profileText}`;
+
+    // Passages are numbered across every search in this answer, so a citation always points at one passage.
+    let passageNo = 0;
 
     const result = streamText({
       model: google('gemini-3.5-flash'),
@@ -137,7 +148,7 @@ Student context (use silently to calibrate tone and examples): ${profileText}`;
               `;
 
               if (!matches || matches.length === 0) return { error: 'Nothing in this source matched that question. Suggest rephrasing it with words the source uses, or asking about a section it covers.' };
-              return matches.map((m) => `[Source Document: ${m.documentName}]\n${m.content}`).join('\n\n---\n\n');
+              return matches.map((m) => `[Source Document: ${m.documentName} | passage ${++passageNo}]\n${m.content}`).join('\n\n---\n\n');
             } catch (e) {
               console.error('Vector search error in tool', e);
               return { error: 'The search could not run just now, likely a temporary problem reaching the AI service. Suggest trying again in a moment.' };

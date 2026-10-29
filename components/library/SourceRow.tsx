@@ -30,7 +30,8 @@ export default function SourceRow({ source, selected, indexing, onToggle, onMenu
     status = 'Not searchable yet · open menu to retry';
     statusClass = 'text-[var(--danger)]';
   } else {
-    status = ['Indexed', formatSize(source.fileSize)].filter(Boolean).join(' · ');
+    const read = source.readProgress ?? 0;
+    status = [read >= 0.98 ? 'Finished' : read > 0.02 ? `${Math.round(read * 100)}% read` : 'Indexed', formatSize(source.fileSize)].filter(Boolean).join(' · ');
   }
 
   return (

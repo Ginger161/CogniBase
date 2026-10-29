@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Download, Maximize, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { TransformComponent, TransformWrapper, useControls } from 'react-zoom-pan-pinch';
 import { toast } from 'sonner';
+import QuizPlayer, { type QuizQuestion } from './QuizPlayer';
 
 export type StudioAsset = {
   id: string;
@@ -194,7 +195,7 @@ function Slides({ slides, title }: { slides: Slide[]; title: string }) {
 }
 
 /** Full-screen viewer for a saved flashcard set, mind map or slide deck. */
-export default function AssetViewer({ asset, onClose }: { asset: Pick<StudioAsset, 'title' | 'type' | 'content'>; onClose: () => void }) {
+export default function AssetViewer({ asset, onClose }: { asset: Pick<StudioAsset, 'id' | 'title' | 'type' | 'content'>; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -207,6 +208,7 @@ export default function AssetViewer({ asset, onClose }: { asset: Pick<StudioAsse
   const c = asset.content as unknown;
   let body: React.ReactNode;
   if (asset.type === 'FLASHCARD' && Array.isArray(c) && c.length > 0) body = <Flashcards cards={c as Card[]} />;
+  else if (asset.type === 'QUIZ' && Array.isArray(c) && c.length > 0) body = <QuizPlayer assetId={asset.id} questions={c as QuizQuestion[]} />;
   else if (asset.type === 'MINDMAP' && typeof (c as { mermaidCode?: unknown })?.mermaidCode === 'string')
     body = <MindMap code={(c as { mermaidCode: string }).mermaidCode} />;
   else if (asset.type === 'PRESENTATION' && Array.isArray(c) && c.length > 0) body = <Slides slides={c as Slide[]} title={asset.title} />;

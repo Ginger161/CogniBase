@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/api-auth';
 import { ensurePrismaUser } from '@/lib/auth-sync';
 import { getMidnightDate } from '@/lib/metrics';
+import { buildReviewQueue } from '@/lib/review-queue';
+import { upcomingExams } from '@/lib/exams';
 
 type Phase = { phaseId?: string; title?: string };
 
@@ -16,6 +18,12 @@ export async function GET() {
     const today = getMidnightDate(new Date());
     const weekStart = new Date(today);
     weekStart.setUTCDate(today.getUTCDate() - 6);
+
+    // Newer features degrade quietly: Home still loads if their tables are not there yet.
+    const [review, exams] = await Promise.all([
+      buildReviewQueue(user.id).then((q) => ({ due: q.dueCount, fresh: q.newCount })).catch(() => ({ due: 0, fresh: 0 })),
+      upcomingExams(user.id, 1).catch(() => []),
+    ]);
 
     const [timetable, guides, metrics, prefs, recent, sourceCount] = await Promise.all([
       prisma.timetable.findFirst({ where: { userId: user.id } }),
@@ -79,6 +87,8 @@ export async function GET() {
       week,
       recent,
       sourceCount,
+      review,
+      exam: exams[0] ?? null,
     });
   } catch (error) {
     console.error('Home API error:', error);

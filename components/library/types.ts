@@ -11,6 +11,8 @@ export type LibrarySource = {
   workspaceId: string;
   indexed: boolean;
   chunkCount: number;
+  /** How much of the source has been read, 0 to 1. */
+  readProgress?: number;
 };
 
 export type IndexingState = { percent: number; message: string };

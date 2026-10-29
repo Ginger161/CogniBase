@@ -171,7 +171,7 @@ function parseBlocks(segment: string): Block[] {
 
     if (dotted && !TERMINAL.test(dotted[2]) && dotted[2].length <= 80) {
       flush();
-      blocks.push({ kind: 'heading', level: Math.min(dotted[1].split('.').length + 1, 4), text: `${dotted[1]} ${dotted[2]}` });
+      blocks.push({ kind: 'heading', level: Math.min(dotted[1].split('.').length, 4), text: `${dotted[1]} ${dotted[2]}` });
       continue;
     }
 
@@ -228,7 +228,8 @@ function parseBlocks(segment: string): Block[] {
       blocks.push({ kind: 'heading', level: 3, text: line });
       continue;
     }
-    if (prevBlank && isolated && line.endsWith(':') && line.length <= 60) {
+    const afterSentence = i > 0 && TERMINAL.test(lines[i - 1].trim());
+    if ((prevBlank || afterSentence) && (isolated || (next && (BULLET.test(next) || NUMBERED.test(next)))) && line.endsWith(':') && line.length <= 60) {
       flush();
       blocks.push({ kind: 'paragraph', text: `**${line.slice(0, -1)}:**` });
       continue;
@@ -255,7 +256,21 @@ function isShortRun(lines: string[], at: number): boolean {
   return spread > 25;
 }
 
+/** A reading needs one title. If nothing is H1, the first heading becomes it and the rest keep their order. */
+function ensureTitle(blocks: Block[]): void {
+  const headings = blocks.filter((b): b is Extract<Block, { kind: 'heading' }> => b.kind === 'heading');
+  if (headings.length === 0 || headings.some((h) => h.level === 1)) return;
+  const first = headings[0];
+  // Only a heading that opens the text is a title; a lone mid-document heading stays a section.
+  if (blocks.indexOf(first) > 1) return;
+  first.level = 1;
+  // Keep the outline sensible: nothing may sit more than one level below its parent.
+  const min = Math.min(...headings.slice(1).map((h) => h.level), 6);
+  if (min > 2) for (const h of headings.slice(1)) h.level = Math.max(2, h.level - (min - 2));
+}
+
 function render(blocks: Block[]): string {
+  ensureTitle(blocks);
   const out: string[] = [];
   for (const b of blocks) {
     switch (b.kind) {

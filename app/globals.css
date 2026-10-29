@@ -99,18 +99,177 @@ html {
   }
 }
 
-/* Long-form reading text (document reader). Colours follow the active theme. */
+/* Long-form reading text (document reader). Colours follow the active theme.
+   Hierarchy comes from size, weight, colour and spacing together so every level reads as its own thing. */
 .reader-prose {
   --tw-prose-body: var(--text-secondary);
   --tw-prose-headings: var(--text-primary);
   --tw-prose-bold: var(--text-primary);
   --tw-prose-links: var(--accent-text);
-  --tw-prose-bullets: var(--text-muted);
-  --tw-prose-counters: var(--text-muted);
+  --tw-prose-bullets: var(--accent-text);
+  --tw-prose-counters: var(--accent-text);
   --tw-prose-quotes: var(--text-primary);
-  --tw-prose-quote-borders: var(--border-strong);
+  --tw-prose-quote-borders: var(--accent-solid);
   --tw-prose-hr: var(--border-color);
   --tw-prose-code: var(--text-primary);
   --tw-prose-th-borders: var(--border-strong);
   --tw-prose-td-borders: var(--border-color);
+  font-size: 17px;
+  line-height: 1.8;
+}
+.reader-prose > :first-child {
+  margin-top: 0;
+}
+.reader-prose h1 {
+  font-size: 2rem;
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin: 0 0 1.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--accent-solid);
+}
+.reader-prose h2 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 3.25rem 0 1rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--border-color);
+}
+.reader-prose h3 {
+  font-size: 1.1875rem;
+  line-height: 1.35;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--accent-text);
+  margin: 2.25rem 0 0.5rem;
+}
+.reader-prose h4,
+.reader-prose h5,
+.reader-prose h6 {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 1.75rem 0 0.25rem;
+}
+/* The paragraph right under the title is the lead-in. */
+.reader-prose h1 + p {
+  font-size: 1.1875rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+.reader-prose p {
+  margin: 0 0 1.25rem;
+}
+.reader-prose strong {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.reader-prose em {
+  font-style: italic;
+  color: var(--text-primary);
+}
+.reader-prose ul,
+.reader-prose ol {
+  margin: 0 0 1.5rem;
+  padding-left: 1.5rem;
+}
+.reader-prose li {
+  margin: 0.4rem 0;
+  padding-left: 0.25rem;
+}
+.reader-prose li::marker {
+  font-weight: 700;
+}
+.reader-prose blockquote {
+  margin: 1.75rem 0;
+  padding: 0.25rem 0 0.25rem 1.25rem;
+  border-left: 3px solid var(--accent-solid);
+  font-style: normal;
+  color: var(--text-primary);
+}
+.reader-prose blockquote p::before,
+.reader-prose blockquote p::after {
+  content: none;
+}
+.reader-prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  border-radius: 0.375rem;
+  background: var(--bg-surface-alt);
+}
+.reader-prose :not(pre) > code::before,
+.reader-prose :not(pre) > code::after {
+  content: none;
+}
+.reader-prose hr {
+  margin: 2.5rem 0;
+}
+.reader-prose table {
+  font-size: 0.9375rem;
+}
+.reader-prose th {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Reader: saved highlights and the flash that shows where a citation points. */
+.reader-prose mark.reader-mark {
+  background: var(--tag-bg);
+  color: inherit;
+  border-radius: 0.2em;
+  padding: 0.05em 0;
+  box-shadow: 0 0 0 2px var(--tag-bg);
+}
+.reader-flash {
+  background: var(--tag-bg);
+  outline: 2px solid var(--accent-solid);
+  outline-offset: 4px;
+  border-radius: 0.5rem;
+  transition: background 0.4s, outline-color 0.4s;
+}
+
+/* Scrollbars: thin, themed and quiet everywhere. They take colours from the tokens above,
+   so they follow whichever theme is active and never show the browser default. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Browsers without scrollbar-color (older Safari) get the same look through the WebKit pseudo-elements. */
+@supports not (scrollbar-color: auto) {
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+    background-clip: content-box;
+  }
+}
+
+/* Native controls (inputs, selects, date pickers) follow the theme instead of flashing light. */
+:root,
+html.charcoal,
+html.dark {
+  color-scheme: dark;
+}
+html.ivory {
+  color-scheme: light;
 }

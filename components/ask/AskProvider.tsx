@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useUserContext } from '@/lib/hooks/useUserContext';
@@ -14,6 +14,11 @@ type AskContextValue = {
   attach: (s: AskSource) => void;
   /** Detach the console and drop its conversation (leaving the source). */
   detach: () => void;
+  /** Open the console and send a message in one step (used by the reader's selection actions). */
+  askWith: (text: string) => void;
+  /** The reader registers how to scroll to a passage; the console calls it when a citation is tapped. */
+  setPassageHandler: (fn: ((passage: string) => void) | null) => void;
+  jumpToPassage: (passage: string) => void;
   isOpen: boolean;
   open: () => void;
   close: () => void;
@@ -80,11 +85,28 @@ export function AskProvider({ children }: { children: React.ReactNode }) {
     [sendMessage, requestOptions, source]
   );
 
+  const passageHandler = useRef<((passage: string) => void) | null>(null);
+  const setPassageHandler = useCallback((fn: ((passage: string) => void) | null) => {
+    passageHandler.current = fn;
+  }, []);
+  const jumpToPassage = useCallback((passage: string) => passageHandler.current?.(passage), []);
+
+  const askWith = useCallback(
+    (text: string) => {
+      setIsOpen(true);
+      send(text);
+    },
+    [send]
+  );
+
   const value = useMemo<AskContextValue>(
     () => ({
       source,
       attach,
       detach,
+      askWith,
+      setPassageHandler,
+      jumpToPassage,
       isOpen,
       open: () => setIsOpen(true),
       close: () => setIsOpen(false),
@@ -96,7 +118,7 @@ export function AskProvider({ children }: { children: React.ReactNode }) {
       isBusy,
       error,
     }),
-    [source, attach, detach, isOpen, messages, send, regenerate, requestOptions, setMessages, stop, isBusy, error]
+    [source, attach, detach, askWith, setPassageHandler, jumpToPassage, isOpen, messages, send, regenerate, requestOptions, setMessages, stop, isBusy, error]
   );
 
   return <AskContext.Provider value={value}>{children}</AskContext.Provider>;

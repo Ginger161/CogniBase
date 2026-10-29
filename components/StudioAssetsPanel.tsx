@@ -3,16 +3,31 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Layers, Network, Presentation, Trash2, Sparkles, type LucideIcon } from 'lucide-react';
+import { Headphones, HelpCircle, Layers, Network, Presentation, Trash2, Sparkles, type LucideIcon } from 'lucide-react';
 import AssetViewer, { type StudioAsset } from '@/components/studio/AssetViewer';
 import ConfirmSheet from '@/components/ui/ConfirmSheet';
 import { friendlyError, readApiError } from '@/lib/client-errors';
 
 const META: Record<string, { label: string; icon: LucideIcon }> = {
   FLASHCARD: { label: 'Flashcards', icon: Layers },
+  QUIZ: { label: 'Quiz', icon: HelpCircle },
+  AUDIO: { label: 'Audio overview', icon: Headphones },
   MINDMAP: { label: 'Mind map', icon: Network },
   PRESENTATION: { label: 'Slides', icon: Presentation },
 };
+
+// A link when the item opens elsewhere, a button when it opens in the viewer.
+function RowTag({ href, onClick, className, children }: { href?: string; onClick: () => void; className: string; children: React.ReactNode }) {
+  return href ? (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  ) : (
+    <button type="button" onClick={onClick} className={className}>
+      {children}
+    </button>
+  );
+}
 
 /** Everything generated from Ask or Library: flashcard sets, mind maps and slide decks. */
 export default function StudioAssetsPanel() {
@@ -76,7 +91,7 @@ export default function StudioAssetsPanel() {
         <div className="flex flex-col gap-1">
           <p className="text-lg font-semibold">Nothing here yet</p>
           <p className="text-sm text-[var(--text-secondary)] max-w-xs">
-            Ask about a source, then choose Flashcards, Mind map or Slides under the answer. They are saved here.
+            Open a source, then use its console to make Flashcards, a Quiz, a Mind map or Slides. They are saved here.
           </p>
         </div>
         <Link href="/vault" className="h-12 px-6 rounded-xl bg-[var(--accent-solid)] text-[var(--on-accent)] font-bold flex items-center">
@@ -92,9 +107,12 @@ export default function StudioAssetsPanel() {
         {assets.map((a) => {
           const meta = META[a.type] ?? { label: a.type, icon: Layers };
           const Icon = meta.icon;
+          // Audio plays in the reader of the source it came from, so it opens there instead of in the viewer.
+          const audioDoc = a.type === 'AUDIO' ? (a.content as { documentId?: string } | null)?.documentId : undefined;
+          const rowClass = 'w-full flex items-center gap-3.5 p-4 pr-14 text-left min-h-[72px]';
           return (
             <li key={a.id} className="relative bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl hover:border-[var(--accent-solid)]/60">
-              <button type="button" onClick={() => setViewing(a)} className="w-full flex items-center gap-3.5 p-4 pr-14 text-left min-h-[72px]">
+              <RowTag href={audioDoc ? `/lecture-materials/${audioDoc}?audio=1` : undefined} onClick={() => setViewing(a)} className={rowClass}>
                 <span className="w-11 h-11 rounded-xl bg-[var(--tag-bg)] flex items-center justify-center shrink-0">
                   <Icon size={22} className="text-[var(--accent-text)]" aria-hidden />
                 </span>
@@ -104,7 +122,7 @@ export default function StudioAssetsPanel() {
                     {meta.label} · {new Date(a.createdAt).toLocaleDateString()}
                   </span>
                 </span>
-              </button>
+              </RowTag>
               <button
                 type="button"
                 onClick={() => setDeleting(a)}

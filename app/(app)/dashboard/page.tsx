@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Clock, FileText, Film, Globe, StickyNote, UploadCloud } from 'lucide-react';
+import { CalendarClock, Clock, FileText, Film, Globe, Layers, StickyNote, UploadCloud } from 'lucide-react';
 import { findNextClass, formatClassTime, type TimetableClass } from '@/lib/utils/schedule';
 import { formatSmartTime } from '@/lib/utils/time';
 import { friendlyError, readApiError } from '@/lib/client-errors';
+import ReviewSession from '@/components/studio/ReviewSession';
+import { buildPlan, daysBetween, type PlanDoc } from '@/lib/study-plan';
 
 type HomeData = {
   name: string;
@@ -15,6 +17,8 @@ type HomeData = {
   week: { date: string; minutes: number }[];
   recent: { id: string; name: string; sourceType: string; createdAt: string }[];
   sourceCount: number;
+  review?: { due: number; fresh: number };
+  exam?: { id: string; title: string; examDate: string; documents: PlanDoc[] } | null;
 };
 
 function greeting(hour: number) {
@@ -61,6 +65,7 @@ export default function HomePage() {
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now] = useState(() => new Date());
+  const [reviewing, setReviewing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +127,48 @@ export default function HomePage() {
             <span className="text-sm text-[var(--text-secondary)]">Upload notes or paste a link, then ask questions about it.</span>
           </div>
         </Link>
+      )}
+
+      {data.exam && (() => {
+        const examDate = new Date(data.exam.examDate);
+        const days = daysBetween(now, examDate);
+        const today = buildPlan({ title: data.exam.title, examDate }, data.exam.documents, now, 1)[0];
+        return (
+          <Link href="/schedule?tab=exams" className={`${card} p-4 flex items-start gap-3.5 hover:border-[var(--accent-solid)]`}>
+            <div className="w-11 h-11 rounded-xl bg-[var(--tag-bg)] flex items-center justify-center shrink-0">
+              <CalendarClock size={22} className="text-[var(--accent-text)]" aria-hidden />
+            </div>
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="text-xs font-medium tracking-wider uppercase text-[var(--text-muted)]">
+                {days <= 0 ? 'Exam today' : `Exam in ${days} day${days === 1 ? '' : 's'}`}
+              </span>
+              <span className="text-[15px] font-semibold truncate">{data.exam.title}</span>
+              {today && today.tasks.length > 0 && (
+                <span className="text-[13px] text-[var(--text-secondary)]">Today: {today.tasks.map((t) => t.label).join(' · ')}</span>
+              )}
+            </div>
+          </Link>
+        );
+      })()}
+
+      {data.review && data.review.due + data.review.fresh > 0 && (
+        <button
+          type="button"
+          onClick={() => setReviewing(true)}
+          className={`${card} p-4 flex items-center gap-3.5 text-left hover:border-[var(--accent-solid)]`}
+        >
+          <div className="w-11 h-11 rounded-xl bg-[var(--tag-bg)] flex items-center justify-center shrink-0">
+            <Layers size={22} className="text-[var(--accent-text)]" aria-hidden />
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[15px] font-semibold">
+              {data.review.due > 0 ? `${data.review.due} card${data.review.due === 1 ? '' : 's'} due` : 'New cards to learn'}
+            </span>
+            <span className="text-[13px] text-[var(--text-secondary)]">
+              {data.review.fresh > 0 ? `Plus ${data.review.fresh} new · ` : ''}A few minutes keeps it from fading
+            </span>
+          </div>
+        </button>
       )}
 
       <Link href="/schedule" className={`${card} p-4 flex items-center gap-3.5 hover:border-[var(--accent-solid)]`}>
@@ -249,6 +296,7 @@ export default function HomePage() {
           </ul>
         </section>
       )}
+      {reviewing && <ReviewSession onClose={() => setReviewing(false)} />}
     </div>
   );
 }

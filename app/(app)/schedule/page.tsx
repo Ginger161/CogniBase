@@ -7,11 +7,13 @@ import { ChevronLeft } from 'lucide-react';
 import { useSchedule } from '@/components/schedule/useSchedule';
 import CoursesSection from '@/components/schedule/CoursesSection';
 import TimetableSection from '@/components/schedule/TimetableSection';
+import ExamsSection from '@/components/schedule/ExamsSection';
 
 function ScheduleInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const tab = params.get('tab') === 'courses' ? 'courses' : 'timetable';
+  const tabParam = params.get('tab');
+  const tab = tabParam === 'courses' ? 'courses' : tabParam === 'exams' ? 'exams' : 'timetable';
   const s = useSchedule();
 
   return (
@@ -27,13 +29,14 @@ function ScheduleInner() {
         {([
           ['timetable', 'Timetable'],
           ['courses', 'Courses'],
+          ['exams', 'Exams'],
         ] as const).map(([id, label]) => (
           <button
             key={id}
             role="tab"
             type="button"
             aria-selected={tab === id}
-            onClick={() => router.replace(id === 'timetable' ? '/schedule' : '/schedule?tab=courses')}
+            onClick={() => router.replace(id === 'timetable' ? '/schedule' : `/schedule?tab=${id}`)}
             className={`flex-1 h-11 rounded-lg text-sm font-semibold ${tab === id ? 'bg-[var(--bg-surface)] text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}
           >
             {label}
@@ -41,7 +44,9 @@ function ScheduleInner() {
         ))}
       </div>
 
-      {s.isLoading ? (
+      {tab === 'exams' ? (
+        <ExamsSection />
+      ) : s.isLoading ? (
         <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading your schedule">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-20 rounded-2xl bg-[var(--bg-surface)] animate-pulse" />

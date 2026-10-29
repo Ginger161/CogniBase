@@ -15,6 +15,8 @@ const CREDITS: Record<string, { focusMinutes: number; tasksCompleted: number }> 
   generate_asset: { focusMinutes: 10, tasksCompleted: 1 },
   read_document: { focusMinutes: 20, tasksCompleted: 1 },
   complete_phase: { focusMinutes: 25, tasksCompleted: 1 },
+  complete_quiz: { focusMinutes: 10, tasksCompleted: 1 },
+  listen_audio: { focusMinutes: 10, tasksCompleted: 1 },
 };
 
 export function isMetricAction(action: unknown): action is string {

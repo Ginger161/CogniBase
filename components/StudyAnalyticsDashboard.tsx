@@ -5,7 +5,13 @@ import { Flame } from 'lucide-react';
 import { friendlyError, readApiError } from '@/lib/client-errors';
 
 type Day = { date: string; minutes: number; tasks: number };
-type Metrics = { focusGoal: number; taskGoal: number; today: Day; week: Day[]; streak: number };
+type Retention = {
+  quizPercent: number | null;
+  recentQuizzes: { title: string; score: number; total: number; createdAt: string }[];
+  recallPercent: number | null;
+  cardsLearning: number;
+};
+type Metrics = { focusGoal: number; taskGoal: number; today: Day; week: Day[]; streak: number; retention?: Retention | null };
 
 const card = 'bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl';
 
@@ -162,6 +168,34 @@ export default function StudyAnalyticsDashboard() {
           <div className={`${card} p-5`}>
             <WeekChart week={metrics.week} />
           </div>
+
+          {metrics.retention && (metrics.retention.quizPercent !== null || metrics.retention.recallPercent !== null) && (
+            <div className={`${card} p-5 flex flex-col gap-4`}>
+              <h2 className="text-sm font-semibold">What is sticking</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-3xl font-black tabular-nums">{metrics.retention.recallPercent !== null ? `${metrics.retention.recallPercent}%` : '–'}</span>
+                  <span className="text-xs text-[var(--text-secondary)]">Card recall · {metrics.retention.cardsLearning} cards learning</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-3xl font-black tabular-nums">{metrics.retention.quizPercent !== null ? `${metrics.retention.quizPercent}%` : '–'}</span>
+                  <span className="text-xs text-[var(--text-secondary)]">Quiz average, 7 days</span>
+                </div>
+              </div>
+              {metrics.retention.recentQuizzes.length > 0 && (
+                <ul className="flex flex-col">
+                  {metrics.retention.recentQuizzes.map((q, i) => (
+                    <li key={i} className="flex items-center gap-3 min-h-11 border-t border-[var(--border-color)] text-sm">
+                      <span className="flex-1 min-w-0 truncate text-[var(--text-secondary)]">{q.title}</span>
+                      <span className="font-semibold tabular-nums">
+                        {q.score}/{q.total}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <p className="text-xs text-[var(--text-muted)] leading-relaxed px-1">
             Focus minutes are credited for what you do: reading, reviewing cards, finishing study phases and asking questions. They are an estimate, not a stopwatch. You can change your daily goal in Settings.

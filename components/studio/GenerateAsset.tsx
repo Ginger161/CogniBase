@@ -7,10 +7,11 @@ import { toast } from 'sonner';
 import { UserError, friendlyError, readApiError } from '@/lib/client-errors';
 import AssetViewer, { type StudioAsset } from './AssetViewer';
 
-export type AssetKind = 'flashcards' | 'mindmap' | 'slides';
+export type AssetKind = 'flashcards' | 'quiz' | 'mindmap' | 'slides';
 
 const COPY: Record<AssetKind, string> = {
   flashcards: 'Writing flashcards…',
+  quiz: 'Writing your quiz…',
   mindmap: 'Mapping concepts…',
   slides: 'Designing slides…',
 };

@@ -21,6 +21,37 @@ Next.js 16 (App Router) · React 19 · Tailwind v4 (+ typography plugin, enabled
 
 The `>_ console` sheet (`components/ask`) is mounted in `app/(app)/layout.tsx` but only attached by the reader. It is bound to one source; leaving the source drops the conversation.
 
+## Study features
+
+- **Reader** (`components/DocumentReader.tsx`): formatted text (`lib/reader/format.ts`), highlights (`Highlight`), reading progress (`ReadingProgress`, resumes where you left off and shows on the Library row), a selection toolbar (highlight, explain, quiz me, save as card), and citations in the console that scroll the reader to the passage (`lib/reader/dom.ts`).
+- **Flashcards** are reviewed with spaced repetition (`lib/srs.ts`, `lib/review-queue.ts`, `CardState`). Cards with no row are new; a few are introduced per day. Home shows what is due.
+- **Quizzes** are a Studio asset type (`QUIZ`). Finished runs are stored as `QuizAttempt` and feed today's accuracy and the "What is sticking" card on Progress.
+- **Exams** (`Exam`, Schedule > Exams): the day-by-day plan is worked out on the client from the exam date and reading progress (`lib/study-plan.ts`), so it is free and uses the student's own time zone.
+- **Audio overviews**: see below.
+- **Offline**: `app/manifest.ts` and `public/sw.js` make the app installable and remember opened sources and the app's scripts. Audio can be saved on the device (`lib/offline.ts`). Everything is cleared on sign-out.
+
+## Audio overviews
+
+Two stages, so each request fits its time limit and a failed voicing can be retried alone:
+
+1. `POST /api/audio` writes a two-host script (`lib/audio/script.ts`). The format (walkthrough, quiz battle, story, myth-busting, exam coach, rapid-fire) comes from the student's goal and rotates so episodes differ (`lib/audio/formats.ts`). Length is held to 5, 10 or 15 minutes, within 20 percent, with one automatic repair pass; no episode is under 4 or over 20 minutes. Long sources become a series (`lib/audio/parts.ts`). Scripts carry recall pauses and chapters.
+2. `POST /api/audio/synthesize` voices it through the provider in `lib/audio/tts.ts` (ElevenLabs), stores the MP3 under `<user id>/audio/`, and records when each turn starts so the player can pause for recall questions and jump by chapter.
+
+Limits live in `lib/plans.ts` (per plan) and `lib/audio/limits.ts` (stored episodes, episodes per month, voiced minutes, and an app-wide monthly voice budget set by `AUDIO_MONTHLY_CHARS`). With no ElevenLabs key, or when a limit is reached, the transcript is still saved and the message says why.
+
+## Plans, credits and billing
+
+- `lib/plans.ts` holds each plan's price and monthly allowances and what one credit buys. `lib/usage.ts` checks an action before the work and records it after it succeeds: the plan's allowance is used first, then credits. A paused account or a switched-off feature is refused there too.
+- Credits are a ledger (`CreditLedger`); the balance is the sum. Payments go through Paystack (`lib/billing.ts`, `/api/billing/*`). The webhook and the return page both call the same idempotent `fulfil`, and the amount paid must match the server's price. Every real payment is also kept in `Payment` for finance.
+- Students can redeem invite codes (`/api/invites/redeem`).
+
+## Admin (`/admin`)
+
+- Lives in its own route group, `app/(admin)/admin`, with its own layout. The layout and every page call `requireStaffPage` (`lib/admin.ts`): a student is redirected to `/dashboard`, a team member only sees the sections they were given, and a section they were not given sends them back to their own admin home. Every admin API route calls `requireStaff(permission)` and answers a plain 404 to anyone else.
+- Owners are the emails in `ADMIN_EMAILS`. They manage the team (`StaffMember`, per-person permissions from `lib/staff.ts`). Moderators are rows, so removing a row removes their access.
+- Sections: overview (revenue, estimated cost, break-even, voice budget), users, payments, funds and runway (`Expense`), invite codes (`Invite`), kill switches (`AppSetting`, read by `lib/settings.ts` and enforced in `checkUsage`), and an activity log of every admin action.
+- Privacy: the admin area shows account facts and totals only. No route returns chats, notes or study material.
+
 ## Data flow
 
 1. **Add a source** (`useLibrary`): files go to Supabase storage under `<user id>/…`; `POST /api/documents` extracts text (Gemini for PDFs and images, Mammoth for Word, officeparser for slides, transcripts for YouTube, Cheerio for web pages) and stores it in `Document.textContent`.

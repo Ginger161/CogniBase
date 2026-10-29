@@ -7,6 +7,7 @@ import { requireUser, requireDocumentOwnership } from '@/lib/api-auth';
 import { ensurePrismaUser } from '@/lib/auth-sync';
 import { recordMetric } from '@/lib/metrics';
 import { classifyAiError } from '@/lib/ai-errors';
+import { checkUsage, recordUsage } from '@/lib/usage';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -52,6 +53,9 @@ export async function POST(req: Request) {
     if (!text) {
       return NextResponse.json({ error: "This source has no readable text, so a guide can't be built from it." }, { status: 400 });
     }
+
+    const allowed = await checkUsage(user.id, 'guide');
+    if (!allowed.ok) return NextResponse.json({ error: allowed.message }, { status: allowed.status });
 
     const prompt = `You are a master tutor. Create a highly structured JSON study guide based on the following document content, strictly adhering to the user's Study Brief Configuration parameters.
 Study Brief Configuration: ${sectionConstraint}
@@ -110,6 +114,7 @@ ${text.substring(0, MAX_SOURCE_CHARS)}
       },
     });
 
+    await recordUsage(user.id, 'guide');
     recordMetric(user.id, 'generate_guide').catch((e) => console.error("Metric failed:", e));
 
     return NextResponse.json({ studyGuide, guide });

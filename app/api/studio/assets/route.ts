@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireUser, requireWorkspaceOwnership } from '@/lib/api-auth';
+import { createClient } from '@/utils/supabase/server';
+import { isEpisodeContent, removeAudio } from '@/lib/audio/episode';
 
 export async function GET(req: Request) {
   try {
@@ -39,8 +41,13 @@ export async function DELETE(req: Request) {
     const id = new URL(req.url).searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-    const asset = await prisma.studioAsset.findFirst({ where: { id, workspace: { userId: user.id } }, select: { id: true } });
+    const asset = await prisma.studioAsset.findFirst({ where: { id, workspace: { userId: user.id } }, select: { id: true, type: true, content: true } });
     if (!asset) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    // An audio overview owns a file in storage; remove it with the episode.
+    if (asset.type === 'AUDIO' && isEpisodeContent(asset.content) && asset.content.audioPath) {
+      await removeAudio(await createClient(), asset.content.audioPath);
+    }
 
     await prisma.studioAsset.delete({ where: { id } });
     return NextResponse.json({ success: true });

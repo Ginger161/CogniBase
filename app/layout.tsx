@@ -29,6 +29,7 @@ import { UserProvider } from '@/lib/hooks/useUserContext';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ThemedToaster } from '@/components/ThemedToaster';
 import { NetworkStatus } from '@/components/NetworkStatus';
+import { ServiceWorker } from '@/components/ServiceWorker';
 import { THEMES, THEME_COOKIE, isAppTheme } from '@/lib/theme-cookie';
 
 export default async function RootLayout({
@@ -48,6 +49,7 @@ export default async function RootLayout({
             {children}
             <ThemedToaster />
             <NetworkStatus />
+            <ServiceWorker />
           </UserProvider>
         </ThemeProvider>
       </body>

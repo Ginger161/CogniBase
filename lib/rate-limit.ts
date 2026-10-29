@@ -14,6 +14,7 @@ export const LIMITS = {
   generate: { name: 'generate', max: 8, windowMs: 60_000 },
   index: { name: 'index', max: 10, windowMs: 60_000 },
   ingest: { name: 'ingest', max: 20, windowMs: 60_000 },
+  audio: { name: 'audio', max: 3, windowMs: 60_000 },
 } satisfies Record<string, Limit>;
 
 /** Returns a 429 response when the user is over the limit, otherwise null. */
