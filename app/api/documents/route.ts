@@ -107,7 +107,8 @@ export async function POST(req: Request) {
 
       if (extension === "pdf") {
         try {
-          const generativeModel = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+          // Capped so a slow or dropped connection falls back to the PDF's own text quickly instead of leaving the student waiting.
+          const generativeModel = genAI.getGenerativeModel({ model: "gemini-3.5-flash" }, { timeout: 30_000 });
           const prompt = "Please extract all text from this document accurately and format it as Markdown. Preserve headings (#, ##), bulleted lists, and bold text. Do not summarize, extract the full text. Output ONLY the markdown text without any other comments.";
           const result = await generativeModel.generateContent([
             prompt,
