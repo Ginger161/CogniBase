@@ -2,6 +2,7 @@ import { BASE_URL, anon, chatText, signIn, sseEvents, type Bot, type Reply } fro
 import { assert, finish, group, skip, test } from './harness';
 import { createClient } from '@supabase/supabase-js';
 import { MARKER_FACT, SECRET_TEXT, docxFile, pptxFile, textFile } from './fixtures';
+import { loadCreds, setPlan } from './accounts';
 
 const BUCKET = 'workspace-files';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -86,8 +87,15 @@ async function main() {
   let bot1!: Bot;
   let bot2!: Bot;
   await test('both test accounts sign in', async () => {
-    bot1 = await signIn('bot1', process.env.BOT1_EMAIL!, process.env.BOT1_PASSWORD!);
-    bot2 = await signIn('bot2', process.env.BOT2_EMAIL!, process.env.BOT2_PASSWORD!);
+    const creds = loadCreds();
+    bot1 = await signIn('bot1', creds['student-a'].email, creds['student-a'].password);
+    bot2 = await signIn('bot2', creds['student-b'].email, creds['student-b'].password);
+    // The app creates the user row on first use; then put both students on the X plan so plan limits do not get in the way
+    // of the other checks (limits have their own tests with a Free account).
+    await bot1.call('GET', '/api/usage');
+    await bot2.call('GET', '/api/usage');
+    await setPlan(creds['student-a'].email, 'X');
+    await setPlan(creds['student-b'].email, 'X');
     return `${bot1.userId.slice(0, 8)}…, ${bot2.userId.slice(0, 8)}…`;
   });
   if (!bot1 || !bot2) {

@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { AUTH_OUTAGE_MESSAGE, isAuthOutage } from '@/lib/auth-outage'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -28,12 +29,15 @@ export async function updateSession(request: NextRequest) {
   )
 
   let user = null;
+  let outage = false;
   try {
-    const { data } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getUser();
     user = data?.user ?? null;
+    outage = !user && isAuthOutage(error);
   } catch (err) {
-    console.warn('Proxy auth check failed (continuing as unauthenticated):', err);
+    console.warn('Proxy auth check failed:', err);
     user = null;
+    outage = isAuthOutage(err);
   }
 
   const pathname = request.nextUrl.pathname
@@ -51,6 +55,14 @@ export async function updateSession(request: NextRequest) {
   const isPaymentWebhook = pathname === '/api/billing/webhook';
 
   if (!user && !isShared && !isEntryPage && !isAuthCallback && !isPublicAsset && !isPaymentWebhook) {
+    // We could not check (connection dropped), which is not the same as signed out: do not send them to the login page.
+    if (outage) {
+      if (pathname.startsWith('/api/')) return NextResponse.json({ error: AUTH_OUTAGE_MESSAGE }, { status: 503 });
+      return new NextResponse(
+        `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reconnecting</title><body style="font-family:system-ui;padding:2rem;max-width:32rem;margin:auto"><h1>Having trouble connecting</h1><p>${AUTH_OUTAGE_MESSAGE}</p><p><a href="">Try again</a></p>`,
+        { status: 503, headers: { 'content-type': 'text/html; charset=utf-8', 'retry-after': '5' } }
+      );
+    }
     // API clients need a status code, not an HTML redirect
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

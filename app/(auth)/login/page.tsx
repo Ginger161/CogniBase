@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
 import { authErrorMessage } from '@/lib/client-errors';
+import { useHydrated } from '@/components/auth/useHydrated';
 import { AuthShell, AuthError, AuthField, OrDivider, authInput, authPrimary, authSecondary } from '@/components/auth/AuthShell';
 
 // Reads ?error=... left by a failed OAuth callback. Isolated so the form itself renders without waiting on it.
@@ -15,6 +16,7 @@ function CallbackError() {
 
 export default function LoginPage() {
   const router = useRouter();
+  const hydrated = useHydrated();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [email, setEmail] = useState('');
@@ -61,7 +63,7 @@ export default function LoginPage() {
         <AuthField id="password" label="Password">
           <input id="password" type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={authInput} />
         </AuthField>
-        <button type="submit" disabled={isLoading} className={authPrimary}>
+        <button type="submit" disabled={isLoading || !hydrated} className={authPrimary}>
           {isLoading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>

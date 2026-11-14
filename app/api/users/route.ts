@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import { prisma } from '@/lib/prisma';
-import { createClient } from '@/utils/supabase/server';
 
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    const { user, response } = await requireUser();
+    if (!user) return response;const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
     return NextResponse.json(dbUser || {});
   } catch {
     return NextResponse.json({ error: "Unknown server error" }, { status: 500 });
@@ -17,11 +14,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const data = await req.json().catch(() => ({}));
+    const { user, response } = await requireUser();
+    if (!user) return response;const data = await req.json().catch(() => ({}));
     const { username, school, department } = data;
 
     const newUser = await prisma.user.upsert({

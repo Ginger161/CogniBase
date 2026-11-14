@@ -1,15 +1,13 @@
 import { logActivity } from '@/lib/audit-log';
+import { requireUser } from '@/lib/api-auth';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { createClient } from '@/utils/supabase/server';
 import { ensurePrismaUser } from '@/lib/auth-sync';
 
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    await ensurePrismaUser(user);
+    const { user, response } = await requireUser();
+    if (!user) return response;await ensurePrismaUser(user);
 
     let dbUser;
     try {
@@ -62,11 +60,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    await ensurePrismaUser(user);
+    const { user, response } = await requireUser();
+    if (!user) return response;await ensurePrismaUser(user);
 
     const data = await req.json().catch(() => ({}));
     const { username, school, department, preferences } = data;

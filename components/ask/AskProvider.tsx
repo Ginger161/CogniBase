@@ -58,12 +58,17 @@ export function AskProvider({ children }: { children: React.ReactNode }) {
     [source, context]
   );
 
+  // Which source the conversation belongs to. Kept in a ref so switching source can clear the chat outside React's
+  // state updater (an updater must not trigger other state changes).
+  const attachedId = useRef<string | null>(null);
+
   const attach = useCallback(
     (s: AskSource) => {
-      setSource((prev) => {
-        if (prev?.id !== s.id) setMessages([]);
-        return s;
-      });
+      if (attachedId.current !== s.id) {
+        attachedId.current = s.id;
+        setMessages([]);
+      }
+      setSource(s);
     },
     [setMessages]
   );
@@ -71,6 +76,7 @@ export function AskProvider({ children }: { children: React.ReactNode }) {
   const detach = useCallback(() => {
     stop();
     setMessages([]);
+    attachedId.current = null;
     setSource(null);
     setIsOpen(false);
   }, [stop, setMessages]);

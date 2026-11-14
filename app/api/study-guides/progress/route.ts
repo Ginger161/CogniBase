@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import { prisma } from '@/lib/prisma';
-import { createClient } from '@/utils/supabase/server';
 import { ensurePrismaUser } from '@/lib/auth-sync';
 import { requireStudyGuideOwnership } from '@/lib/api-auth';
 
 export async function GET(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    await ensurePrismaUser(user);
+    const { user, response } = await requireUser();
+    if (!user) return response;await ensurePrismaUser(user);
 
     const { searchParams } = new URL(req.url);
     const guideId = searchParams.get('guideId');
@@ -37,11 +34,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    await ensurePrismaUser(user);
+    const { user, response } = await requireUser();
+    if (!user) return response;await ensurePrismaUser(user);
 
     const data = await req.json().catch(() => ({}));
     const { guideId, phaseId } = data;

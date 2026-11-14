@@ -2,11 +2,12 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ArrowUp, ChevronLeft, GraduationCap, HelpCircle, Layers, Network, Presentation, RotateCcw, Square, X } from 'lucide-react';
 import type { UIMessage } from 'ai';
 import { useAsk } from './AskProvider';
+import { normaliseCites, parseCite } from '@/lib/cites';
 import GenerateAsset, { type AssetKind } from '../studio/GenerateAsset';
 import StudyGuideSheet from '../library/StudyGuideSheet';
 
@@ -29,18 +30,6 @@ function isSearching(m: UIMessage | undefined): boolean {
   return m.parts.some(
     (p) => p.type.startsWith('tool-') && 'state' in p && p.state !== 'output-available' && p.state !== 'output-error'
   );
-}
-
-// A citation link is cite:NAME#N, where N is the passage the claim came from.
-function parseCite(href: string): { name: string; n: number | null } {
-  let raw = href.slice(5);
-  try {
-    raw = decodeURIComponent(raw);
-  } catch {
-    /* keep it as written */
-  }
-  const m = raw.match(/^(.*)#(\d+)$/);
-  return m ? { name: m[1], n: Number(m[2]) } : { name: raw, n: null };
 }
 
 // Distinct cited document names, in order of first appearance.
@@ -83,14 +72,19 @@ function friendlyError(error: Error): string {
   return 'Something went wrong generating that answer.';
 }
 
-function AssistantBody({ text, passages }: { text: string; passages: Map<number, string> }) {
+function AssistantBody({ text: rawText, passages }: { text: string; passages: Map<number, string> }) {
   const { jumpToPassage, close } = useAsk();
+  const text = useMemo(() => normaliseCites(rawText), [rawText]);
   const names = useMemo(() => citedNames(text), [text]);
   return (
     <div className="flex flex-col gap-3">
       <div className="text-[15px] leading-relaxed text-[var(--text-primary)] [&_p]:my-0 [&_p+p]:mt-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-base [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-semibold [&_strong]:font-semibold [&_code]:font-mono [&_code]:text-[13px] [&_code]:bg-[var(--bg-surface-alt)] [&_code]:px-1 [&_code]:rounded [&_pre]:bg-[var(--bg-surface)] [&_pre]:border [&_pre]:border-[var(--border-color)] [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto [&_table]:text-sm [&_th]:text-left [&_th]:pr-4">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
+          // react-markdown blanks any link whose scheme it does not know, which would erase every citation. Allow ours
+          // (it is only ever read back as a name and a number) and keep the default safety filter for everything else,
+          // so a link like javascript:... in a source or an answer is still removed.
+          urlTransform={(url) => (url.startsWith('cite:') ? url : defaultUrlTransform(url))}
           components={{
             a: ({ href, children }) => {
               if (href?.startsWith('cite:')) {

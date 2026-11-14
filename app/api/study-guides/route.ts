@@ -1,17 +1,13 @@
 import { NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import { prisma } from '@/lib/prisma';
-import { createClient } from '@/utils/supabase/server';
 import { ensurePrismaUser } from '@/lib/auth-sync';
 import { requireDocumentOwnership } from '@/lib/api-auth';
 
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { user, response } = await requireUser();
+    if (!user) return response;
 
     await ensurePrismaUser(user);
 
@@ -36,12 +32,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { user, response } = await requireUser();
+    if (!user) return response;
 
     await ensurePrismaUser(user);
 
