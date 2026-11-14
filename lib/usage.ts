@@ -118,16 +118,16 @@ export async function grantCredits(args: { userId: string; amount: number; reaso
 }
 
 /** Puts a user on a plan. `days` null means it never lapses on its own. Buying the same plan again extends it. */
-export async function setPlan(userId: string, tier: PlanTier, days: number | null): Promise<Date | null> {
+export async function setPlan(userId: string, tier: PlanTier, days: number | null, db: Pick<Prisma.TransactionClient, 'user'> = prisma): Promise<Date | null> {
   if (tier === 'FREE') {
-    await prisma.user.update({ where: { id: userId }, data: { planTier: 'FREE', planExpiresAt: null } });
+    await db.user.update({ where: { id: userId }, data: { planTier: 'FREE', planExpiresAt: null } });
     return null;
   }
-  const current = await prisma.user.findUnique({ where: { id: userId }, select: { planTier: true, planExpiresAt: true } });
+  const current = await db.user.findUnique({ where: { id: userId }, select: { planTier: true, planExpiresAt: true } });
   const now = new Date();
   const sameAndActive = current?.planTier === tier && current.planExpiresAt && current.planExpiresAt > now;
   const from = sameAndActive ? current.planExpiresAt! : now;
   const expiresAt = days === null ? null : new Date(from.getTime() + days * 86_400_000);
-  await prisma.user.update({ where: { id: userId }, data: { planTier: tier, planExpiresAt: expiresAt } });
+  await db.user.update({ where: { id: userId }, data: { planTier: tier, planExpiresAt: expiresAt } });
   return expiresAt;
 }

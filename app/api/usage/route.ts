@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api-auth';
+import { ensurePrismaUser } from '@/lib/auth-sync';
 import { usageSummary } from '@/lib/usage';
 import { CREDIT_PACKS, paymentsOn } from '@/lib/billing';
 import { PLANS } from '@/lib/plans';
@@ -9,6 +10,7 @@ export async function GET() {
   try {
     const { user, response } = await requireUser();
     if (!user) return response;
+    await ensurePrismaUser(user); // so a brand-new account can open this page first and still buy
     const summary = await usageSummary(user.id);
     return NextResponse.json({
       ...summary,

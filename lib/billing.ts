@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { PLANS, type PlanTier } from '@/lib/plans';
 import { grantCredits, setPlan } from '@/lib/usage';
@@ -97,9 +98,20 @@ export async function fulfil(paid: PaidTransaction): Promise<{ ok: true; product
     const result = await grantCredits({ userId: paid.userId, amount: product.credits, reason: 'PURCHASE', ref, note: product.label });
     return { ok: true, product, duplicate: result === 'duplicate' };
   }
-  // A plan payment leaves a zero-credit marker so the same payment is never applied twice.
-  const marker = await grantCredits({ userId: paid.userId, amount: 0, reason: 'PLAN', ref, note: product.label }).catch(() => 'duplicate' as const);
-  if (marker === 'duplicate') return { ok: true, product, duplicate: true };
-  await setPlan(paid.userId, product.tier, product.days);
-  return { ok: true, product, duplicate: false };
+  // A plan payment leaves a zero-credit marker so the same payment is never applied twice. The marker and the upgrade
+  // happen together: if the upgrade fails, the marker is rolled back too, so Paystack's retry can still apply it.
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.creditLedger.create({ data: { userId: paid.userId, amount: 0, reason: 'PLAN', ref, note: product.label } });
+        await setPlan(paid.userId, product.tier, product.days, tx);
+      },
+      // A pooled connection to a remote database can take a few seconds to open; do not fail a paid upgrade over that.
+      { maxWait: 10_000, timeout: 20_000 }
+    );
+    return { ok: true, product, duplicate: false };
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return { ok: true, product, duplicate: true };
+    throw e;
+  }
 }

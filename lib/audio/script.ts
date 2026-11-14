@@ -99,8 +99,10 @@ async function ask(promptText: string): Promise<unknown> {
       return JSON.parse(out.replace(/^```json|```$/gm, '').trim());
     } catch (err) {
       const msg = String(err instanceof Error ? err.message : err);
-      const transient = msg.includes('503') || msg.includes('429') || msg.toLowerCase().includes('overloaded');
-      if (!transient || attempt >= backoff.length) throw err;
+      const overloaded = msg.includes('503') || msg.includes('429') || msg.toLowerCase().includes('overloaded');
+      // A dropped connection is retried once: it often works on the next try, but each failure can take a while.
+      const dropped = msg.includes('fetch failed') && attempt < 1;
+      if (!(overloaded || dropped) || attempt >= backoff.length) throw err;
       await new Promise((r) => setTimeout(r, backoff[attempt]));
     }
   }

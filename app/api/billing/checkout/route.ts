@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { requireUser } from '@/lib/api-auth';
+import { ensurePrismaUser } from '@/lib/auth-sync';
 import { initializeTransaction, paymentsOn, productFor } from '@/lib/billing';
 import { logActivity } from '@/lib/audit-log';
 
@@ -14,6 +15,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Payments are not switched on yet. Please try again soon.' }, { status: 503 });
     }
     if (!user.email) return NextResponse.json({ error: 'Your account needs an email address to pay.' }, { status: 400 });
+    await ensurePrismaUser(user); // the payment is credited to this row, so it must exist before anyone pays
 
     const { product: id } = await req.json().catch(() => ({}));
     const product = productFor(id);

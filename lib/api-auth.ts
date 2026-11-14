@@ -1,19 +1,23 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { prisma } from '@/lib/prisma';
+import { AUTH_OUTAGE_MESSAGE, isAuthOutage } from '@/lib/auth-outage';
 
 // Confirms someone is logged in. Use this at the top of every route.
 export async function requireUser() {
   try {
     const supabase = await createClient();
-    const { data } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getUser();
     const user = data?.user;
     if (!user) {
+      // Could not reach the sign-in service: say so (503) instead of pretending they are signed out (401).
+      if (isAuthOutage(error)) return { user: null, response: NextResponse.json({ error: AUTH_OUTAGE_MESSAGE }, { status: 503 }) };
       return { user: null, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
     }
     return { user, response: null };
   } catch (error) {
     console.error("requireUser error:", error);
+    if (isAuthOutage(error)) return { user: null, response: NextResponse.json({ error: AUTH_OUTAGE_MESSAGE }, { status: 503 }) };
     return { user: null, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 }

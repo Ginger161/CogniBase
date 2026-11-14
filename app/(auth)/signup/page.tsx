@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
 import { authErrorMessage } from '@/lib/client-errors';
+import { useHydrated } from '@/components/auth/useHydrated';
 import { AuthShell, AuthError, AuthField, OrDivider, authInput, authPrimary, authSecondary } from '@/components/auth/AuthShell';
 
 export default function SignUpPage() {
   const router = useRouter();
+  const hydrated = useHydrated();
   const [step, setStep] = useState<1 | 2>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -129,7 +131,7 @@ export default function SignUpPage() {
         <AuthField id="confirm" label="Confirm password">
           <input id="confirm" type="password" required autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={authInput} />
         </AuthField>
-        <button type="submit" disabled={isLoading} className={authPrimary}>
+        <button type="submit" disabled={isLoading || !hydrated} className={authPrimary}>
           {isLoading ? 'Creating…' : 'Create account'}
         </button>
       </form>

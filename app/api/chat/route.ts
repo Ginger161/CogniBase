@@ -58,12 +58,12 @@ export async function POST(req: Request) {
       }
     }
 
-    // A real question counts against the plan. Explaining a missing source is free, so it is not metered.
-    if (!problem) {
-      const allowed = await checkUsage(user.id, 'chat');
-      if (!allowed.ok) return new Response(allowed.message, { status: allowed.status });
-      await recordUsage(user.id, 'chat');
-    }
+    // Every message that reaches the AI is checked and counted, including the ones that only explain a missing source.
+    // Otherwise a paused account, a switched-off feature or a spent allowance could be sidestepped by sending no source,
+    // and that path would be unlimited free AI chat.
+    const allowed = await checkUsage(user.id, 'chat');
+    if (!allowed.ok) return new Response(allowed.message, { status: allowed.status });
+    await recordUsage(user.id, 'chat');
 
     const profileText = JSON.stringify(userProfile ?? {}).slice(0, 2000);
 
