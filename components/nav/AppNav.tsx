@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useScrollLock } from '@/components/ui/useScrollLock';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -150,6 +151,7 @@ export function MobileHeader({ userName }: { userName: string }) {
 }
 
 function Manifesto({ open, onClose }: { open: boolean; onClose: () => void }) {
+  useScrollLock(open);
   return (
     <AnimatePresence>
       {open && (

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { useScrollLock } from './useScrollLock';
 
 type SheetProps = {
   open: boolean;
@@ -16,6 +17,7 @@ type SheetProps = {
 // Bottom sheet on phones, centred dialog on larger screens. Rendered in a portal so it is never clipped.
 export default function Sheet({ open, onClose, title, children, footer }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  useScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
@@ -75,7 +77,7 @@ export default function Sheet({ open, onClose, title, children, footer }: SheetP
             <X size={20} aria-hidden />
           </button>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-4">{children}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-4">{children}</div>
         {footer && (
           <div className="shrink-0 px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-[var(--border-color)]">
             {footer}

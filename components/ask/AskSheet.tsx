@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useScrollLock } from '@/components/ui/useScrollLock';
 import Link from 'next/link';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -146,6 +147,7 @@ function AssistantBody({ text: rawText, passages }: { text: string; passages: Ma
 
 export default function AskSheet() {
   const { isOpen, close, source, messages, send, retry, reset, stop, isBusy, error } = useAsk();
+  useScrollLock(isOpen && !!source);
   const [input, setInput] = useState('');
   const [tool, setTool] = useState<Tool | null>(null);
   const listRef = useRef<HTMLDivElement>(null);

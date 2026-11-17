@@ -8,7 +8,7 @@ export async function GET() {
     if (!user) return response;const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
     return NextResponse.json(dbUser || {});
   } catch {
-    return NextResponse.json({ error: "Unknown server error" }, { status: 500 });
+    return NextResponse.json({ error: "Something went wrong on our side. Please try again." }, { status: 500 });
   }
 }
 

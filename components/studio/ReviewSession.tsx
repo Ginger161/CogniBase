@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '@/components/ui/useScrollLock';
 import { createPortal } from 'react-dom';
 import { Loader2, PartyPopper, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -18,6 +19,7 @@ const GRADES: { grade: Grade; label: string; style: string }[] = [
 
 /** Today's flashcards across everything saved: due cards first, a few new ones, each scheduled by how it went. */
 export default function ReviewSession({ onClose }: { onClose: () => void }) {
+  useScrollLock(true);
   const [queue, setQueue] = useState<Card[] | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(0);

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useScrollLock } from '@/components/ui/useScrollLock';
 import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -25,6 +26,7 @@ type Props = {
 
 /** Generates the asset on the server (which also saves it to Studio), then opens it. */
 export default function GenerateAsset({ kind, workspaceId, documentIds, onClose }: Props) {
+  useScrollLock(true);
   const [asset, setAsset] = useState<StudioAsset | null>(null);
 
   useEffect(() => {

@@ -12,12 +12,12 @@ export async function DELETE(req: Request, props: { params: Promise<{ id: string
     const guide = await prisma.studyGuide.findUnique({ where: { id: params.id } });
     
     if (!guide) {
-        return NextResponse.json({ error: "Guide not found" }, { status: 404 });
+        return NextResponse.json({ error: "That guide could not be found." }, { status: 404 });
     }
 
     // Verify ownership
     if (guide.userId !== user.id) {
-        return NextResponse.json({ error: "Unauthorized: You do not have permission to delete this guide." }, { status: 403 });
+        return NextResponse.json({ error: "You can only delete your own guides." }, { status: 403 });
     }
 
     await prisma.studyGuide.delete({

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { parseOffice } from "officeparser";
-import { createClient } from '@/utils/supabase/server';
+import { requireUser } from '@/lib/api-auth';
 import { classifyAiError } from '@/lib/ai-errors';
 
 export const maxDuration = 60;
@@ -10,12 +10,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized: Please log in." }, { status: 401 });
-    }
+    const { user, response: authResponse } = await requireUser();
+    if (!user) return authResponse;
 
     const { imageBase64, mimeType } = await req.json().catch(() => ({}));
 

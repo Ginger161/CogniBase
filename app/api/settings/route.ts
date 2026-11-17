@@ -54,7 +54,7 @@ export async function GET() {
     return NextResponse.json(dbUser);
   } catch (error) {
     console.error("Settings GET Error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Something went wrong on our side. Please try again." }, { status: 500 });
   }
 }
 
@@ -125,6 +125,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ user: updatedUser, preferences: updatedPreferences });
   } catch (error) {
     console.error("Settings POST Error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Something went wrong on our side. Please try again." }, { status: 500 });
   }
 }

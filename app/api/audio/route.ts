@@ -152,7 +152,8 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
-    await recordUsage(user.id, 'audio_script');
+    // The episode is saved, so a bookkeeping failure must not make the student see an error for it.
+    await recordUsage(user.id, 'audio_script').catch((e) => console.error('Usage record failed:', e));
     recordMetric(user.id, 'generate_asset').catch((e) => console.error('Metric failed:', e));
     return NextResponse.json({ id: asset.id, minutes, format: chosen, tierAdjusted: tier !== wantedTier ? tier : null, parts: parts.length });
   } catch (error) {

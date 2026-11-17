@@ -100,7 +100,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "Failed to process image with AI Vision." }, { status: 500 });
         }
       } else {
-        return NextResponse.json({ error: `Unsupported file extension: .${extension}` }, { status: 400 });
+        return NextResponse.json({ error: "That file type is not supported." }, { status: 400 });
       }
     }
 

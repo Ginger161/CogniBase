@@ -327,8 +327,22 @@ export default function AudioSheet({ open, onClose, documentId, documentName }: 
     }
   };
 
+  // After a lost connection: the server may still be writing the episode, and it saves it even though this page
+  // never got the reply. Look for a new episode for a while before reporting a failure.
+  const waitForSaved = async (known: Set<string>): Promise<string | null> => {
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const d = await load();
+      const fresh = d?.episodes.find((ep) => !known.has(ep.id));
+      if (fresh) return fresh.id;
+    }
+    return null;
+  };
+
   const make = async () => {
     setStep('script');
+    const known = new Set((data?.episodes ?? []).map((ep) => ep.id));
+    let madeId: string | null = null;
     try {
       const res = await fetch('/api/audio', {
         method: 'POST',
@@ -337,15 +351,27 @@ export default function AudioSheet({ open, onClose, documentId, documentName }: 
       });
       if (!res.ok) throw await readApiError(res, 'Could not make this audio overview.');
       const made = await res.json();
-      const d = await load();
-      setOpenId(made.id);
+      madeId = made.id;
       if (made.tierAdjusted) toast(`This source supports about ${made.tierAdjusted} minutes without padding, so that is what you got.`);
-      if (d?.voicesOn && !made.cached) await voice(made.id);
-      else setStep(null);
+      if (made.cached) {
+        await load();
+        setOpenId(made.id);
+        setStep(null);
+        return;
+      }
     } catch (e) {
-      setStep(null);
-      toast.error(friendlyError(e, 'Could not make this audio overview.'));
+      if (e instanceof TypeError) madeId = await waitForSaved(known);
+      if (!madeId) {
+        setStep(null);
+        toast.error(friendlyError(e, 'Could not make this audio overview.'));
+        return;
+      }
     }
+    if (!madeId) return;
+    const d = await load();
+    setOpenId(madeId);
+    if (d?.voicesOn) await voice(madeId);
+    else setStep(null);
   };
 
   const busy = step !== null;
@@ -362,7 +388,7 @@ export default function AudioSheet({ open, onClose, documentId, documentName }: 
             <span className="text-xs font-semibold tracking-wider uppercase text-[var(--text-muted)]">Your goal</span>
             <div role="radiogroup" aria-label="Goal" className="flex flex-wrap gap-2">
               {(Object.keys(GOAL_INFO) as AudioGoal[]).map((g) => (
-                <button key={g} type="button" role="radio" aria-checked={goal === g} onClick={() => setGoal(g)} className={chip(goal === g)}>
+                <button key={g} type="button" role="radio" aria-checked={goal === g} disabled={busy} onClick={() => setGoal(g)} className={chip(goal === g, busy)}>
                   {GOAL_INFO[g].label}
                 </button>
               ))}
@@ -376,7 +402,7 @@ export default function AudioSheet({ open, onClose, documentId, documentName }: 
               {TIERS.map((t) => {
                 const locked = !!data && t > data.plan.maxEpisodeMinutes;
                 return (
-                  <button key={t} type="button" role="radio" aria-checked={length === t} disabled={locked} onClick={() => setLength(t)} className={chip(length === t, locked)}>
+                  <button key={t} type="button" role="radio" aria-checked={length === t} disabled={locked || busy} onClick={() => setLength(t)} className={chip(length === t, locked || busy)}>
                     {t} min
                   </button>
                 );
@@ -390,11 +416,11 @@ export default function AudioSheet({ open, onClose, documentId, documentName }: 
           <div className="flex flex-col gap-2">
             <span className="text-xs font-semibold tracking-wider uppercase text-[var(--text-muted)]">Style</span>
             <div role="radiogroup" aria-label="Style" className="flex flex-wrap gap-2">
-              <button type="button" role="radio" aria-checked={format === 'auto'} onClick={() => setFormat('auto')} className={chip(format === 'auto')}>
+              <button type="button" role="radio" aria-checked={format === 'auto'} disabled={busy} onClick={() => setFormat('auto')} className={chip(format === 'auto', busy)}>
                 Surprise me
               </button>
               {(Object.keys(FORMAT_INFO) as AudioFormat[]).map((f) => (
-                <button key={f} type="button" role="radio" aria-checked={format === f} onClick={() => setFormat(f)} className={chip(format === f)}>
+                <button key={f} type="button" role="radio" aria-checked={format === f} disabled={busy} onClick={() => setFormat(f)} className={chip(format === f, busy)}>
                   {FORMAT_INFO[f].label}
                 </button>
               ))}

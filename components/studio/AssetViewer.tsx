@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useScrollLock } from '@/components/ui/useScrollLock';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Download, Maximize, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { TransformComponent, TransformWrapper, useControls } from 'react-zoom-pan-pinch';
@@ -196,6 +197,7 @@ function Slides({ slides, title }: { slides: Slide[]; title: string }) {
 
 /** Full-screen viewer for a saved flashcard set, mind map or slide deck. */
 export default function AssetViewer({ asset, onClose }: { asset: Pick<StudioAsset, 'id' | 'title' | 'type' | 'content'>; onClose: () => void }) {
+  useScrollLock(true);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {

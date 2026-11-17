@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useScrollLock } from '@/components/ui/useScrollLock';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { BrainCircuit, Check, ChevronLeft, Share2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -55,6 +56,7 @@ export function StudyEngine({ guideData, guideId, initialPublic = false, onClose
   const data = useMemo(() => parseGuide(guideData), [guideData]);
 
   const [view, setView] = useState<View>('quest_log');
+  useScrollLock(view !== 'quest_log');
   const [activeIndex, setActiveIndex] = useState(0);
   const [biteIndex, setBiteIndex] = useState(0);
   const [cardIndex, setCardIndex] = useState(0);
