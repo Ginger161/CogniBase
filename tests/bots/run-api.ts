@@ -175,6 +175,29 @@ async function main() {
   await test('upload a .docx file → text extracted', async () => {
     await addFile('docx', 'glassfern.docx', await docxFile(), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   });
+  await test('upload a .pdf file → text extracted (Gemini, or the text-layer fallback)', async () => {
+    // A one-page PDF with a real text layer, built by hand so the test needs no extra files.
+    const lines = ['Fernwick Notes', 'The Zorblax enzyme speeds up step four of glycolysis.'];
+    const stream = 'BT /F1 14 Tf 50 750 Td 18 TL\n' + lines.map((l) => `(${l}) Tj T*`).join('\n') + '\nET';
+    const objs = [
+      '<</Type/Catalog/Pages 2 0 R>>',
+      '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+      '<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>',
+      `<</Length ${stream.length}>>\nstream\n${stream}\nendstream`,
+      '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>',
+    ];
+    let pdf = '%PDF-1.4\n';
+    const offsets: number[] = [];
+    objs.forEach((o, i) => {
+      offsets.push(pdf.length);
+      pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+    });
+    const xref = pdf.length;
+    pdf += `xref\n0 6\n0000000000 65535 f \n${offsets.map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join('')}trailer<</Size 6/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF`;
+    const started = Date.now();
+    await addFile('pdf', 'fernwick.pdf', Buffer.from(pdf), 'application/pdf');
+    return `took ${Math.round((Date.now() - started) / 1000)}s`;
+  });
   await test('web page link → text extracted', async () => {
     const r = await bot1.call('POST', '/api/documents', { url: 'https://example.com' });
     assert(r.status === 200 && r.json?.id, `${r.status} ${r.text.slice(0, 160)}`);

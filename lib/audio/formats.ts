@@ -10,7 +10,7 @@ export const FORMAT_INFO: Record<AudioFormat, { label: string; blurb: string; st
     label: 'Walkthrough',
     blurb: 'A teacher and a curious student take you through it.',
     structure:
-      'A leads as the teacher; B is the curious student who asks the "wait, so..." questions and restates ideas in plain words. Move through the source in the order a learner needs it, one idea at a time, each with an example.',
+      'A leads as the teacher; B is the curious student who asks the "wait, so..." questions and reacts to ideas with a quick "so that means..." that adds a concrete example, never an echo of what A just said. Move through the source in the order a learner needs it, one idea at a time, each with an example.',
   },
   quiz: {
     label: 'Quiz battle',
@@ -40,7 +40,7 @@ export const FORMAT_INFO: Record<AudioFormat, { label: string; blurb: string; st
     label: 'Rapid-fire',
     blurb: 'Fast, punchy last-minute revision.',
     structure:
-      'Quick, high-energy revision: short turns, one fact or definition per turn, immediately repeated back by the other host. Group items into numbered sets of three, with a quick recall pause after each set. No long explanations.',
+      'Quick, high-energy revision: short turns, one fact or definition per turn, said once. The other host answers with a quick reaction, a memory hook or a one-line example, never the same fact again. Group items into numbered sets of three, with a quick recall pause after each set. No long explanations.',
   },
 };
 

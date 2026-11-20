@@ -184,7 +184,7 @@ export async function POST(req: Request) {
       data: { name: docName, url: url || 'text://pasted', workspaceId: targetWorkspaceId, fileSize, textContent: extractedText, sourceType, category: category || 'Note' }
     });
 
-    if (metered) await recordUsage(user.id, 'upload');
+    if (metered) await recordUsage(user.id, 'upload').catch((e) => console.error('Usage record failed:', e));
     recordMetric(user.id, 'upload_document').catch((e) => console.error("Failed to update gamification metric:", e));
 
     logActivity(user.id, 'upload_document', `Uploaded "${name}"`, req).catch(console.error);

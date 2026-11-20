@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { isEcho } from './repetition';
 import { CHARS_PER_MINUTE, FORMAT_INFO, GOAL_INFO, lengthRange, type AudioFormat, type AudioGoal, type LengthTier } from './formats';
 
 export type Turn = { speaker: 'A' | 'B'; text: string; /** A question the listener should answer in their head before the reply. */ recall?: boolean };
@@ -8,6 +9,7 @@ export type AudioScript = { title: string; chapters: Chapter[]; turns: Turn[] };
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 const SOURCE_CHARS = 24_000;
+const wordCount = (s: string) => (s.match(/S+/g) ?? []).length;
 
 // Varied on purpose, so two episodes on similar material still open and feel different.
 const OPENERS = [
@@ -23,25 +25,32 @@ const pick = <T,>(list: T[]): T => list[Math.floor(Math.random() * list.length)]
 
 type Brief = { name: string; text: string; format: AudioFormat; goal: AudioGoal; tier: LengthTier; part?: { index: number; total: number } };
 
-function prompt({ name, text, format, goal, tier, part }: Brief): string {
+export function audioPrompt({ name, text, format, goal, tier, part }: Brief): string {
   const { targetWords } = lengthRange(tier);
   // Quiz and rapid-fire episodes are built on recall, so they pause far more often than a walkthrough.
   const perFiveMinutes = format === 'quiz' ? 4 : format === 'rapid' ? 3 : 2;
   const recalls = Math.max(2, Math.round((tier / 5) * perFiveMinutes));
+  const sourceWords = wordCount(text.slice(0, SOURCE_CHARS));
   return `You write audio study overviews for university students who listen while walking, so there is nothing to look at. Two hosts, A and B, speak. Write the script.
 
 FORMAT: ${FORMAT_INFO[format].label}. ${FORMAT_INFO[format].structure}
 GOAL: ${GOAL_INFO[goal].guidance}
-LENGTH: about ${targetWords} words in total (${tier} minutes spoken). Stay within 20 percent of that. ${part ? `This is part ${part.index} of ${part.total} of a series on the source: cover only the text given, say "part ${part.index}" in the opening line${part.index < part.total ? ' and tease the next part at the end' : ' and close the series at the end'}.` : ''}
+LENGTH: about ${targetWords} words in total (${tier} minutes spoken), but never by repeating yourself. The source below has about ${sourceWords} words. If it runs out of material, finish early: a shorter episode is better than one that goes over the same ground again. ${part ? `This is part ${part.index} of ${part.total} of a series on the source: cover only the text given, say "part ${part.index}" in the opening line${part.index < part.total ? ' and tease the next part at the end' : ' and close the series at the end'}.` : ''}
 
 HOW PEOPLE REMEMBER WHAT THEY HEAR. Build these in:
 - Open with ${pick(OPENERS)}, then a 15-second roadmap of what is coming.
 - Teach in small chunks of three to five ideas, and number them out loud ("three things to remember").
 - Include exactly ${recalls} recall pauses. A recall pause is a host turn that asks a question about what was just taught, marked "recall": true. The very next turn gives the answer. Never put an answer in the same turn as its question.
-- Say each key definition in the same words at least twice, so the listener can reproduce it in an exam.
+- Say each key definition once, in one clean sentence the listener could write down in an exam. Bring it back only through a recall pause, where the answer is a short fresh phrase, not the definition read out again.
 - Use vivid, concrete analogies (draw some from ${pick(ANALOGY_WORLDS)}), one short mnemonic where one fits, and flag "likely exam question" moments.
 - Keep every turn short, 1 to 3 sentences. Real conversation: reactions, questions, light humour. Never lecture for more than 3 sentences.
 - Close with a two-line recap of the most important points.
+
+NEVER REPEAT. This matters more than hitting the length:
+- Every turn must add something new: a fact from the source, a question, an example, a reaction that moves on, or a link to an earlier idea. A turn that restates the previous turn, even in other words, is not allowed.
+- The host who did not just explain something never echoes it back. They react briefly, ask a follow-up, or give a new example.
+- Do not give the same analogy, example, mnemonic or "likely exam question" twice. Each point appears in full once. Later mentions are a few words at most.
+- Do not tell the listener what you are about to say and then say it again. No "so, to repeat", "as I said", "let us go over that again".
 
 WRITE FOR THE EAR. No "as you can see", no bullet lists, no markdown, no stage directions, no sound effects. Say numbers and formulas the way they are spoken ("x squared plus two"). Expand abbreviations and symbols ("for example", not "e.g."). Define any acronym the first time. Use only what the source says: if it is not in the source, do not teach it as fact.
 
@@ -61,13 +70,16 @@ export function normaliseScript(raw: unknown, fallbackTitle: string, hardMaxChar
   const obj = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const list = Array.isArray(obj.turns) ? obj.turns : Array.isArray(raw) ? raw : [];
   const turns: Turn[] = [];
+  const keptFrom: number[] = []; // where each kept turn sat in the model's list, to place the chapters afterwards
   let used = 0;
-  for (const t of list) {
-    const r = t as Record<string, unknown>;
+  for (let at = 0; at < list.length; at++) {
+    const r = list[at] as Record<string, unknown>;
     const text = typeof r?.text === 'string' ? r.text.replace(/\s+/g, ' ').trim() : '';
     if (!text) continue;
+    if (isEcho(text, turns)) continue; // says again what was just said
     if (used + text.length > hardMaxChars) break;
     used += text.length;
+    keptFrom.push(at);
     turns.push({ speaker: r.speaker === 'B' ? 'B' : 'A', text, ...(r.recall === true ? { recall: true } : {}) });
   }
   if (turns.length < 4) return null;
@@ -76,8 +88,10 @@ export function normaliseScript(raw: unknown, fallbackTitle: string, hardMaxChar
 
   const chapters: Chapter[] = (Array.isArray(obj.chapters) ? obj.chapters : [])
     .map((c) => c as Record<string, unknown>)
-    .filter((c) => typeof c?.title === 'string' && Number.isInteger(c.startTurn) && (c.startTurn as number) >= 0 && (c.startTurn as number) < turns.length)
-    .map((c) => ({ title: (c.title as string).trim().slice(0, 80), startTurn: c.startTurn as number }))
+    .filter((c) => typeof c?.title === 'string' && Number.isInteger(c.startTurn) && (c.startTurn as number) >= 0)
+    // The model numbered its turns before any were dropped, so find the first kept turn at or after each start.
+    .map((c) => ({ title: (c.title as string).trim().slice(0, 80), startTurn: keptFrom.findIndex((from) => from >= (c.startTurn as number)) }))
+    .filter((c) => c.startTurn >= 0 && c.startTurn < turns.length)
     .sort((a, b) => a.startTurn - b.startTurn);
   if (chapters.length === 0 || chapters[0].startTurn !== 0) chapters.unshift({ title: 'Introduction', startTurn: 0 });
 
@@ -118,14 +132,16 @@ export async function writeScript(brief: Brief): Promise<ScriptResult | null> {
   const { minChars, maxChars } = lengthRange(brief.tier);
   const fallbackTitle = `Audio overview · ${brief.name}`;
 
-  let script = normaliseScript(await ask(prompt(brief)), fallbackTitle, maxChars * 1.5);
+  let script = normaliseScript(await ask(audioPrompt(brief)), fallbackTitle, maxChars * 1.5);
   if (!script) return null;
 
   let repaired = false;
   const size = chars(script.turns);
-  if (size < minChars || size > maxChars) {
+  // Do not lengthen a script that is already twice the size of its source: whatever fills the rest would be repeats.
+  const alreadyStretched = size < minChars && size >= Math.min(brief.text.length, SOURCE_CHARS) * 2;
+  if ((size < minChars && !alreadyStretched) || size > maxChars) {
     repaired = true;
-    const direction = size < minChars ? 'too short. Expand it with more examples, recall pauses and recap' : 'too long. Condense it by trimming the least important material';
+    const direction = size < minChars ? 'too short. Lengthen it ONLY with points from the source that the script has not covered yet, and fresh examples. Do not repeat or rephrase anything already said, and do not stretch a point. If the source has nothing more to add, return the script unchanged' : 'too long. Condense it by trimming the least important material';
     const fixed = await ask(
       `This audio script is ${direction}, to about ${lengthRange(brief.tier).targetWords} words (${brief.tier} minutes spoken). Keep the same format, voice, recall pauses and structure. Return the full script in the same JSON shape.\n\n${JSON.stringify({ title: script.title, chapters: script.chapters, turns: script.turns })}`
     ).catch(() => null);

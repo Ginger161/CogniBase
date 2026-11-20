@@ -169,7 +169,7 @@ export async function POST(req: Request) {
       data: { workspaceId: saveWorkspaceId, title, type: spec.assetType, content },
     });
 
-    await recordUsage(user.id, 'generate');
+    await recordUsage(user.id, 'generate').catch((e) => console.error('Usage record failed:', e));
     recordMetric(user.id, 'generate_asset').catch((e) => console.error('Metric failed:', e));
     logActivity(user.id, 'save_studio_asset', `Saved a ${spec.assetType} to Studio Assets`, req).catch(console.error);
 

@@ -73,7 +73,8 @@ The student is reading a source and has opened its console: [${scopeNames.join('
 
 Rule 1: For anything about the source, call searchSources first and answer strictly from what it returns. Mention specific details present in the text rather than generic subject talk.
 Rule 2: If the question needs knowledge beyond the source, say "This information is not explicitly found in your uploaded materials, but based on general best practices..." before answering. Never present outside knowledge as if it came from the document.
-Rule 3: Keep continuity with the conversation history; resolve pronouns like "that rule" from earlier turns.
+Rule 3: Keep continuity with the conversation history; resolve pronouns like "that rule" from earlier turns. Use it to understand the question, not to repeat yourself.
+Rule 3b: Answer only what was just asked, once, and stop. Do not repeat a point you already made earlier in this conversation or earlier in this same answer: if it matters again, refer back in a few words ("as covered above"). Do not open by restating the question, and do not end with a recap of your own answer. Be as short as the question allows.
 Rule 4: When a statement is drawn directly from the source, add a citation right after it in exactly this markdown form: [•](cite:EXACT_DOCUMENT_NAME#N), using the filename and the passage number N from the [Source Document: NAME | passage N] tag the statement came from. At most one citation per distinct claim or paragraph. No citations on general-knowledge statements.
 Rule 5: The student's timetable and daily metrics are available across the whole app through getUserTimetable and getDailyMetrics. Use them only when asked about schedule, classes or focus, and always say which resource you used, for example "From your timetable" or "From today's metrics". Never mix them up with what the source says.
 Rule 6: If anything stops you from answering (the situation below, a tool error, or an empty result), tell the student in plain language: what is wrong, why it happened, and what they can do next. Keep it short and kind, never blame them, never show technical jargon or error codes, and never invent source content to fill the gap.
@@ -85,6 +86,9 @@ Student context (use silently to calibrate tone and examples): ${profileText}`;
 
     // Passages are numbered across every search in this answer, so a citation always points at one passage.
     let passageNo = 0;
+    // Passages already given to the model in this answer. A second search that finds the same text gets only what is new,
+    // so the answer does not walk over the same ground twice.
+    const seenPassages = new Set<string>();
 
     const result = streamText({
       model: google('gemini-3.5-flash'),
@@ -148,7 +152,10 @@ Student context (use silently to calibrate tone and examples): ${profileText}`;
               `;
 
               if (!matches || matches.length === 0) return { error: 'Nothing in this source matched that question. Suggest rephrasing it with words the source uses, or asking about a section it covers.' };
-              return matches.map((m) => `[Source Document: ${m.documentName} | passage ${++passageNo}]\n${m.content}`).join('\n\n---\n\n');
+              const fresh = matches.filter((m) => !seenPassages.has(m.content));
+              fresh.forEach((m) => seenPassages.add(m.content));
+              if (fresh.length === 0) return { note: 'Everything this search found was already returned earlier in this answer. Do not search again; write the answer from the passages you already have.' };
+              return fresh.map((m) => `[Source Document: ${m.documentName} | passage ${++passageNo}]\n${m.content}`).join('\n\n---\n\n');
             } catch (e) {
               console.error('Vector search error in tool', e);
               return { error: 'The search could not run just now, likely a temporary problem reaching the AI service. Suggest trying again in a moment.' };

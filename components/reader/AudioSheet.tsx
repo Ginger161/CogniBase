@@ -353,6 +353,7 @@ export default function AudioSheet({ open, onClose, documentId, documentName }: 
       const made = await res.json();
       madeId = made.id;
       if (made.tierAdjusted) toast(`This source supports about ${made.tierAdjusted} minutes without padding, so that is what you got.`);
+      else if (!made.cached && typeof made.minutes === 'number' && made.minutes < length * 0.8) toast(`This source only has about ${Math.round(made.minutes)} minutes of material, so the episode is shorter instead of repeating itself.`);
       if (made.cached) {
         await load();
         setOpenId(made.id);

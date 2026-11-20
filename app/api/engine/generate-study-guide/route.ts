@@ -114,7 +114,7 @@ ${text.substring(0, MAX_SOURCE_CHARS)}
       },
     });
 
-    await recordUsage(user.id, 'guide');
+    await recordUsage(user.id, 'guide').catch((e) => console.error('Usage record failed:', e));
     recordMetric(user.id, 'generate_guide').catch((e) => console.error("Metric failed:", e));
 
     return NextResponse.json({ studyGuide, guide });
